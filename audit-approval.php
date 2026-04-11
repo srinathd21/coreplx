@@ -42,11 +42,16 @@ if (!function_exists('firstExistingColumn')) {
 
 if (!function_exists('formatDateTimeDisplay')) {
     function formatDateTimeDisplay($datetime) {
-        if (empty($datetime) || $datetime === '0000-00-00 00:00:00') {
+        if (empty($datetime) || $datetime === '0000-00-00 00:00:00' || $datetime === '0000-00-00') {
             return '-';
         }
-        $ts = strtotime($datetime);
-        return $ts ? date('d-M-Y h:i A', $ts) : '-';
+
+        $ts = strtotime((string)$datetime);
+        if ($ts) {
+            return date('d-M-Y h:i A', $ts);
+        }
+
+        return e((string)$datetime);
     }
 }
 
@@ -87,22 +92,49 @@ if ($selectedSource !== '') {
     $types  = '';
     $where  = [];
 
-    $timestampCol = firstExistingColumn($conn, $selectedSource, ['created_at', 'approved_at', 'action_at', 'logged_at', 'updated_at', 'timestamp']);
-    $reasonCol    = firstExistingColumn($conn, $selectedSource, ['reason', 'comments', 'comment', 'remark', 'remarks', 'note', 'notes', 'approval_reason']);
-    $meaningCol   = firstExistingColumn($conn, $selectedSource, ['meaning', 'status', 'action', 'action_name', 'decision', 'approval_status', 'event_name']);
-    $documentCol  = firstExistingColumn($conn, $selectedSource, ['document_id', 'document_code', 'doc_no', 'document_number', 'doc_id']);
-    $userNameCol  = firstExistingColumn($conn, $selectedSource, ['user_name', 'approver_name', 'actor_name', 'approved_by_name']);
-    $userIdCol    = firstExistingColumn($conn, $selectedSource, ['user_id', 'approved_by', 'approver_id', 'actor_id', 'created_by']);
-    $signatureCol = firstExistingColumn($conn, $selectedSource, ['signature', 'signature_hash', 'signature_token', 'esignature', 'electronic_signature']);
+    $timestampCol = firstExistingColumn($conn, $selectedSource, [
+        'created_at', 'approved_at', 'action_at', 'logged_at', 'updated_at',
+        'timestamp', 'event_time', 'date_time', 'entry_date', 'approval_date'
+    ]);
 
-    if ($timestampCol === null) {
-        $errorMessage = 'No timestamp column found in ' . $selectedSource . '.';
-    } elseif ($meaningCol === null) {
+    $orderCol = $timestampCol ?: firstExistingColumn($conn, $selectedSource, ['id']);
+
+    $reasonCol = firstExistingColumn($conn, $selectedSource, [
+        'reason', 'comments', 'comment', 'remark', 'remarks', 'note',
+        'notes', 'approval_reason', 'message', 'description'
+    ]);
+
+    $meaningCol = firstExistingColumn($conn, $selectedSource, [
+        'meaning', 'status', 'action', 'action_name', 'decision',
+        'approval_status', 'event_name', 'event', 'result'
+    ]);
+
+    $documentCol = firstExistingColumn($conn, $selectedSource, [
+        'document_id', 'document_code', 'doc_no', 'document_number',
+        'doc_id', 'doc_code', 'reference_no'
+    ]);
+
+    $userNameCol = firstExistingColumn($conn, $selectedSource, [
+        'user_name', 'approver_name', 'actor_name', 'approved_by_name',
+        'employee_name', 'full_name'
+    ]);
+
+    $userIdCol = firstExistingColumn($conn, $selectedSource, [
+        'user_id', 'approved_by', 'approver_id', 'actor_id', 'created_by',
+        'employee_id'
+    ]);
+
+    $signatureCol = firstExistingColumn($conn, $selectedSource, [
+        'signature', 'signature_hash', 'signature_token',
+        'esignature', 'electronic_signature'
+    ]);
+
+    if ($meaningCol === null) {
         $errorMessage = 'No approval status / meaning column found in ' . $selectedSource . '.';
     } else {
         $joins = [];
 
-        $timestampExpr = "a.`{$timestampCol}`";
+        $eventTimeExpr = $timestampCol !== null ? "a.`{$timestampCol}`" : "''";
         $reasonExpr    = $reasonCol !== null ? "a.`{$reasonCol}`" : "''";
         $meaningExpr   = "a.`{$meaningCol}`";
         $documentExpr  = $documentCol !== null ? "a.`{$documentCol}`" : "'-'";
@@ -154,21 +186,21 @@ if ($selectedSource !== '') {
             $types .= 's';
         }
 
-        if ($dateFrom !== '') {
-            $where[] = "DATE({$timestampExpr}) >= ?";
+        if ($timestampCol !== null && $dateFrom !== '') {
+            $where[] = "DATE(a.`{$timestampCol}`) >= ?";
             $params[] = $dateFrom;
             $types .= 's';
         }
 
-        if ($dateTo !== '') {
-            $where[] = "DATE({$timestampExpr}) <= ?";
+        if ($timestampCol !== null && $dateTo !== '') {
+            $where[] = "DATE(a.`{$timestampCol}`) <= ?";
             $params[] = $dateTo;
             $types .= 's';
         }
 
         $sql = "
             SELECT
-                {$timestampExpr} AS event_time,
+                {$eventTimeExpr} AS event_time,
                 {$userExpr} AS user_name,
                 {$meaningExpr} AS meaning_name,
                 {$documentExpr} AS document_id,
@@ -181,7 +213,11 @@ if ($selectedSource !== '') {
             $sql .= " WHERE " . implode(" AND ", $where);
         }
 
-        $sql .= " ORDER BY {$timestampExpr} DESC LIMIT 500";
+        if ($orderCol !== null) {
+            $sql .= " ORDER BY a.`{$orderCol}` DESC";
+        }
+
+        $sql .= " LIMIT 500";
 
         $stmt = mysqli_prepare($conn, $sql);
         if ($stmt) {
