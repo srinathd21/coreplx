@@ -29,6 +29,17 @@ if (!function_exists('columnExists')) {
     }
 }
 
+if (!function_exists('firstExistingColumn')) {
+    function firstExistingColumn(mysqli $conn, $tableName, array $columns) {
+        foreach ($columns as $column) {
+            if (columnExists($conn, $tableName, $column)) {
+                return $column;
+            }
+        }
+        return null;
+    }
+}
+
 if (!function_exists('formatDateTimeDisplay')) {
     function formatDateTimeDisplay($datetime) {
         if (empty($datetime) || $datetime === '0000-00-00 00:00:00') {
@@ -46,289 +57,257 @@ $currentUserName = isset($_SESSION['full_name']) && trim($_SESSION['full_name'])
 $successMessage = '';
 $errorMessage   = '';
 
-$search      = trim($_GET['search'] ?? '');
-$userFilter  = trim($_GET['user'] ?? '');
+$search       = trim($_GET['search'] ?? '');
+$userFilter   = trim($_GET['user'] ?? '');
 $actionFilter = trim($_GET['action_name'] ?? '');
-$docFilter   = trim($_GET['document_id'] ?? '');
-$dateFrom    = trim($_GET['date_from'] ?? '');
-$dateTo      = trim($_GET['date_to'] ?? '');
-$export      = trim($_GET['export'] ?? '');
+$docFilter    = trim($_GET['document_id'] ?? '');
+$dateFrom     = trim($_GET['date_from'] ?? '');
+$dateTo       = trim($_GET['date_to'] ?? '');
+$export       = trim($_GET['export'] ?? '');
 
 $rows = [];
 $dataSourceLabel = 'No audit comment table found.';
 
 $possibleSources = [];
+if (tableExists($conn, 'approver_comments')) $possibleSources[] = 'approver_comments';
+if (tableExists($conn, 'audit_comments'))    $possibleSources[] = 'audit_comments';
+if (tableExists($conn, 'document_comments')) $possibleSources[] = 'document_comments';
+if (tableExists($conn, 'audit_trail'))       $possibleSources[] = 'audit_trail';
+if (tableExists($conn, 'audit_logs'))        $possibleSources[] = 'audit_logs';
+if (tableExists($conn, 'activity_logs'))     $possibleSources[] = 'activity_logs';
 
-/*
-|--------------------------------------------------------------------------
-| DETECT BEST AVAILABLE SOURCE TABLE
-|--------------------------------------------------------------------------
-|
-| Priority:
-| 1. approver_comments
-| 2. audit_comments
-| 3. document_comments
-| 4. audit_trail / audit_logs / activity_logs (comment-like fields)
-|
-*/
-
-if (tableExists($conn, 'approver_comments')) {
-    $possibleSources[] = 'approver_comments';
-}
-if (tableExists($conn, 'audit_comments')) {
-    $possibleSources[] = 'audit_comments';
-}
-if (tableExists($conn, 'document_comments')) {
-    $possibleSources[] = 'document_comments';
-}
-if (tableExists($conn, 'audit_trail')) {
-    $possibleSources[] = 'audit_trail';
-}
-if (tableExists($conn, 'audit_logs')) {
-    $possibleSources[] = 'audit_logs';
-}
-if (tableExists($conn, 'activity_logs')) {
-    $possibleSources[] = 'activity_logs';
-}
-
-$selectedSource = '';
-if (!empty($possibleSources)) {
-    $selectedSource = $possibleSources[0];
-}
+$selectedSource = !empty($possibleSources) ? $possibleSources[0] : '';
 
 if ($selectedSource !== '') {
     $dataSourceLabel = ucfirst(str_replace('_', ' ', $selectedSource));
 }
 
-/*
-|--------------------------------------------------------------------------
-| LOAD DATA DYNAMICALLY BASED ON AVAILABLE TABLE/COLUMNS
-|--------------------------------------------------------------------------
-*/
 if ($selectedSource !== '') {
-    $where = [];
     $params = [];
-    $types = '';
+    $types  = '';
+    $where  = [];
 
-    if ($selectedSource === 'approver_comments' || $selectedSource === 'audit_comments' || $selectedSource === 'document_comments') {
-        $selectParts = [];
-        $joins = [];
+    if (in_array($selectedSource, ['approver_comments', 'audit_comments', 'document_comments'], true)) {
+        $timestampCol = firstExistingColumn($conn, $selectedSource, ['created_at', 'commented_at', 'updated_at', 'timestamp']);
+        $commentCol   = firstExistingColumn($conn, $selectedSource, ['comment', 'comments', 'remark', 'remarks', 'note', 'notes', 'comment_text']);
+        $actionCol    = firstExistingColumn($conn, $selectedSource, ['action', 'action_name', 'event_name', 'event']);
+        $documentCol  = firstExistingColumn($conn, $selectedSource, ['document_id', 'document_code', 'doc_no', 'document_number', 'doc_id']);
+        $userNameCol  = firstExistingColumn($conn, $selectedSource, ['user_name', 'commented_by_name', 'actor_name']);
+        $userIdCol    = firstExistingColumn($conn, $selectedSource, ['user_id', 'commented_by', 'created_by', 'actor_id']);
 
-        $timestampExpr = 'c.created_at';
-        if (!columnExists($conn, $selectedSource, 'created_at') && columnExists($conn, $selectedSource, 'commented_at')) {
-            $timestampExpr = 'c.commented_at';
-        } elseif (!columnExists($conn, $selectedSource, 'created_at') && columnExists($conn, $selectedSource, 'updated_at')) {
-            $timestampExpr = 'c.updated_at';
-        }
-
-        $commentExpr = 'c.comment';
-        if (!columnExists($conn, $selectedSource, 'comment') && columnExists($conn, $selectedSource, 'comments')) {
-            $commentExpr = 'c.comments';
-        } elseif (!columnExists($conn, $selectedSource, 'comment') && columnExists($conn, $selectedSource, 'remark')) {
-            $commentExpr = 'c.remark';
-        } elseif (!columnExists($conn, $selectedSource, 'comment') && columnExists($conn, $selectedSource, 'remarks')) {
-            $commentExpr = 'c.remarks';
-        }
-
-        $actionExpr = "'Comment Added'";
-        if (columnExists($conn, $selectedSource, 'action')) {
-            $actionExpr = 'c.action';
-        } elseif (columnExists($conn, $selectedSource, 'action_name')) {
-            $actionExpr = 'c.action_name';
-        } elseif (columnExists($conn, $selectedSource, 'event_name')) {
-            $actionExpr = 'c.event_name';
-        }
-
-        $userExpr = "'-'";
-        if (columnExists($conn, $selectedSource, 'user_name')) {
-            $userExpr = 'c.user_name';
-        } elseif (columnExists($conn, $selectedSource, 'commented_by_name')) {
-            $userExpr = 'c.commented_by_name';
-        } elseif (columnExists($conn, $selectedSource, 'user_id') && tableExists($conn, 'users')) {
-            $joins[] = "LEFT JOIN users u ON u.id = c.user_id";
-            $userExpr = "TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')))";
-        } elseif (columnExists($conn, $selectedSource, 'commented_by') && tableExists($conn, 'users')) {
-            $joins[] = "LEFT JOIN users u ON u.id = c.commented_by";
-            $userExpr = "TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')))";
-        }
-
-        $documentExpr = "'-'";
-        if (columnExists($conn, $selectedSource, 'document_id')) {
-            $documentExpr = 'c.document_id';
-        } elseif (columnExists($conn, $selectedSource, 'document_code')) {
-            $documentExpr = 'c.document_code';
-        } elseif (columnExists($conn, $selectedSource, 'doc_no')) {
-            $documentExpr = 'c.doc_no';
-        } elseif (columnExists($conn, $selectedSource, 'document_number')) {
-            $documentExpr = 'c.document_number';
-        }
-
-        $selectParts[] = "{$timestampExpr} AS event_time";
-        $selectParts[] = "{$userExpr} AS user_name";
-        $selectParts[] = "{$actionExpr} AS action_name";
-        $selectParts[] = "{$documentExpr} AS document_id";
-        $selectParts[] = "{$commentExpr} AS comment_text";
-
-        if ($search !== '') {
-            $where[] = "({$commentExpr} LIKE ? OR {$documentExpr} LIKE ? OR {$userExpr} LIKE ?)";
-            $like = '%' . $search . '%';
-            $params[] = $like;
-            $params[] = $like;
-            $params[] = $like;
-            $types .= 'sss';
-        }
-
-        if ($userFilter !== '') {
-            $where[] = "({$userExpr} LIKE ?)";
-            $params[] = '%' . $userFilter . '%';
-            $types .= 's';
-        }
-
-        if ($actionFilter !== '') {
-            $where[] = "({$actionExpr} LIKE ?)";
-            $params[] = '%' . $actionFilter . '%';
-            $types .= 's';
-        }
-
-        if ($docFilter !== '') {
-            $where[] = "({$documentExpr} LIKE ?)";
-            $params[] = '%' . $docFilter . '%';
-            $types .= 's';
-        }
-
-        if ($dateFrom !== '') {
-            $where[] = "DATE({$timestampExpr}) >= ?";
-            $params[] = $dateFrom;
-            $types .= 's';
-        }
-
-        if ($dateTo !== '') {
-            $where[] = "DATE({$timestampExpr}) <= ?";
-            $params[] = $dateTo;
-            $types .= 's';
-        }
-
-        $sql = "
-            SELECT " . implode(",\n", $selectParts) . "
-            FROM `{$selectedSource}` c
-            " . implode("\n", $joins) . "
-        ";
-
-        if (!empty($where)) {
-            $sql .= " WHERE " . implode(" AND ", $where);
-        }
-
-        $sql .= " ORDER BY event_time DESC LIMIT 500";
-    } else {
-        $timestampExpr = columnExists($conn, $selectedSource, 'created_at') ? 'a.created_at' : (columnExists($conn, $selectedSource, 'logged_at') ? 'a.logged_at' : 'a.updated_at');
-        $userExpr      = columnExists($conn, $selectedSource, 'user_name') ? 'a.user_name' : (columnExists($conn, $selectedSource, 'actor_name') ? 'a.actor_name' : "'-'");
-        $actionExpr    = columnExists($conn, $selectedSource, 'action') ? 'a.action' : (columnExists($conn, $selectedSource, 'action_name') ? 'a.action_name' : "'Comment Added'");
-        $documentExpr  = columnExists($conn, $selectedSource, 'document_id') ? 'a.document_id' : (columnExists($conn, $selectedSource, 'document_code') ? 'a.document_code' : "'-'");
-        $commentExpr   = columnExists($conn, $selectedSource, 'comment') ? 'a.comment' : (columnExists($conn, $selectedSource, 'comments') ? 'a.comments' : (columnExists($conn, $selectedSource, 'remark') ? 'a.remark' : (columnExists($conn, $selectedSource, 'remarks') ? 'a.remarks' : "''")));
-
-        $where[] = "TRIM(COALESCE({$commentExpr}, '')) <> ''";
-
-        if ($search !== '') {
-            $where[] = "({$commentExpr} LIKE ? OR {$documentExpr} LIKE ? OR {$userExpr} LIKE ?)";
-            $like = '%' . $search . '%';
-            $params[] = $like;
-            $params[] = $like;
-            $params[] = $like;
-            $types .= 'sss';
-        }
-
-        if ($userFilter !== '') {
-            $where[] = "({$userExpr} LIKE ?)";
-            $params[] = '%' . $userFilter . '%';
-            $types .= 's';
-        }
-
-        if ($actionFilter !== '') {
-            $where[] = "({$actionExpr} LIKE ?)";
-            $params[] = '%' . $actionFilter . '%';
-            $types .= 's';
-        }
-
-        if ($docFilter !== '') {
-            $where[] = "({$documentExpr} LIKE ?)";
-            $params[] = '%' . $docFilter . '%';
-            $types .= 's';
-        }
-
-        if ($dateFrom !== '') {
-            $where[] = "DATE({$timestampExpr}) >= ?";
-            $params[] = $dateFrom;
-            $types .= 's';
-        }
-
-        if ($dateTo !== '') {
-            $where[] = "DATE({$timestampExpr}) <= ?";
-            $params[] = $dateTo;
-            $types .= 's';
-        }
-
-        $sql = "
-            SELECT
-                {$timestampExpr} AS event_time,
-                {$userExpr} AS user_name,
-                {$actionExpr} AS action_name,
-                {$documentExpr} AS document_id,
-                {$commentExpr} AS comment_text
-            FROM `{$selectedSource}` a
-        ";
-
-        if (!empty($where)) {
-            $sql .= " WHERE " . implode(" AND ", $where);
-        }
-
-        $sql .= " ORDER BY event_time DESC LIMIT 500";
-    }
-
-    $stmt = mysqli_prepare($conn, $sql);
-    if ($stmt) {
-        if (!empty($params)) {
-            mysqli_stmt_bind_param($stmt, $types, ...$params);
-        }
-
-        if (mysqli_stmt_execute($stmt)) {
-            $res = mysqli_stmt_get_result($stmt);
-            if ($res) {
-                while ($row = mysqli_fetch_assoc($res)) {
-                    $rows[] = [
-                        'event_time'   => $row['event_time'] ?? '',
-                        'user_name'    => trim((string)($row['user_name'] ?? '')) !== '' ? trim((string)$row['user_name']) : '-',
-                        'action_name'  => trim((string)($row['action_name'] ?? '')) !== '' ? trim((string)$row['action_name']) : 'Comment Added',
-                        'document_id'  => trim((string)($row['document_id'] ?? '')) !== '' ? trim((string)$row['document_id']) : '-',
-                        'comment_text' => trim((string)($row['comment_text'] ?? '')) !== '' ? trim((string)$row['comment_text']) : '-',
-                    ];
-                }
-            }
+        if ($timestampCol === null) {
+            $errorMessage = 'No timestamp column found in ' . $selectedSource . '.';
+        } elseif ($commentCol === null) {
+            $errorMessage = 'No comment column found in ' . $selectedSource . '.';
         } else {
-            $errorMessage = 'Failed to load audit comments: ' . mysqli_error($conn);
+            $joins = [];
+
+            $timestampExpr = "c.`{$timestampCol}`";
+            $commentExpr   = "c.`{$commentCol}`";
+            $actionExpr    = $actionCol !== null ? "c.`{$actionCol}`" : "'Comment Added'";
+            $documentExpr  = $documentCol !== null ? "c.`{$documentCol}`" : "'-'";
+            $userExpr      = "'-'";
+
+            if ($userNameCol !== null) {
+                $userExpr = "c.`{$userNameCol}`";
+            } elseif ($userIdCol !== null && tableExists($conn, 'users')) {
+                $joins[] = "LEFT JOIN users u ON u.id = c.`{$userIdCol}`";
+                $userExpr = "TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')))";
+            }
+
+            if ($search !== '') {
+                $where[] = "({$commentExpr} LIKE ? OR {$documentExpr} LIKE ? OR {$userExpr} LIKE ?)";
+                $like = '%' . $search . '%';
+                $params[] = $like;
+                $params[] = $like;
+                $params[] = $like;
+                $types .= 'sss';
+            }
+
+            if ($userFilter !== '') {
+                $where[] = "({$userExpr} LIKE ?)";
+                $params[] = '%' . $userFilter . '%';
+                $types .= 's';
+            }
+
+            if ($actionFilter !== '') {
+                $where[] = "({$actionExpr} LIKE ?)";
+                $params[] = '%' . $actionFilter . '%';
+                $types .= 's';
+            }
+
+            if ($docFilter !== '') {
+                $where[] = "({$documentExpr} LIKE ?)";
+                $params[] = '%' . $docFilter . '%';
+                $types .= 's';
+            }
+
+            if ($dateFrom !== '') {
+                $where[] = "DATE({$timestampExpr}) >= ?";
+                $params[] = $dateFrom;
+                $types .= 's';
+            }
+
+            if ($dateTo !== '') {
+                $where[] = "DATE({$timestampExpr}) <= ?";
+                $params[] = $dateTo;
+                $types .= 's';
+            }
+
+            $sql = "
+                SELECT
+                    {$timestampExpr} AS event_time,
+                    {$userExpr} AS user_name,
+                    {$actionExpr} AS action_name,
+                    {$documentExpr} AS document_id,
+                    {$commentExpr} AS comment_text
+                FROM `{$selectedSource}` c
+                " . implode("\n", $joins);
+
+            if (!empty($where)) {
+                $sql .= " WHERE " . implode(" AND ", $where);
+            }
+
+            $sql .= " ORDER BY {$timestampExpr} DESC LIMIT 500";
+
+            $stmt = mysqli_prepare($conn, $sql);
+            if ($stmt) {
+                if (!empty($params)) {
+                    mysqli_stmt_bind_param($stmt, $types, ...$params);
+                }
+
+                if (mysqli_stmt_execute($stmt)) {
+                    $res = mysqli_stmt_get_result($stmt);
+                    if ($res) {
+                        while ($row = mysqli_fetch_assoc($res)) {
+                            $rows[] = [
+                                'event_time'   => $row['event_time'] ?? '',
+                                'user_name'    => trim((string)($row['user_name'] ?? '')) !== '' ? trim((string)$row['user_name']) : '-',
+                                'action_name'  => trim((string)($row['action_name'] ?? '')) !== '' ? trim((string)$row['action_name']) : 'Comment Added',
+                                'document_id'  => trim((string)($row['document_id'] ?? '')) !== '' ? trim((string)$row['document_id']) : '-',
+                                'comment_text' => trim((string)($row['comment_text'] ?? '')) !== '' ? trim((string)$row['comment_text']) : '-',
+                            ];
+                        }
+                    }
+                } else {
+                    $errorMessage = 'Failed to load audit comments: ' . mysqli_error($conn);
+                }
+                mysqli_stmt_close($stmt);
+            } else {
+                $errorMessage = 'Failed to prepare query: ' . mysqli_error($conn);
+            }
         }
-        mysqli_stmt_close($stmt);
     } else {
-        $errorMessage = 'Failed to prepare query: ' . mysqli_error($conn);
+        $timestampCol = firstExistingColumn($conn, $selectedSource, ['created_at', 'logged_at', 'updated_at', 'timestamp']);
+        $commentCol   = firstExistingColumn($conn, $selectedSource, ['comment', 'comments', 'remark', 'remarks', 'note', 'notes', 'comment_text']);
+        $actionCol    = firstExistingColumn($conn, $selectedSource, ['action', 'action_name', 'event_name', 'event']);
+        $documentCol  = firstExistingColumn($conn, $selectedSource, ['document_id', 'document_code', 'doc_no', 'document_number', 'doc_id']);
+        $userNameCol  = firstExistingColumn($conn, $selectedSource, ['user_name', 'actor_name', 'commented_by_name']);
+
+        if ($timestampCol === null) {
+            $errorMessage = 'No timestamp column found in ' . $selectedSource . '.';
+        } elseif ($commentCol === null) {
+            $errorMessage = 'No comment column found in ' . $selectedSource . '.';
+        } else {
+            $timestampExpr = "a.`{$timestampCol}`";
+            $commentExpr   = "a.`{$commentCol}`";
+            $actionExpr    = $actionCol !== null ? "a.`{$actionCol}`" : "'Comment Added'";
+            $documentExpr  = $documentCol !== null ? "a.`{$documentCol}`" : "'-'";
+            $userExpr      = $userNameCol !== null ? "a.`{$userNameCol}`" : "'-'";
+
+            $where[] = "TRIM(COALESCE({$commentExpr}, '')) <> ''";
+
+            if ($search !== '') {
+                $where[] = "({$commentExpr} LIKE ? OR {$documentExpr} LIKE ? OR {$userExpr} LIKE ?)";
+                $like = '%' . $search . '%';
+                $params[] = $like;
+                $params[] = $like;
+                $params[] = $like;
+                $types .= 'sss';
+            }
+
+            if ($userFilter !== '') {
+                $where[] = "({$userExpr} LIKE ?)";
+                $params[] = '%' . $userFilter . '%';
+                $types .= 's';
+            }
+
+            if ($actionFilter !== '') {
+                $where[] = "({$actionExpr} LIKE ?)";
+                $params[] = '%' . $actionFilter . '%';
+                $types .= 's';
+            }
+
+            if ($docFilter !== '') {
+                $where[] = "({$documentExpr} LIKE ?)";
+                $params[] = '%' . $docFilter . '%';
+                $types .= 's';
+            }
+
+            if ($dateFrom !== '') {
+                $where[] = "DATE({$timestampExpr}) >= ?";
+                $params[] = $dateFrom;
+                $types .= 's';
+            }
+
+            if ($dateTo !== '') {
+                $where[] = "DATE({$timestampExpr}) <= ?";
+                $params[] = $dateTo;
+                $types .= 's';
+            }
+
+            $sql = "
+                SELECT
+                    {$timestampExpr} AS event_time,
+                    {$userExpr} AS user_name,
+                    {$actionExpr} AS action_name,
+                    {$documentExpr} AS document_id,
+                    {$commentExpr} AS comment_text
+                FROM `{$selectedSource}` a
+            ";
+
+            if (!empty($where)) {
+                $sql .= " WHERE " . implode(" AND ", $where);
+            }
+
+            $sql .= " ORDER BY {$timestampExpr} DESC LIMIT 500";
+
+            $stmt = mysqli_prepare($conn, $sql);
+            if ($stmt) {
+                if (!empty($params)) {
+                    mysqli_stmt_bind_param($stmt, $types, ...$params);
+                }
+
+                if (mysqli_stmt_execute($stmt)) {
+                    $res = mysqli_stmt_get_result($stmt);
+                    if ($res) {
+                        while ($row = mysqli_fetch_assoc($res)) {
+                            $rows[] = [
+                                'event_time'   => $row['event_time'] ?? '',
+                                'user_name'    => trim((string)($row['user_name'] ?? '')) !== '' ? trim((string)$row['user_name']) : '-',
+                                'action_name'  => trim((string)($row['action_name'] ?? '')) !== '' ? trim((string)$row['action_name']) : 'Comment Added',
+                                'document_id'  => trim((string)($row['document_id'] ?? '')) !== '' ? trim((string)$row['document_id']) : '-',
+                                'comment_text' => trim((string)($row['comment_text'] ?? '')) !== '' ? trim((string)$row['comment_text']) : '-',
+                            ];
+                        }
+                    }
+                } else {
+                    $errorMessage = 'Failed to load audit comments: ' . mysqli_error($conn);
+                }
+                mysqli_stmt_close($stmt);
+            } else {
+                $errorMessage = 'Failed to prepare query: ' . mysqli_error($conn);
+            }
+        }
     }
 }
 
-/*
-|--------------------------------------------------------------------------
-| EXPORT CSV / EXCEL
-|--------------------------------------------------------------------------
-*/
 if ($export === 'excel') {
     header('Content-Type: application/vnd.ms-excel; charset=utf-8');
     header('Content-Disposition: attachment; filename=audit-comments-' . date('Ymd_His') . '.xls');
 
     echo '<table border="1">';
-    echo '<tr>';
-    echo '<th>Timestamp</th>';
-    echo '<th>User</th>';
-    echo '<th>Action</th>';
-    echo '<th>Document ID</th>';
-    echo '<th>Comment</th>';
-    echo '</tr>';
+    echo '<tr><th>Timestamp</th><th>User</th><th>Action</th><th>Document ID</th><th>Comment</th></tr>';
 
     if (!empty($rows)) {
         foreach ($rows as $row) {
@@ -343,6 +322,7 @@ if ($export === 'excel') {
     } else {
         echo '<tr><td colspan="5">No records found.</td></tr>';
     }
+
     echo '</table>';
     exit;
 }
@@ -372,11 +352,6 @@ if ($export === 'csv') {
     exit;
 }
 
-/*
-|--------------------------------------------------------------------------
-| EXPORT PRINT / PDF-FRIENDLY HTML
-|--------------------------------------------------------------------------
-*/
 if ($export === 'pdf') {
     ?>
     <!doctype html>
