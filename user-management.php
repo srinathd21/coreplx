@@ -50,9 +50,9 @@ if (!function_exists('tableExists')) {
 $currentUserId   = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 $currentUserName = isset($_SESSION['full_name']) && $_SESSION['full_name'] !== '' ? $_SESSION['full_name'] : 'QA Admin';
 
-$hasUsersTable            = tableExists($conn, 'users');
-$hasDepartmentsTable      = tableExists($conn, 'departments');
-$hasUserRoleHistoryTable  = tableExists($conn, 'user_role_history');
+$hasUsersTable           = tableExists($conn, 'users');
+$hasDepartmentsTable     = tableExists($conn, 'departments');
+$hasUserRoleHistoryTable = tableExists($conn, 'user_role_history');
 
 $validCurrentUserId = 0;
 
@@ -244,19 +244,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'update_user') {
-            $userId              = (int)($_POST['user_id'] ?? 0);
-            $firstName           = trim($_POST['first_name'] ?? '');
-            $lastName            = trim($_POST['last_name'] ?? '');
-            $email               = trim($_POST['email'] ?? '');
-            $phone               = trim($_POST['phone'] ?? '');
-            $employeeCode        = trim($_POST['employee_code'] ?? '');
-            $password            = trim($_POST['password'] ?? '');
-            $currentRoleId       = (int)($_POST['current_role_id'] ?? 0);
-            $departmentIdRaw     = trim($_POST['department_id'] ?? '');
-            $status              = trim($_POST['status'] ?? 'active');
-            $timezone            = trim($_POST['timezone'] ?? 'Asia/Kolkata');
-            $mustChangePassword  = isset($_POST['must_change_password']) ? 1 : 0;
-            $roleChangeReason    = trim($_POST['role_change_reason'] ?? 'Role updated from user management');
+            $userId             = (int)($_POST['user_id'] ?? 0);
+            $firstName          = trim($_POST['first_name'] ?? '');
+            $lastName           = trim($_POST['last_name'] ?? '');
+            $email              = trim($_POST['email'] ?? '');
+            $phone              = trim($_POST['phone'] ?? '');
+            $employeeCode       = trim($_POST['employee_code'] ?? '');
+            $password           = trim($_POST['password'] ?? '');
+            $currentRoleId      = (int)($_POST['current_role_id'] ?? 0);
+            $departmentIdRaw    = trim($_POST['department_id'] ?? '');
+            $status             = trim($_POST['status'] ?? 'active');
+            $timezone           = trim($_POST['timezone'] ?? 'Asia/Kolkata');
+            $mustChangePassword = isset($_POST['must_change_password']) ? 1 : 0;
+            $roleChangeReason   = trim($_POST['role_change_reason'] ?? 'Role updated from user management');
 
             $allowedStatuses = ['active', 'inactive', 'locked', 'suspended'];
 
@@ -460,7 +460,6 @@ if ($hasUsersTable) {
             color: #212529;
         }
 
-        /* FIX: modal/form transparency issue */
         .modal-content {
             background: #ffffff !important;
             border: 1px solid rgba(0, 0, 0, 0.08);
@@ -651,6 +650,20 @@ if ($hasUsersTable) {
                                             $fullName = 'Unnamed User';
                                         }
                                         $badgeClass = statusBadgeClass($user['status'] ?? 'inactive');
+
+                                        $editPayload = [
+                                            'id' => (int)($user['id'] ?? 0),
+                                            'employee_code' => (string)($user['employee_code'] ?? ''),
+                                            'first_name' => (string)($user['first_name'] ?? ''),
+                                            'last_name' => (string)($user['last_name'] ?? ''),
+                                            'email' => (string)($user['email'] ?? ''),
+                                            'phone' => (string)($user['phone'] ?? ''),
+                                            'current_role_id' => isset($user['current_role_id']) ? (string)$user['current_role_id'] : '',
+                                            'department_id' => !empty($user['department_id']) ? (string)$user['department_id'] : '',
+                                            'status' => (string)($user['status'] ?? 'active'),
+                                            'must_change_password' => (int)($user['must_change_password'] ?? 0),
+                                            'timezone' => (string)($user['timezone'] ?? 'Asia/Kolkata'),
+                                        ];
                                     ?>
                                     <tr>
                                         <td><?php echo e($fullName); ?></td>
@@ -668,17 +681,7 @@ if ($hasUsersTable) {
                                                 class="btn btn-sm btn-outline-primary edit-user-btn"
                                                 data-bs-toggle="modal"
                                                 data-bs-target="#editUserModal"
-                                                data-id="<?php echo (int)$user['id']; ?>"
-                                                data-first_name="<?php echo e($user['first_name']); ?>"
-                                                data-last_name="<?php echo e($user['last_name']); ?>"
-                                                data-email="<?php echo e($user['email']); ?>"
-                                                data-phone="<?php echo e($user['phone']); ?>"
-                                                data-employee_code="<?php echo e($user['employee_code']); ?>"
-                                                data-current_role_id="<?php echo (int)$user['current_role_id']; ?>"
-                                                data-department_id="<?php echo (int)$user['department_id']; ?>"
-                                                data-status="<?php echo e($user['status']); ?>"
-                                                data-must_change_password="<?php echo (int)$user['must_change_password']; ?>"
-                                                data-timezone="<?php echo e($user['timezone']); ?>"
+                                                data-user="<?php echo e(json_encode($editPayload, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG)); ?>"
                                             >
                                                 Edit
                                             </button>
@@ -901,21 +904,70 @@ if ($hasUsersTable) {
 document.addEventListener('DOMContentLoaded', function () {
     var editButtons = document.querySelectorAll('.edit-user-btn');
 
+    function setSelectValue(selectId, value) {
+        var select = document.getElementById(selectId);
+        if (!select) return;
+        value = value == null ? '' : String(value);
+        var hasMatch = false;
+
+        for (var i = 0; i < select.options.length; i++) {
+            if (String(select.options[i].value) === value) {
+                hasMatch = true;
+                break;
+            }
+        }
+        select.value = hasMatch ? value : '';
+    }
+
+    function resetEditForm() {
+        document.getElementById('edit_user_id').value = '';
+        document.getElementById('edit_employee_code').value = '';
+        document.getElementById('edit_first_name').value = '';
+        document.getElementById('edit_last_name').value = '';
+        document.getElementById('edit_email').value = '';
+        document.getElementById('edit_phone').value = '';
+        document.getElementById('edit_timezone').value = 'Asia/Kolkata';
+        document.getElementById('edit_must_change_password').checked = false;
+        setSelectValue('edit_current_role_id', '');
+        setSelectValue('edit_department_id', '');
+        setSelectValue('edit_status', 'active');
+    }
+
     editButtons.forEach(function (button) {
         button.addEventListener('click', function () {
-            document.getElementById('edit_user_id').value = this.getAttribute('data-id') || '';
-            document.getElementById('edit_employee_code').value = this.getAttribute('data-employee_code') || '';
-            document.getElementById('edit_first_name').value = this.getAttribute('data-first_name') || '';
-            document.getElementById('edit_last_name').value = this.getAttribute('data-last_name') || '';
-            document.getElementById('edit_email').value = this.getAttribute('data-email') || '';
-            document.getElementById('edit_phone').value = this.getAttribute('data-phone') || '';
-            document.getElementById('edit_current_role_id').value = this.getAttribute('data-current_role_id') || '';
-            document.getElementById('edit_department_id').value = this.getAttribute('data-department_id') || '';
-            document.getElementById('edit_status').value = this.getAttribute('data-status') || 'active';
-            document.getElementById('edit_timezone').value = this.getAttribute('data-timezone') || 'Asia/Kolkata';
-            document.getElementById('edit_must_change_password').checked = this.getAttribute('data-must_change_password') === '1';
+            resetEditForm();
+
+            var raw = this.getAttribute('data-user') || '{}';
+            var user = {};
+
+            try {
+                user = JSON.parse(raw);
+            } catch (err) {
+                console.error('Invalid edit user payload:', err, raw);
+                return;
+            }
+
+            document.getElementById('edit_user_id').value = user.id || '';
+            document.getElementById('edit_employee_code').value = user.employee_code || '';
+            document.getElementById('edit_first_name').value = user.first_name || '';
+            document.getElementById('edit_last_name').value = user.last_name || '';
+            document.getElementById('edit_email').value = user.email || '';
+            document.getElementById('edit_phone').value = user.phone || '';
+            document.getElementById('edit_timezone').value = user.timezone || 'Asia/Kolkata';
+            document.getElementById('edit_must_change_password').checked = String(user.must_change_password || '0') === '1';
+
+            setSelectValue('edit_current_role_id', user.current_role_id || '');
+            setSelectValue('edit_department_id', user.department_id || '');
+            setSelectValue('edit_status', user.status || 'active');
         });
     });
+
+    var editModal = document.getElementById('editUserModal');
+    if (editModal) {
+        editModal.addEventListener('hidden.bs.modal', function () {
+            resetEditForm();
+        });
+    }
 });
 </script>
 </body>
