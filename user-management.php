@@ -42,6 +42,29 @@ if (!function_exists('statusBadgeClass')) {
 $currentUserId   = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 $currentUserName = isset($_SESSION['full_name']) && $_SESSION['full_name'] !== '' ? $_SESSION['full_name'] : 'QA Admin';
 
+// Check if current user exists in database for foreign key reference
+$validCurrentUserId = 0;
+if ($currentUserId > 0) {
+    $checkUserStmt = mysqli_prepare($conn, "SELECT id FROM users WHERE id = ? LIMIT 1");
+    mysqli_stmt_bind_param($checkUserStmt, "i", $currentUserId);
+    mysqli_stmt_execute($checkUserStmt);
+    $checkUserRes = mysqli_stmt_get_result($checkUserStmt);
+    if ($checkUserRes && mysqli_num_rows($checkUserRes) > 0) {
+        $validCurrentUserId = $currentUserId;
+    }
+}
+
+// If no valid current user, try to get the first admin user
+if ($validCurrentUserId === 0) {
+    $adminStmt = mysqli_prepare($conn, "SELECT id FROM users WHERE current_role_id IN (2, 3) LIMIT 1");
+    mysqli_stmt_execute($adminStmt);
+    $adminRes = mysqli_stmt_get_result($adminStmt);
+    if ($adminRes && mysqli_num_rows($adminRes) > 0) {
+        $adminRow = mysqli_fetch_assoc($adminRes);
+        $validCurrentUserId = (int)$adminRow['id'];
+    }
+}
+
 $successMessage = '';
 $errorMessage   = '';
 
@@ -128,6 +151,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $departmentId = ($departmentIdRaw !== '') ? (int)$departmentIdRaw : null;
                 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
+                // Use valid current user ID or set to NULL (allow NULL in database)
+                $createdBy = ($validCurrentUserId > 0) ? $validCurrentUserId : null;
+                $updatedBy = ($validCurrentUserId > 0) ? $validCurrentUserId : null;
+
                 $insertSql = "
                     INSERT INTO users (
                         employee_code,
@@ -161,20 +188,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $status,
                     $mustChangePassword,
                     $timezone,
-                    $currentUserId,
-                    $currentUserId
+                    $createdBy,
+                    $updatedBy
                 );
 
                 if (mysqli_stmt_execute($stmt)) {
                     $newUserId = mysqli_insert_id($conn);
 
-                    if ($newUserId > 0 && $currentUserId > 0) {
+                    if ($newUserId > 0 && $validCurrentUserId > 0) {
                         $reason = 'Initial role assigned during user creation';
                         $historyStmt = mysqli_prepare(
                             $conn,
                             "INSERT INTO user_role_history (user_id, old_role_id, new_role_id, reason_for_change, changed_by) VALUES (?, NULL, ?, ?, ?)"
                         );
-                        mysqli_stmt_bind_param($historyStmt, "iisi", $newUserId, $currentRoleId, $reason, $currentUserId);
+                        mysqli_stmt_bind_param($historyStmt, "iisi", $newUserId, $currentRoleId, $reason, $validCurrentUserId);
                         mysqli_stmt_execute($historyStmt);
                     }
 
@@ -228,6 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $errorMessage = 'Another user already uses this email.';
                 } else {
                     $departmentId = ($departmentIdRaw !== '') ? (int)$departmentIdRaw : null;
+                    $updatedBy = ($validCurrentUserId > 0) ? $validCurrentUserId : null;
 
                     if ($password !== '') {
                         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
@@ -254,7 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $status,
                             $mustChangePassword,
                             $timezone,
-                            $currentUserId,
+                            $updatedBy,
                             $userId
                         );
                     } else {
@@ -279,7 +307,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $status,
                             $mustChangePassword,
                             $timezone,
-                            $currentUserId,
+                            $updatedBy,
                             $userId
                         );
                     }
@@ -287,12 +315,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (mysqli_stmt_execute($stmt)) {
                         $oldRoleId = (int)$oldRow['current_role_id'];
 
-                        if ($oldRoleId !== $currentRoleId && $currentUserId > 0) {
+                        if ($oldRoleId !== $currentRoleId && $validCurrentUserId > 0) {
                             $historyStmt = mysqli_prepare(
                                 $conn,
                                 "INSERT INTO user_role_history (user_id, old_role_id, new_role_id, reason_for_change, changed_by) VALUES (?, ?, ?, ?, ?)"
                             );
-                            mysqli_stmt_bind_param($historyStmt, "iiisi", $userId, $oldRoleId, $currentRoleId, $roleChangeReason, $currentUserId);
+                            mysqli_stmt_bind_param($historyStmt, "iiisi", $userId, $oldRoleId, $currentRoleId, $roleChangeReason, $validCurrentUserId);
                             mysqli_stmt_execute($historyStmt);
                         }
 
@@ -534,7 +562,7 @@ if ($userRes) {
                 </tr>
               <?php endif; ?>
             </tbody>
-          </table>
+          梳
         </div>
 
       </div>
