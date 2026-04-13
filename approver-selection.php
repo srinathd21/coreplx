@@ -29,9 +29,20 @@ if (!function_exists('columnExists')) {
     }
 }
 
+if (!function_exists('firstExistingColumn')) {
+    function firstExistingColumn(mysqli $conn, $tableName, array $columns) {
+        foreach ($columns as $column) {
+            if (columnExists($conn, $tableName, $column)) {
+                return $column;
+            }
+        }
+        return null;
+    }
+}
+
 $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 $currentUserName = isset($_SESSION['full_name']) && trim($_SESSION['full_name']) !== ''
-    ? $_SESSION['full_name']
+    ? trim($_SESSION['full_name'])
     : '';
 
 $successMessage = '';
@@ -52,50 +63,82 @@ $documentApproversTableExists = tableExists($conn, 'document_approvers');
 
 $approvers = [];
 
+/*
+|--------------------------------------------------------------------------
+| LOAD APPROVERS FROM DATABASE MORE FLEXIBLY
+|--------------------------------------------------------------------------
+*/
 if ($usersTableExists) {
-    $hasFirstName = columnExists($conn, 'users', 'first_name');
-    $hasLastName = columnExists($conn, 'users', 'last_name');
-    $hasFullName = columnExists($conn, 'users', 'full_name');
-    $hasStatus = columnExists($conn, 'users', 'status');
-    $hasRoleId = columnExists($conn, 'users', 'current_role_id');
+    $firstNameCol = firstExistingColumn($conn, 'users', ['first_name']);
+    $lastNameCol  = firstExistingColumn($conn, 'users', ['last_name']);
+    $fullNameCol  = firstExistingColumn($conn, 'users', ['full_name', 'name', 'username']);
+    $statusCol    = firstExistingColumn($conn, 'users', ['status', 'is_active']);
+    $roleIdCol    = firstExistingColumn($conn, 'users', ['current_role_id', 'role_id']);
+
+    $hasRolesIdCol = $rolesTableExists && columnExists($conn, 'roles', 'id');
+    $roleNameCol   = $rolesTableExists ? firstExistingColumn($conn, 'roles', ['role_name', 'name']) : null;
+    $roleCodeCol   = $rolesTableExists ? firstExistingColumn($conn, 'roles', ['role_code', 'code']) : null;
 
     $nameExpr = "CAST(u.id AS CHAR)";
-    if ($hasFirstName && $hasLastName) {
-        $nameExpr = "TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')))";
-    } elseif ($hasFullName) {
-        $nameExpr = "u.full_name";
+    if ($firstNameCol !== null && $lastNameCol !== null) {
+        $nameExpr = "TRIM(CONCAT(COALESCE(u.`{$firstNameCol}`,''), ' ', COALESCE(u.`{$lastNameCol}`,'')))";
+    } elseif ($fullNameCol !== null) {
+        $nameExpr = "u.`{$fullNameCol}`";
     }
 
     $sql = "SELECT u.id, {$nameExpr} AS approver_name";
 
-    if ($rolesTableExists && $hasRoleId && columnExists($conn, 'roles', 'id') && columnExists($conn, 'roles', 'role_name')) {
-        $sql .= ", r.role_name";
+    if ($rolesTableExists && $roleIdCol !== null && $hasRolesIdCol && $roleNameCol !== null) {
+        $sql .= ", r.`{$roleNameCol}` AS role_name";
     } else {
         $sql .= ", '' AS role_name";
     }
 
-    $sql .= " FROM users u";
+    $sql .= " FROM `users` u";
 
-    if ($rolesTableExists && $hasRoleId && columnExists($conn, 'roles', 'id') && columnExists($conn, 'roles', 'role_name')) {
-        $sql .= " LEFT JOIN roles r ON r.id = u.current_role_id";
+    if ($rolesTableExists && $roleIdCol !== null && $hasRolesIdCol && $roleNameCol !== null) {
+        $sql .= " LEFT JOIN `roles` r ON r.`id` = u.`{$roleIdCol}`";
     }
 
     $where = [];
-    if ($hasStatus) {
-        $where[] = "(u.status = 'active' OR u.status = 'Active' OR u.status = 1)";
+
+    if ($statusCol !== null) {
+        if ($statusCol === 'is_active') {
+            $where[] = "(u.`{$statusCol}` = 1 OR u.`{$statusCol}` = '1')";
+        } else {
+            $where[] = "(
+                u.`{$statusCol}` = 'active' OR
+                u.`{$statusCol}` = 'Active' OR
+                u.`{$statusCol}` = 'ACTIVE' OR
+                u.`{$statusCol}` = 1 OR
+                u.`{$statusCol}` = '1'
+            )";
+        }
     }
+
     if ($currentUserId > 0) {
-        $where[] = "u.id != " . (int)$currentUserId;
+        $where[] = "u.`id` != " . (int)$currentUserId;
     }
 
-    if (!empty($where)) {
-        $sql .= " WHERE " . implode(" AND ", $where);
+    $preferredWhere = $where;
+
+    if ($rolesTableExists && $roleIdCol !== null && $hasRolesIdCol && $roleCodeCol !== null) {
+        $preferredWhere[] = "(
+            LOWER(COALESCE(r.`{$roleCodeCol}`, '')) LIKE '%qa%' OR
+            LOWER(COALESCE(r.`{$roleCodeCol}`, '')) LIKE '%admin%' OR
+            LOWER(COALESCE(r.`{$roleCodeCol}`, '')) LIKE '%super%'
+        )";
     }
 
-    $sql .= " ORDER BY approver_name ASC";
+    $preferredSql = $sql;
+    if (!empty($preferredWhere)) {
+        $preferredSql .= " WHERE " . implode(" AND ", $preferredWhere);
+    }
+    $preferredSql .= " ORDER BY approver_name ASC";
 
-    $res = mysqli_query($conn, $sql);
-    if ($res) {
+    $res = mysqli_query($conn, $preferredSql);
+
+    if ($res && mysqli_num_rows($res) > 0) {
         while ($row = mysqli_fetch_assoc($res)) {
             $name = trim((string)($row['approver_name'] ?? ''));
             if ($name === '') {
@@ -108,9 +151,59 @@ if ($usersTableExists) {
                 'role_name' => (string)($row['role_name'] ?? '')
             ];
         }
+    } else {
+        $fallbackSql = $sql;
+        if (!empty($where)) {
+            $fallbackSql .= " WHERE " . implode(" AND ", $where);
+        }
+        $fallbackSql .= " ORDER BY approver_name ASC";
+
+        $fallbackRes = mysqli_query($conn, $fallbackSql);
+
+        if ($fallbackRes && mysqli_num_rows($fallbackRes) > 0) {
+            while ($row = mysqli_fetch_assoc($fallbackRes)) {
+                $name = trim((string)($row['approver_name'] ?? ''));
+                if ($name === '') {
+                    $name = 'User #' . (int)$row['id'];
+                }
+
+                $approvers[] = [
+                    'id' => (int)$row['id'],
+                    'name' => $name,
+                    'role_name' => (string)($row['role_name'] ?? '')
+                ];
+            }
+        } else {
+            $allSql = $sql . " ORDER BY approver_name ASC";
+            $allRes = mysqli_query($conn, $allSql);
+
+            if ($allRes && mysqli_num_rows($allRes) > 0) {
+                while ($row = mysqli_fetch_assoc($allRes)) {
+                    if ($currentUserId > 0 && (int)$row['id'] === $currentUserId) {
+                        continue;
+                    }
+
+                    $name = trim((string)($row['approver_name'] ?? ''));
+                    if ($name === '') {
+                        $name = 'User #' . (int)$row['id'];
+                    }
+
+                    $approvers[] = [
+                        'id' => (int)$row['id'],
+                        'name' => $name,
+                        'role_name' => (string)($row['role_name'] ?? '')
+                    ];
+                }
+            }
+        }
     }
 }
 
+/*
+|--------------------------------------------------------------------------
+| SAVE APPROVER
+|--------------------------------------------------------------------------
+*/
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim($_POST['action'] ?? '');
 
@@ -138,15 +231,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errorMessage = 'Selected approver is invalid.';
             } else {
                 if ($documentApproversTableExists) {
-                    $docIdCol = columnExists($conn, 'document_approvers', 'document_id') ? 'document_id' : '';
-                    $ownerCol = columnExists($conn, 'document_approvers', 'document_owner') ? 'document_owner' : '';
-                    $actionCol = columnExists($conn, 'document_approvers', 'requested_action') ? 'requested_action' : '';
-                    $approverIdCol = columnExists($conn, 'document_approvers', 'approver_id') ? 'approver_id' : '';
-                    $approverNameCol = columnExists($conn, 'document_approvers', 'approver_name') ? 'approver_name' : '';
-                    $createdByCol = columnExists($conn, 'document_approvers', 'created_by') ? 'created_by' : '';
-                    $updatedByCol = columnExists($conn, 'document_approvers', 'updated_by') ? 'updated_by' : '';
+                    $docIdCol = firstExistingColumn($conn, 'document_approvers', ['document_id']);
+                    $ownerCol = firstExistingColumn($conn, 'document_approvers', ['document_owner']);
+                    $actionCol = firstExistingColumn($conn, 'document_approvers', ['requested_action']);
+                    $approverIdCol = firstExistingColumn($conn, 'document_approvers', ['approver_id']);
+                    $approverNameCol = firstExistingColumn($conn, 'document_approvers', ['approver_name']);
+                    $createdByCol = firstExistingColumn($conn, 'document_approvers', ['created_by']);
+                    $updatedByCol = firstExistingColumn($conn, 'document_approvers', ['updated_by']);
 
-                    if ($docIdCol === '' || $ownerCol === '' || $actionCol === '' || $approverIdCol === '') {
+                    if ($docIdCol === null || $ownerCol === null || $actionCol === null || $approverIdCol === null) {
                         $errorMessage = 'document_approvers table structure is incomplete.';
                     } else {
                         $checkSql = "SELECT id FROM `document_approvers` WHERE `{$docIdCol}` = ? LIMIT 1";
@@ -165,10 +258,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $updateParts[] = "`{$actionCol}` = ?";
                                 $updateParts[] = "`{$approverIdCol}` = ?";
 
-                                if ($approverNameCol !== '') {
+                                if ($approverNameCol !== null) {
                                     $updateParts[] = "`{$approverNameCol}` = ?";
                                 }
-                                if ($updatedByCol !== '') {
+                                if ($updatedByCol !== null) {
                                     $updateParts[] = "`{$updatedByCol}` = ?";
                                 }
 
@@ -176,7 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $stmt = mysqli_prepare($conn, $sql);
 
                                 if ($stmt) {
-                                    if ($approverNameCol !== '' && $updatedByCol !== '') {
+                                    if ($approverNameCol !== null && $updatedByCol !== null) {
                                         mysqli_stmt_bind_param(
                                             $stmt,
                                             "ssisis",
@@ -187,7 +280,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             $currentUserId,
                                             $documentId
                                         );
-                                    } elseif ($approverNameCol !== '') {
+                                    } elseif ($approverNameCol !== null) {
                                         mysqli_stmt_bind_param(
                                             $stmt,
                                             "ssiss",
@@ -197,7 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             $selectedApproverName,
                                             $documentId
                                         );
-                                    } elseif ($updatedByCol !== '') {
+                                    } elseif ($updatedByCol !== null) {
                                         mysqli_stmt_bind_param(
                                             $stmt,
                                             "ssiis",
@@ -253,21 +346,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $binds[] = $selectedApproverId;
                                 $types .= 'i';
 
-                                if ($approverNameCol !== '') {
+                                if ($approverNameCol !== null) {
                                     $cols[] = "`{$approverNameCol}`";
                                     $vals[] = "?";
                                     $binds[] = $selectedApproverName;
                                     $types .= 's';
                                 }
 
-                                if ($createdByCol !== '') {
+                                if ($createdByCol !== null) {
                                     $cols[] = "`{$createdByCol}`";
                                     $vals[] = "?";
                                     $binds[] = $currentUserId;
                                     $types .= 'i';
                                 }
 
-                                if ($updatedByCol !== '') {
+                                if ($updatedByCol !== null) {
                                     $cols[] = "`{$updatedByCol}`";
                                     $vals[] = "?";
                                     $binds[] = $currentUserId;
@@ -307,21 +400,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+/*
+|--------------------------------------------------------------------------
+| LOAD SAVED DATA
+|--------------------------------------------------------------------------
+*/
 $selectedApproverName = '';
 
 if ($documentApproversTableExists && $documentId !== '') {
-    $docIdCol = columnExists($conn, 'document_approvers', 'document_id') ? 'document_id' : '';
-    $ownerCol = columnExists($conn, 'document_approvers', 'document_owner') ? 'document_owner' : '';
-    $actionCol = columnExists($conn, 'document_approvers', 'requested_action') ? 'requested_action' : '';
-    $approverIdCol = columnExists($conn, 'document_approvers', 'approver_id') ? 'approver_id' : '';
-    $approverNameCol = columnExists($conn, 'document_approvers', 'approver_name') ? 'approver_name' : '';
+    $docIdCol = firstExistingColumn($conn, 'document_approvers', ['document_id']);
+    $ownerCol = firstExistingColumn($conn, 'document_approvers', ['document_owner']);
+    $actionCol = firstExistingColumn($conn, 'document_approvers', ['requested_action']);
+    $approverIdCol = firstExistingColumn($conn, 'document_approvers', ['approver_id']);
+    $approverNameCol = firstExistingColumn($conn, 'document_approvers', ['approver_name']);
 
-    if ($docIdCol !== '' && $approverIdCol !== '') {
+    if ($docIdCol !== null && $approverIdCol !== null) {
         $selectCols = [];
-        if ($ownerCol !== '') $selectCols[] = "`{$ownerCol}` AS document_owner";
-        if ($actionCol !== '') $selectCols[] = "`{$actionCol}` AS requested_action";
+        if ($ownerCol !== null) $selectCols[] = "`{$ownerCol}` AS document_owner";
+        if ($actionCol !== null) $selectCols[] = "`{$actionCol}` AS requested_action";
         $selectCols[] = "`{$approverIdCol}` AS approver_id";
-        if ($approverNameCol !== '') $selectCols[] = "`{$approverNameCol}` AS approver_name";
+        if ($approverNameCol !== null) $selectCols[] = "`{$approverNameCol}` AS approver_name";
 
         $sql = "SELECT " . implode(', ', $selectCols) . " FROM `document_approvers` WHERE `{$docIdCol}` = ? LIMIT 1";
         $stmt = mysqli_prepare($conn, $sql);
@@ -502,7 +600,7 @@ if ($documentApproversTableExists && $documentId !== '') {
                         </option>
                       <?php endforeach; ?>
                     <?php else: ?>
-                      <option value="">No active approvers found</option>
+                      <option value="">No users found in database</option>
                     <?php endif; ?>
                   </select>
                 </div>
