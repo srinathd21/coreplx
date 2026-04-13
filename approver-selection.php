@@ -32,7 +32,7 @@ if (!function_exists('columnExists')) {
 $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 $currentUserName = isset($_SESSION['full_name']) && trim($_SESSION['full_name']) !== ''
     ? $_SESSION['full_name']
-    : 'Pradeep';
+    : '';
 
 $successMessage = '';
 $errorMessage = '';
@@ -41,9 +41,9 @@ if (!isset($_SESSION['document_approver_selections']) || !is_array($_SESSION['do
     $_SESSION['document_approver_selections'] = [];
 }
 
-$documentId = trim($_GET['document_id'] ?? $_POST['document_id'] ?? 'DOC-001');
-$documentOwner = trim($_GET['document_owner'] ?? $_POST['document_owner'] ?? $currentUserName);
-$requestedAction = trim($_GET['requested_action'] ?? $_POST['requested_action'] ?? 'Create Document');
+$documentId = trim($_GET['document_id'] ?? $_POST['document_id'] ?? '');
+$documentOwner = trim($_GET['document_owner'] ?? $_POST['document_owner'] ?? '');
+$requestedAction = trim($_GET['requested_action'] ?? $_POST['requested_action'] ?? '');
 $selectedApproverId = (int)($_POST['approver_id'] ?? 0);
 
 $usersTableExists = tableExists($conn, 'users');
@@ -111,14 +111,6 @@ if ($usersTableExists) {
     }
 }
 
-if (empty($approvers)) {
-    $approvers = [
-        ['id' => 101, 'name' => 'QA Head', 'role_name' => 'QA Admin'],
-        ['id' => 102, 'name' => 'Compliance Manager', 'role_name' => 'QA Admin'],
-        ['id' => 103, 'name' => 'Document Control Lead', 'role_name' => 'QA Admin'],
-    ];
-}
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim($_POST['action'] ?? '');
 
@@ -126,9 +118,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($documentId === '') {
             $errorMessage = 'Document ID is required.';
         } elseif ($documentOwner === '') {
-            $errorMessage = 'Document owner is required.';
+            $errorMessage = 'Document Owner is required.';
         } elseif ($requestedAction === '') {
-            $errorMessage = 'Requested action is required.';
+            $errorMessage = 'Requested Action is required.';
         } elseif ($selectedApproverId <= 0) {
             $errorMessage = 'Please select an approver.';
         } elseif ($currentUserId > 0 && $selectedApproverId === $currentUserId) {
@@ -317,7 +309,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $selectedApproverName = '';
 
-if ($documentApproversTableExists) {
+if ($documentApproversTableExists && $documentId !== '') {
     $docIdCol = columnExists($conn, 'document_approvers', 'document_id') ? 'document_id' : '';
     $ownerCol = columnExists($conn, 'document_approvers', 'document_owner') ? 'document_owner' : '';
     $actionCol = columnExists($conn, 'document_approvers', 'requested_action') ? 'requested_action' : '';
@@ -339,10 +331,10 @@ if ($documentApproversTableExists) {
             $res = mysqli_stmt_get_result($stmt);
             if ($res && mysqli_num_rows($res) > 0) {
                 $row = mysqli_fetch_assoc($res);
-                if (!empty($row['document_owner'])) {
+                if (isset($row['document_owner']) && $row['document_owner'] !== '') {
                     $documentOwner = (string)$row['document_owner'];
                 }
-                if (!empty($row['requested_action'])) {
+                if (isset($row['requested_action']) && $row['requested_action'] !== '') {
                     $requestedAction = (string)$row['requested_action'];
                 }
                 $selectedApproverId = (int)($row['approver_id'] ?? 0);
@@ -352,7 +344,7 @@ if ($documentApproversTableExists) {
         }
     }
 } else {
-    if (isset($_SESSION['document_approver_selections'][$documentId])) {
+    if ($documentId !== '' && isset($_SESSION['document_approver_selections'][$documentId])) {
         $saved = $_SESSION['document_approver_selections'][$documentId];
         $documentOwner = (string)($saved['document_owner'] ?? $documentOwner);
         $requestedAction = (string)($saved['requested_action'] ?? $requestedAction);
@@ -387,9 +379,6 @@ if ($documentApproversTableExists) {
     }
     .note-list {
       padding-left: 1rem;
-    }
-    .readonly {
-      background-color: #f8f9fa;
     }
   </style>
 </head>
@@ -447,7 +436,7 @@ if ($documentApproversTableExists) {
         <li class="nav-item"><a class="nav-link" href="portal-select.php">Switch to User</a></li>
       </ul>
       <div class="d-flex align-items-center gap-3 ms-xl-3">
-        <span class="navbar-text small"><?php echo e($currentUserName); ?></span>
+        <span class="navbar-text small"><?php echo e($currentUserName !== '' ? $currentUserName : 'QA Admin'); ?></span>
         <a class="nav-link px-0" href="notifications.php">Notifications</a>
         <span class="navbar-text small">Profile</span>
       </div>
@@ -485,28 +474,36 @@ if ($documentApproversTableExists) {
 
             <form method="post">
               <input type="hidden" name="action" value="save_approver">
-              <input type="hidden" name="document_id" value="<?php echo e($documentId); ?>">
 
               <div class="row g-3">
                 <div class="col-md-6">
+                  <label class="form-label">Document ID</label>
+                  <input class="form-control" name="document_id" value="<?php echo e($documentId); ?>" placeholder="Enter document ID">
+                </div>
+
+                <div class="col-md-6">
                   <label class="form-label">Document Owner</label>
-                  <input class="form-control readonly" name="document_owner" readonly value="<?php echo e($documentOwner); ?>">
+                  <input class="form-control" name="document_owner" value="<?php echo e($documentOwner); ?>" placeholder="Enter document owner">
                 </div>
 
                 <div class="col-md-6">
                   <label class="form-label">Requested Action</label>
-                  <input class="form-control readonly" name="requested_action" readonly value="<?php echo e($requestedAction); ?>">
+                  <input class="form-control" name="requested_action" value="<?php echo e($requestedAction); ?>" placeholder="Enter requested action">
                 </div>
 
-                <div class="col-12">
+                <div class="col-md-6">
                   <label class="form-label">Approver</label>
                   <select class="form-select" name="approver_id" required>
                     <option value="">Select Approver</option>
-                    <?php foreach ($approvers as $approver): ?>
-                      <option value="<?php echo (int)$approver['id']; ?>" <?php echo $selectedApproverId === (int)$approver['id'] ? 'selected' : ''; ?>>
-                        <?php echo e($approver['name'] . ($approver['role_name'] !== '' ? ' - ' . $approver['role_name'] : '')); ?>
-                      </option>
-                    <?php endforeach; ?>
+                    <?php if (!empty($approvers)): ?>
+                      <?php foreach ($approvers as $approver): ?>
+                        <option value="<?php echo (int)$approver['id']; ?>" <?php echo $selectedApproverId === (int)$approver['id'] ? 'selected' : ''; ?>>
+                          <?php echo e($approver['name'] . ($approver['role_name'] !== '' ? ' - ' . $approver['role_name'] : '')); ?>
+                        </option>
+                      <?php endforeach; ?>
+                    <?php else: ?>
+                      <option value="">No active approvers found</option>
+                    <?php endif; ?>
                   </select>
                 </div>
               </div>
@@ -515,7 +512,7 @@ if ($documentApproversTableExists) {
 
               <div class="d-flex gap-2 mt-3">
                 <button type="submit" class="btn btn-primary">Save Approver</button>
-                <a href="approver-selection.php?document_id=<?php echo urlencode($documentId); ?>&document_owner=<?php echo urlencode($documentOwner); ?>&requested_action=<?php echo urlencode($requestedAction); ?>" class="btn btn-outline-secondary">Reset</a>
+                <a href="approver-selection.php" class="btn btn-outline-secondary">Reset</a>
               </div>
             </form>
 
