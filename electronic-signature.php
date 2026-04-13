@@ -77,7 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $timestampValue = date('d-M-Y H:i:s');
 
     if ($action === 'apply_signature') {
-        if ($username === '') {
+        if ($documentId === '') {
+            $errorMessage = 'Document ID is required.';
+        } elseif ($username === '') {
             $errorMessage = 'Username is required.';
         } elseif ($password === '') {
             $errorMessage = 'Password is required.';
@@ -89,6 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $verifiedUserId = 0;
             $verifiedUserName = '';
             $verified = false;
+            $userRow = null;
 
             if ($usersTableExists) {
                 $loginCols = [];
@@ -97,6 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $loginCols[] = $col;
                     }
                 }
+
+                $hasFirstName = columnExists($conn, 'users', 'first_name');
+                $hasLastName  = columnExists($conn, 'users', 'last_name');
 
                 $passwordCols = [];
                 foreach (['password', 'password_hash', 'user_password'] as $col) {
@@ -113,19 +119,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
-                if (!empty($loginCols) && !empty($passwordCols)) {
-                    $orParts = [];
+                if (empty($loginCols) && !($hasFirstName || $hasLastName)) {
+                    $errorMessage = 'No usable login column found in users table.';
+                } elseif (empty($passwordCols)) {
+                    $errorMessage = 'No valid password column found in users table.';
+                } else {
+                    $whereParts = [];
+                    $bindValues = [];
+                    $bindTypes = '';
+
                     foreach ($loginCols as $col) {
-                        $orParts[] = "`{$col}` = ?";
+                        $whereParts[] = "TRIM(LOWER(COALESCE(`{$col}`, ''))) = TRIM(LOWER(?))";
+                        $bindValues[] = $username;
+                        $bindTypes .= 's';
                     }
 
-                    $sql = "SELECT * FROM `users` WHERE (" . implode(' OR ', $orParts) . ") LIMIT 1";
+                    if ($hasFirstName && $hasLastName) {
+                        $whereParts[] = "TRIM(LOWER(CONCAT(COALESCE(`first_name`, ''), ' ', COALESCE(`last_name`, '')))) = TRIM(LOWER(?))";
+                        $bindValues[] = $username;
+                        $bindTypes .= 's';
+                    }
+
+                    $sql = "SELECT * FROM `users` WHERE (" . implode(' OR ', $whereParts) . ") LIMIT 1";
                     $stmt = mysqli_prepare($conn, $sql);
 
                     if ($stmt) {
-                        $types = str_repeat('s', count($loginCols));
-                        $params = array_fill(0, count($loginCols), $username);
-                        mysqli_stmt_bind_param($stmt, $types, ...$params);
+                        mysqli_stmt_bind_param($stmt, $bindTypes, ...$bindValues);
                         mysqli_stmt_execute($stmt);
                         $res = mysqli_stmt_get_result($stmt);
 
@@ -165,9 +184,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         $verified = true;
                                         $verifiedUserId = (int)($userRow['id'] ?? 0);
 
-                                        if (columnExists($conn, 'users', 'full_name')) {
-                                            $verifiedUserName = trim((string)($userRow['full_name'] ?? ''));
-                                        } elseif (columnExists($conn, 'users', 'first_name') && columnExists($conn, 'users', 'last_name')) {
+                                        if (columnExists($conn, 'users', 'full_name') && trim((string)($userRow['full_name'] ?? '')) !== '') {
+                                            $verifiedUserName = trim((string)$userRow['full_name']);
+                                        } elseif ($hasFirstName && $hasLastName) {
                                             $verifiedUserName = trim((string)($userRow['first_name'] ?? '') . ' ' . (string)($userRow['last_name'] ?? ''));
                                         } else {
                                             foreach ($loginCols as $loginCol) {
@@ -180,10 +199,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         break;
                                     }
                                 }
+
+                                if (!$verified) {
+                                    $errorMessage = 'Password did not match database value.';
+                                }
+                            } else {
+                                $errorMessage = 'User is not active.';
                             }
+                        } else {
+                            $errorMessage = 'Username not found in users table.';
                         }
 
                         mysqli_stmt_close($stmt);
+                    } else {
+                        $errorMessage = 'Failed to prepare user query.';
                     }
                 }
             } else {
@@ -192,15 +221,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $verifiedUserName = $username;
             }
 
-            if (!$verified) {
+            if (!$verified && $errorMessage === '') {
                 $errorMessage = 'Invalid username or password.';
-            } else {
+            }
+
+            if ($verified) {
                 $statusAfter = ($signatureMeaning === 'Approved') ? 'Approved' : 'Denied';
 
                 if ($signatureTable !== '') {
                     $docIdCol = firstExistingColumn($conn, $signatureTable, ['document_id', 'doc_id', 'document_code']);
                     $userIdCol = firstExistingColumn($conn, $signatureTable, ['user_id', 'signed_by', 'approver_id']);
-                    $userNameCol = firstExistingColumn($conn, $signatureTable, ['user_name', 'signed_by_name', 'approver_name']);
+                    $userNameCol = firstExistingColumn($conn, $signatureTable, ['user_name', 'signed_by_name', 'approver_name', 'username']);
                     $meaningCol = firstExistingColumn($conn, $signatureTable, ['signature_meaning', 'meaning', 'status', 'decision']);
                     $reasonCol = firstExistingColumn($conn, $signatureTable, ['reason', 'comments', 'comment', 'remarks', 'remark']);
                     $timeCol = firstExistingColumn($conn, $signatureTable, ['signed_at', 'created_at', 'timestamp', 'action_at']);
