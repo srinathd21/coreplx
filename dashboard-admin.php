@@ -382,7 +382,7 @@ if ($recentDocsRes) {
             <li><a class="dropdown-item" href="qa-admin.php">QA Admin</a></li>
             <li><a class="dropdown-item" href="employee-role.php">Employee Role</a></li>
             <li><a class="dropdown-item" href="super-admin.php">Super Admin</a></li>
-            <li><a class="dropdown-item" href="manage-user.php">User Management</a></li>
+            <li><a class="dropdown-item" href="user-management.php">User Management</a></li>
             <li><a class="dropdown-item" href="role-assignment.php">Role Assignment</a></li>
           </ul>
         </li>
