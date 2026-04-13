@@ -7,62 +7,25 @@ if (!function_exists('e')) {
     }
 }
 
-$currentUserName = isset($_SESSION['full_name']) && trim((string)$_SESSION['full_name']) !== ''
-    ? trim((string)$_SESSION['full_name'])
-    : 'QA Admin';
+$roleName = $_SESSION['role_name'] ?? 'QA Admin';
+$displayName = $_SESSION['admin_name'] ?? ($_SESSION['full_name'] ?? 'Profile');
 ?>
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CorePlx Quality DMS - Repository</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
   <style>
-    .cp-card{
-      border:1px solid rgba(0,0,0,.08);
-      border-radius:18px;
-      box-shadow:0 6px 24px rgba(0,0,0,.06);
-      background:#fff;
-    }
-    .page-title{
-      font-size:27px;
-      line-height:1.2;
-      font-weight:700;
-      color:#173f7a;
-      margin:0 0 12px 0;
-    }
-    .page-subtitle{
-      font-size:18px;
-      line-height:1.55;
-      color:#5c6f8e;
-      margin:0;
-      font-weight:400;
-    }
-    .card-title{
-      font-size:21px;
-      line-height:1.3;
-      font-weight:700;
-      color:#173f7a;
-      margin:0 0 4px 0;
-    }
-    .card-subtitle{
-      color:#5f708c;
-      font-size:15px;
-      line-height:1.55;
-    }
-    .badge-soft-success{
-      background:rgba(25,135,84,.12);
-      color:#198754;
-    }
-    .badge-soft-danger{
-      background:rgba(220,53,69,.12);
-      color:#dc3545;
-    }
-    .table > :not(caption) > * > *{
-      padding:.9rem .75rem;
-      vertical-align:middle;
-    }
+    .app-shell{min-height:calc(100vh - 72px);}
+    .content-wrap{max-width:1400px;}
+    .page-title{font-size:1.75rem;font-weight:700;color:#0D2144;}
+    .page-subtitle{color:#6c757d;}
+    .cp-card{border:1px solid #e9ecef;border-radius:16px;box-shadow:0 6px 18px rgba(15,23,42,.05);}
+    .card-title{font-size:1.1rem;font-weight:700;color:#0D2144;}
+    .card-subtitle{color:#6c757d;font-size:.95rem;}
   </style>
 </head>
 <body>
@@ -72,10 +35,13 @@ $currentUserName = isset($_SESSION['full_name']) && trim((string)$_SESSION['full
     <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
+
     <div class="collapse navbar-collapse" id="topNav">
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
-        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.php">Dashboard</a></li>
-        
+        <li class="nav-item">
+          <a class="nav-link active" href="dashboard-admin.php">Dashboard</a>
+        </li>
+
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
           <ul class="dropdown-menu">
@@ -85,7 +51,7 @@ $currentUserName = isset($_SESSION['full_name']) && trim((string)$_SESSION['full
             <li><a class="dropdown-item" href="repository.php">Repository</a></li>
           </ul>
         </li>
-        
+
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a>
           <ul class="dropdown-menu">
@@ -101,7 +67,7 @@ $currentUserName = isset($_SESSION['full_name']) && trim((string)$_SESSION['full
             <li><a class="dropdown-item" href="notifications.php">Notifications</a></li>
           </ul>
         </li>
-        
+
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
           <ul class="dropdown-menu">
@@ -115,83 +81,56 @@ $currentUserName = isset($_SESSION['full_name']) && trim((string)$_SESSION['full
             <li><a class="dropdown-item" href="role-assignment.php">Role Assignment</a></li>
           </ul>
         </li>
-        
-        <li class="nav-item"><a class="nav-link" href="portal-select.php">Switch to User</a></li>
+
+        <li class="nav-item">
+          <a class="nav-link" href="portal-select.php">Switch to User</a>
+        </li>
       </ul>
+
       <div class="d-flex align-items-center gap-3 ms-xl-3">
-        <span class="navbar-text small"><?php echo e($currentUserName); ?></span>
+        <span class="navbar-text small"><?php echo e($roleName); ?></span>
         <a class="nav-link px-0" href="notifications.php">Notifications</a>
-        <span class="navbar-text small">Profile</span>
+        <span class="navbar-text small"><?php echo e($displayName); ?></span>
       </div>
     </div>
   </div>
 </nav>
 
 <main class="app-shell">
-<div class="content-wrap px-4 py-4 mx-auto">
-  <div class="mb-4">
-    <h1 class="page-title mb-2">Effective Documents Repository</h1>
-    <p class="page-subtitle mb-0">Access approved and effective controlled documents in a read-only repository.</p>
-  </div>
+  <div class="content-wrap px-4 py-4 mx-auto">
+    <div class="mb-4">
+      <h1 class="page-title mb-2">Effective Documents Repository</h1>
+      <p class="page-subtitle mb-0">Access approved and effective controlled documents in a read-only repository.</p>
+    </div>
 
-  <div class="card cp-card">
-    <div class="card-body">
-      <h2 class="card-title mb-1">Effective Controlled Documents</h2>
-      <p class="card-subtitle mb-3">Approved documents appear here in a read-only repository.</p>
+    <div class="card cp-card">
+      <div class="card-body">
+        <h2 class="card-title mb-1">Effective Controlled Documents</h2>
+        <p class="card-subtitle mb-3">Approved documents appear here in a read-only repository.</p>
 
-      <div class="table-responsive">
-        <table class="table align-middle">
-          <thead>
-            <tr>
-              <th>Document ID</th>
-              <th>Title</th>
-              <th>Effective Date</th>
-              <th>Next Review Date</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="fw-semibold"></td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td><span class="badge badge-soft-success"></span></td>
-              <td>
-                <button class="btn btn-sm btn-outline-primary">View</button>
-                <button class="btn btn-sm btn-outline-secondary">PDF</button>
-              </td>
-            </tr>
-            <tr>
-              <td class="fw-semibold"></td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td><span class="badge badge-soft-danger"></span></td>
-              <td>
-                <button class="btn btn-sm btn-outline-primary">View</button>
-                <button class="btn btn-sm btn-outline-secondary">PDF</button>
-              </td>
-            </tr>
-            <tr>
-              <td class="fw-semibold"></td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td><span class="badge badge-soft-success"></span></td>
-              <td>
-                <button class="btn btn-sm btn-outline-primary">View</button>
-                <button class="btn btn-sm btn-outline-secondary">PDF</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead>
+              <tr>
+                <th>Document ID</th>
+                <th>Title</th>
+                <th>Effective Date</th>
+                <th>Next Review Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="6" class="text-center text-muted py-4">No effective documents found</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
       </div>
-
     </div>
   </div>
-</div>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
