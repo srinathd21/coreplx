@@ -5,6 +5,17 @@ require_once __DIR__ . '/includes/db.php';
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die("Database connection not found. Please check includes/db.php");
 }
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header('Location: login-admin.php');
+    exit;
+}
+
+$userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+if ($userId <= 0) {
+    session_destroy();
+    header('Location: login-admin.php');
+    exit;
+}
 
 if (!function_exists('e')) {
     function e($value) {
@@ -30,9 +41,55 @@ if (!function_exists('formatDateTimeDisplay')) {
     }
 }
 
-$currentUserName = isset($_SESSION['full_name']) && trim($_SESSION['full_name']) !== ''
-    ? $_SESSION['full_name']
-    : 'QA Admin';
+/*
+|--------------------------------------------------------------------------
+| ALLOW ONLY SUPER ADMIN
+|--------------------------------------------------------------------------
+*/
+if (
+    !isset($_SESSION['admin_logged_in']) ||
+    $_SESSION['admin_logged_in'] !== true ||
+    !isset($_SESSION['user_id']) ||
+    (int)$_SESSION['user_id'] <= 0
+) {
+    header('Location: login-admin.php');
+    exit;
+}
+
+$currentUserId = (int)$_SESSION['user_id'];
+
+$currentUser = null;
+$currentUserSql = "
+    SELECT
+        u.id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        r.role_code,
+        r.role_name
+    FROM users u
+    INNER JOIN roles r ON r.id = u.current_role_id
+    WHERE u.id = ?
+    LIMIT 1
+";
+$currentUserStmt = mysqli_prepare($conn, $currentUserSql);
+if ($currentUserStmt) {
+    mysqli_stmt_bind_param($currentUserStmt, "i", $currentUserId);
+    mysqli_stmt_execute($currentUserStmt);
+    $currentUserRes = mysqli_stmt_get_result($currentUserStmt);
+    $currentUser = ($currentUserRes && mysqli_num_rows($currentUserRes) > 0) ? mysqli_fetch_assoc($currentUserRes) : null;
+    mysqli_stmt_close($currentUserStmt);
+}
+
+if (!$currentUser || ($currentUser['role_code'] ?? '') !== 'super_admin') {
+    header('Location: login-admin.php');
+    exit;
+}
+
+$currentUserName = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
+if ($currentUserName === '') {
+    $currentUserName = $_SESSION['full_name'] ?? 'Super Admin';
+}
 
 $hasUsersTable           = tableExists($conn, 'users');
 $hasRolesTable           = tableExists($conn, 'roles');
@@ -98,6 +155,7 @@ if ($hasRolesTable) {
     $res = mysqli_query($conn, "
         SELECT id, role_code, role_name, description, is_active, created_at
         FROM roles
+        WHERE role_code = 'super_admin'
         ORDER BY id ASC
     ");
     if ($res) {
@@ -119,10 +177,13 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
             newr.role_name AS new_role_name,
             CONCAT(COALESCE(cb.first_name, ''), ' ', COALESCE(cb.last_name, '')) AS changed_by_name
         FROM user_role_history urh
-        LEFT JOIN users u   ON u.id = urh.user_id
+        LEFT JOIN users u ON u.id = urh.user_id
         LEFT JOIN roles oldr ON oldr.id = urh.old_role_id
         LEFT JOIN roles newr ON newr.id = urh.new_role_id
-        LEFT JOIN users cb  ON cb.id = urh.changed_by
+        LEFT JOIN users cb ON cb.id = urh.changed_by
+        LEFT JOIN roles nr ON nr.id = urh.new_role_id
+        WHERE nr.role_code = 'super_admin'
+           OR oldr.role_code = 'super_admin'
         ORDER BY urh.id DESC
         LIMIT 5
     ";
@@ -184,18 +245,6 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
     .soft-badge.secondary {
       background: rgba(108,117,125,.12);
       color: #6c757d;
-    }
-    .mini-list {
-      padding-left: 1rem;
-      margin-bottom: 0;
-    }
-    .mini-list li {
-      margin-bottom: .45rem;
-      color: #6c757d;
-      font-size: .92rem;
-    }
-    .mini-list li:last-child {
-      margin-bottom: 0;
     }
     .table thead th {
       white-space: nowrap;
@@ -275,7 +324,7 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
             <li><a class="dropdown-item" href="qa-admin.php">QA Admin</a></li>
             <li><a class="dropdown-item" href="employee-role.php">Employee Role</a></li>
             <li><a class="dropdown-item" href="super-admin.php">Super Admin</a></li>
-            <li><a class="dropdown-item" href="user-management.php">User Management</a></li>
+            <li><a class="dropdown-item" href="manage-user.php">User Management</a></li>
             <li><a class="dropdown-item" href="role-assignment.php">Role Assignment</a></li>
           </ul>
         </li>
@@ -285,7 +334,7 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
       <div class="d-flex align-items-center gap-3 ms-xl-3">
         <span class="navbar-text small"><?php echo e($currentUserName); ?></span>
         <a class="nav-link px-0" href="notifications.php">Notifications</a>
-        <span class="navbar-text small">Profile</span>
+        <span class="navbar-text small">Super Admin</span>
       </div>
     </div>
   </div>
@@ -295,15 +344,15 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
   <div class="content-wrap px-4 py-4 mx-auto">
     <div class="mb-4">
       <h1 class="page-title mb-2">Super Admin Controls</h1>
-      <p class="page-subtitle mb-0">Manage system-wide access, user roles, and administrative controls with full traceability.</p>
+      <p class="page-subtitle mb-0">Manage only super admin access and high-level administrative control.</p>
     </div>
 
     <div class="row g-3 mb-3">
       <div class="col-sm-6 col-xl-3">
         <div class="card cp-card h-100">
           <div class="card-body">
-            <div class="stat-number"><?php echo (int)$totalUsers; ?></div>
-            <div class="stat-label">Total Users</div>
+            <div class="stat-number"><?php echo (int)$superAdmins; ?></div>
+            <div class="stat-label">Total Super Admins</div>
           </div>
         </div>
       </div>
@@ -312,16 +361,7 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
         <div class="card cp-card h-100">
           <div class="card-body">
             <div class="stat-number"><?php echo (int)$activeUsers; ?></div>
-            <div class="stat-label">Active Users</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-sm-6 col-xl-3">
-        <div class="card cp-card h-100">
-          <div class="card-body">
-            <div class="stat-number"><?php echo (int)$superAdmins; ?></div>
-            <div class="stat-label">Super Admins</div>
+            <div class="stat-label">All Active Users</div>
           </div>
         </div>
       </div>
@@ -334,6 +374,15 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
           </div>
         </div>
       </div>
+
+      <div class="col-sm-6 col-xl-3">
+        <div class="card cp-card h-100">
+          <div class="card-body">
+            <div class="stat-number"><?php echo (int)$employees; ?></div>
+            <div class="stat-label">Employees</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="row g-3">
@@ -341,12 +390,12 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
         <div class="card cp-card h-100">
           <div class="card-body">
             <h2 class="card-title mb-1">Role Summary</h2>
-            <p class="card-subtitle mb-3">Core responsibilities for the selected access role.</p>
+            <p class="card-subtitle mb-3">Super Admin access only.</p>
             <ul class="small text-secondary mb-0">
-              <li>All QA Admin permissions.</li>
-              <li>Assign and change roles.</li>
-              <li>Deactivate users.</li>
-              <li>Audit trail remains read-only for all roles, including Super Admin.</li>
+              <li>Only super admin can open this page.</li>
+              <li>Can manage roles and users.</li>
+              <li>Can review administrative changes.</li>
+              <li>Audit trail remains traceable.</li>
             </ul>
           </div>
         </div>
@@ -356,12 +405,10 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
         <div class="card cp-card h-100">
           <div class="card-body">
             <h2 class="card-title mb-1">Access Matrix</h2>
-            <p class="card-subtitle mb-3">Use centralized role definitions instead of per-page exceptions.</p>
-            <div class="small text-secondary">Bootstrap tables and badges can be reused for permission matrix rendering.</div>
+            <p class="card-subtitle mb-3">Showing only super admin role definition.</p>
+            <div class="small text-secondary">This page is restricted to the highest access role only.</div>
 
             <div class="mt-3 d-flex flex-wrap gap-2">
-              <span class="soft-badge">Employee: <?php echo (int)$employees; ?></span>
-              <span class="soft-badge success">QA Admin: <?php echo (int)$qaAdmins; ?></span>
               <span class="soft-badge secondary">Super Admin: <?php echo (int)$superAdmins; ?></span>
             </div>
           </div>
@@ -372,7 +419,7 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
         <div class="card cp-card h-100">
           <div class="card-body">
             <h2 class="card-title mb-1">Audit Expectation</h2>
-            <p class="card-subtitle mb-3">Every permission change must be traceable.</p>
+            <p class="card-subtitle mb-3">Every super admin permission change must be traceable.</p>
             <div class="small text-secondary">Capture changed by, changed on, old role, new role, and reason.</div>
           </div>
         </div>
@@ -380,11 +427,11 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
     </div>
 
     <div class="row g-3 mt-1">
-      <div class="col-xl-7">
+      <div class="col-xl-12">
         <div class="card cp-card h-100">
           <div class="card-body">
             <h2 class="card-title mb-1">Role Definitions</h2>
-            <p class="card-subtitle mb-3">Centralized roles configured in the system.</p>
+            <p class="card-subtitle mb-3">Only super admin role is shown here.</p>
 
             <div class="table-responsive">
               <table class="table align-middle mb-0">
@@ -414,7 +461,7 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
                     <?php endforeach; ?>
                   <?php else: ?>
                     <tr>
-                      <td colspan="4" class="text-center text-muted py-4">No roles found.</td>
+                      <td colspan="4" class="text-center text-muted py-4">No super admin role found.</td>
                     </tr>
                   <?php endif; ?>
                 </tbody>
@@ -424,44 +471,7 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
         </div>
       </div>
 
-      <div class="col-xl-5">
-        <div class="card cp-card h-100">
-          <div class="card-body">
-            <h2 class="card-title mb-1">Recent Role Changes</h2>
-            <p class="card-subtitle mb-3">Latest administrative role activity.</p>
-
-            <?php if (!empty($recentRoleChanges)): ?>
-              <?php foreach ($recentRoleChanges as $item): ?>
-                <?php
-                  $targetUser = trim((string)($item['target_user_name'] ?? ''));
-                  if ($targetUser === '') {
-                      $targetUser = 'Unknown User';
-                  }
-
-                  $changedBy = trim((string)($item['changed_by_name'] ?? ''));
-                  if ($changedBy === '') {
-                      $changedBy = 'System';
-                  }
-                ?>
-                <div class="activity-item">
-                  <div class="activity-title">
-                    <?php echo e($targetUser); ?> :
-                    <?php echo e(($item['old_role_name'] ?? 'No Role') . ' → ' . ($item['new_role_name'] ?? 'No Role')); ?>
-                  </div>
-                  <div class="activity-meta">
-                    Changed by <?php echo e($changedBy); ?> • <?php echo e(formatDateTimeDisplay($item['changed_at'] ?? '')); ?>
-                  </div>
-                  <div class="activity-reason">
-                    <?php echo e($item['reason_for_change'] ?: '-'); ?>
-                  </div>
-                </div>
-              <?php endforeach; ?>
-            <?php else: ?>
-              <div class="small text-secondary">No recent role changes found.</div>
-            <?php endif; ?>
-          </div>
-        </div>
-      </div>
+      
     </div>
 
   </div>

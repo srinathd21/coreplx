@@ -5,6 +5,17 @@ require_once __DIR__ . '/includes/db.php';
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die("Database connection not found. Please check includes/db.php");
 }
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header('Location: login-admin.php');
+    exit;
+}
+
+$userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+if ($userId <= 0) {
+    session_destroy();
+    header('Location: login-admin.php');
+    exit;
+}
 
 if (!function_exists('e')) {
     function e($value) {
@@ -366,7 +377,7 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
     </div>
 
     <div class="row g-3 mt-1">
-      <div class="col-xl-7">
+      <div class="col-xl-12">
         <div class="card cp-card h-100">
           <div class="card-body">
             <h2 class="card-title mb-1">Employee Users</h2>
@@ -419,44 +430,7 @@ if ($hasUserRoleHistoryTable && $hasUsersTable && $hasRolesTable) {
         </div>
       </div>
 
-      <div class="col-xl-5">
-        <div class="card cp-card h-100">
-          <div class="card-body">
-            <h2 class="card-title mb-1">Recent Employee Role Changes</h2>
-            <p class="card-subtitle mb-3">Latest role updates where employee access was assigned.</p>
-
-            <?php if (!empty($recentEmployeeRoleChanges)): ?>
-              <?php foreach ($recentEmployeeRoleChanges as $item): ?>
-                <?php
-                  $targetUser = trim((string)($item['target_user_name'] ?? ''));
-                  if ($targetUser === '') {
-                      $targetUser = 'Unknown User';
-                  }
-
-                  $changedBy = trim((string)($item['changed_by_name'] ?? ''));
-                  if ($changedBy === '') {
-                      $changedBy = 'System';
-                  }
-                ?>
-                <div class="activity-item">
-                  <div class="activity-title">
-                    <?php echo e($targetUser); ?> :
-                    <?php echo e(($item['old_role_name'] ?? 'No Role') . ' → ' . ($item['new_role_name'] ?? 'No Role')); ?>
-                  </div>
-                  <div class="activity-meta">
-                    Changed by <?php echo e($changedBy); ?> • <?php echo e(formatDateTimeDisplay($item['changed_at'] ?? '')); ?>
-                  </div>
-                  <div class="activity-reason">
-                    <?php echo e($item['reason_for_change'] ?: '-'); ?>
-                  </div>
-                </div>
-              <?php endforeach; ?>
-            <?php else: ?>
-              <div class="small text-secondary">No recent employee role changes found.</div>
-            <?php endif; ?>
-          </div>
-        </div>
-      </div>
+      
     </div>
 
   </div>

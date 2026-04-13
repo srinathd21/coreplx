@@ -5,6 +5,17 @@ require_once __DIR__ . '/includes/db.php';
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die("Database connection not found. Please check includes/db.php");
 }
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header('Location: login-admin.php');
+    exit;
+}
+
+$userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+if ($userId <= 0) {
+    session_destroy();
+    header('Location: login-admin.php');
+    exit;
+}
 
 if (!function_exists('e')) {
     function e($value) {
