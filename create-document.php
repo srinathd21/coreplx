@@ -9,7 +9,7 @@ session_start();
 | Adjust this include path only if your project uses a different file.
 | This page supports PDO directly.
 */
-require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/db.php';
 
 /*
 |--------------------------------------------------------------------------
