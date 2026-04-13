@@ -72,6 +72,186 @@ foreach (['electronic_signatures', 'document_signatures', 'approval_signatures',
     }
 }
 
+if (!function_exists('verifyUserFlexible')) {
+    function verifyUserFlexible(mysqli $conn, string $inputUsername, string $inputPassword): array {
+        if (!tableExists($conn, 'users')) {
+            return [
+                'verified' => false,
+                'user_id' => 0,
+                'user_name' => '',
+                'error' => 'users table not found.'
+            ];
+        }
+
+        $loginCols = [];
+        foreach (['username', 'email', 'employee_code', 'full_name', 'name'] as $col) {
+            if (columnExists($conn, 'users', $col)) {
+                $loginCols[] = $col;
+            }
+        }
+
+        $passwordCols = [];
+        foreach (['password', 'password_hash', 'user_password'] as $col) {
+            if (columnExists($conn, 'users', $col)) {
+                $passwordCols[] = $col;
+            }
+        }
+
+        $statusCol = null;
+        foreach (['status', 'is_active'] as $col) {
+            if (columnExists($conn, 'users', $col)) {
+                $statusCol = $col;
+                break;
+            }
+        }
+
+        $hasFirstName = columnExists($conn, 'users', 'first_name');
+        $hasLastName = columnExists($conn, 'users', 'last_name');
+
+        if (empty($loginCols) && !($hasFirstName || $hasLastName)) {
+            return [
+                'verified' => false,
+                'user_id' => 0,
+                'user_name' => '',
+                'error' => 'No usable login column found in users table.'
+            ];
+        }
+
+        if (empty($passwordCols)) {
+            return [
+                'verified' => false,
+                'user_id' => 0,
+                'user_name' => '',
+                'error' => 'No valid password column found in users table.'
+            ];
+        }
+
+        $inputUsername = trim($inputUsername);
+
+        $whereParts = [];
+        $bindValues = [];
+        $bindTypes = '';
+
+        foreach ($loginCols as $col) {
+            $whereParts[] = "TRIM(LOWER(COALESCE(`{$col}`, ''))) = TRIM(LOWER(?))";
+            $bindValues[] = $inputUsername;
+            $bindTypes .= 's';
+        }
+
+        if ($hasFirstName && $hasLastName) {
+            $whereParts[] = "TRIM(LOWER(CONCAT(COALESCE(`first_name`, ''), ' ', COALESCE(`last_name`, '')))) = TRIM(LOWER(?))";
+            $bindValues[] = $inputUsername;
+            $bindTypes .= 's';
+        }
+
+        $sql = "SELECT * FROM `users` WHERE (" . implode(' OR ', $whereParts) . ") LIMIT 1";
+        $stmt = mysqli_prepare($conn, $sql);
+        if (!$stmt) {
+            return [
+                'verified' => false,
+                'user_id' => 0,
+                'user_name' => '',
+                'error' => 'Failed to prepare user query.'
+            ];
+        }
+
+        mysqli_stmt_bind_param($stmt, $bindTypes, ...$bindValues);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+
+        if (!$res || mysqli_num_rows($res) === 0) {
+            mysqli_stmt_close($stmt);
+            return [
+                'verified' => false,
+                'user_id' => 0,
+                'user_name' => '',
+                'error' => 'Username not found in users table.'
+            ];
+        }
+
+        $userRow = mysqli_fetch_assoc($res);
+        mysqli_stmt_close($stmt);
+
+        $isActiveUser = true;
+        if ($statusCol !== null) {
+            if ($statusCol === 'is_active') {
+                $isActiveUser = ((string)($userRow[$statusCol] ?? '') === '1' || (int)($userRow[$statusCol] ?? 0) === 1);
+            } else {
+                $statusValue = strtolower(trim((string)($userRow[$statusCol] ?? '')));
+                $isActiveUser = in_array($statusValue, ['active', '1', 'yes', 'enabled', 'approved'], true);
+            }
+        }
+
+        if (!$isActiveUser) {
+            return [
+                'verified' => false,
+                'user_id' => 0,
+                'user_name' => '',
+                'error' => 'User is not active.'
+            ];
+        }
+
+        $passwordMatched = false;
+        foreach ($passwordCols as $passwordCol) {
+            $dbPassword = (string)($userRow[$passwordCol] ?? '');
+            if ($dbPassword === '') {
+                continue;
+            }
+
+            if (password_verify($inputPassword, $dbPassword)) {
+                $passwordMatched = true;
+                break;
+            }
+            if (hash_equals($dbPassword, $inputPassword)) {
+                $passwordMatched = true;
+                break;
+            }
+            if (md5($inputPassword) === $dbPassword) {
+                $passwordMatched = true;
+                break;
+            }
+            if (sha1($inputPassword) === $dbPassword) {
+                $passwordMatched = true;
+                break;
+            }
+        }
+
+        if (!$passwordMatched) {
+            return [
+                'verified' => false,
+                'user_id' => 0,
+                'user_name' => '',
+                'error' => 'Password did not match database value.'
+            ];
+        }
+
+        $verifiedUserName = '';
+        if (columnExists($conn, 'users', 'full_name') && trim((string)($userRow['full_name'] ?? '')) !== '') {
+            $verifiedUserName = trim((string)$userRow['full_name']);
+        } elseif ($hasFirstName && $hasLastName) {
+            $verifiedUserName = trim((string)($userRow['first_name'] ?? '') . ' ' . (string)($userRow['last_name'] ?? ''));
+        } else {
+            foreach ($loginCols as $loginCol) {
+                if (!empty($userRow[$loginCol])) {
+                    $verifiedUserName = trim((string)$userRow[$loginCol]);
+                    break;
+                }
+            }
+        }
+
+        if ($verifiedUserName === '') {
+            $verifiedUserName = 'User #' . (int)($userRow['id'] ?? 0);
+        }
+
+        return [
+            'verified' => true,
+            'user_id' => (int)($userRow['id'] ?? 0),
+            'user_name' => $verifiedUserName,
+            'error' => ''
+        ];
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim($_POST['action'] ?? '');
     $timestampValue = date('d-M-Y H:i:s');
@@ -91,141 +271,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $verifiedUserId = 0;
             $verifiedUserName = '';
             $verified = false;
-            $userRow = null;
 
             if ($usersTableExists) {
-                $loginCols = [];
-                foreach (['username', 'email', 'employee_code', 'full_name', 'name'] as $col) {
-                    if (columnExists($conn, 'users', $col)) {
-                        $loginCols[] = $col;
-                    }
-                }
-
-                $hasFirstName = columnExists($conn, 'users', 'first_name');
-                $hasLastName  = columnExists($conn, 'users', 'last_name');
-
-                $passwordCols = [];
-                foreach (['password', 'password_hash', 'user_password'] as $col) {
-                    if (columnExists($conn, 'users', $col)) {
-                        $passwordCols[] = $col;
-                    }
-                }
-
-                $statusCol = null;
-                foreach (['status', 'is_active'] as $col) {
-                    if (columnExists($conn, 'users', $col)) {
-                        $statusCol = $col;
-                        break;
-                    }
-                }
-
-                if (empty($loginCols) && !($hasFirstName || $hasLastName)) {
-                    $errorMessage = 'No usable login column found in users table.';
-                } elseif (empty($passwordCols)) {
-                    $errorMessage = 'No valid password column found in users table.';
-                } else {
-                    $whereParts = [];
-                    $bindValues = [];
-                    $bindTypes = '';
-
-                    foreach ($loginCols as $col) {
-                        $whereParts[] = "TRIM(LOWER(COALESCE(`{$col}`, ''))) = TRIM(LOWER(?))";
-                        $bindValues[] = $username;
-                        $bindTypes .= 's';
-                    }
-
-                    if ($hasFirstName && $hasLastName) {
-                        $whereParts[] = "TRIM(LOWER(CONCAT(COALESCE(`first_name`, ''), ' ', COALESCE(`last_name`, '')))) = TRIM(LOWER(?))";
-                        $bindValues[] = $username;
-                        $bindTypes .= 's';
-                    }
-
-                    $sql = "SELECT * FROM `users` WHERE (" . implode(' OR ', $whereParts) . ") LIMIT 1";
-                    $stmt = mysqli_prepare($conn, $sql);
-
-                    if ($stmt) {
-                        mysqli_stmt_bind_param($stmt, $bindTypes, ...$bindValues);
-                        mysqli_stmt_execute($stmt);
-                        $res = mysqli_stmt_get_result($stmt);
-
-                        if ($res && mysqli_num_rows($res) > 0) {
-                            $userRow = mysqli_fetch_assoc($res);
-
-                            $isActiveUser = true;
-                            if ($statusCol !== null) {
-                                if ($statusCol === 'is_active') {
-                                    $isActiveUser = ((string)($userRow[$statusCol] ?? '') === '1' || (int)($userRow[$statusCol] ?? 0) === 1);
-                                } else {
-                                    $statusValue = strtolower(trim((string)($userRow[$statusCol] ?? '')));
-                                    $isActiveUser = in_array($statusValue, ['active', '1', 'yes', 'enabled', 'approved'], true);
-                                }
-                            }
-
-                            if ($isActiveUser) {
-                                foreach ($passwordCols as $passwordCol) {
-                                    $dbPassword = (string)($userRow[$passwordCol] ?? '');
-                                    if ($dbPassword === '') {
-                                        continue;
-                                    }
-
-                                    $passwordMatched = false;
-
-                                    if (password_verify($password, $dbPassword)) {
-                                        $passwordMatched = true;
-                                    } elseif (hash_equals($dbPassword, $password)) {
-                                        $passwordMatched = true;
-                                    } elseif (md5($password) === $dbPassword) {
-                                        $passwordMatched = true;
-                                    } elseif (sha1($password) === $dbPassword) {
-                                        $passwordMatched = true;
-                                    }
-
-                                    if ($passwordMatched) {
-                                        $verified = true;
-                                        $verifiedUserId = (int)($userRow['id'] ?? 0);
-
-                                        if (columnExists($conn, 'users', 'full_name') && trim((string)($userRow['full_name'] ?? '')) !== '') {
-                                            $verifiedUserName = trim((string)$userRow['full_name']);
-                                        } elseif ($hasFirstName && $hasLastName) {
-                                            $verifiedUserName = trim((string)($userRow['first_name'] ?? '') . ' ' . (string)($userRow['last_name'] ?? ''));
-                                        } else {
-                                            foreach ($loginCols as $loginCol) {
-                                                if (!empty($userRow[$loginCol])) {
-                                                    $verifiedUserName = trim((string)$userRow[$loginCol]);
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        break;
-                                    }
-                                }
-
-                                if (!$verified) {
-                                    $errorMessage = 'Password did not match database value.';
-                                }
-                            } else {
-                                $errorMessage = 'User is not active.';
-                            }
-                        } else {
-                            $errorMessage = 'Username not found in users table.';
-                        }
-
-                        mysqli_stmt_close($stmt);
-                    } else {
-                        $errorMessage = 'Failed to prepare user query.';
-                    }
-                }
+                $verifyResult = verifyUserFlexible($conn, $username, $password);
+                $verified = $verifyResult['verified'];
+                $verifiedUserId = $verifyResult['user_id'];
+                $verifiedUserName = $verifyResult['user_name'];
+                $errorMessage = $verifyResult['error'];
             } else {
                 $verified = true;
                 $verifiedUserId = 0;
                 $verifiedUserName = $username;
-            }
-
-            if (!$verified && $errorMessage === '') {
-                $errorMessage = 'Invalid username or password.';
+                $errorMessage = '';
             }
 
             if ($verified) {
+                $errorMessage = '';
                 $statusAfter = ($signatureMeaning === 'Approved') ? 'Approved' : 'Denied';
 
                 if ($signatureTable !== '') {
