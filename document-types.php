@@ -95,9 +95,9 @@ if ($hasDocumentTypesTable) {
         if ($res) {
             while ($row = mysqli_fetch_assoc($res)) {
                 $documentTypes[] = [
-                    'type_name' => $row['type_name'] ?? '',
+                    'type_name'   => $row['type_name'] ?? '',
                     'description' => $row['description'] ?? '',
-                    'row_status' => $row['row_status'] ?? 'active'
+                    'row_status'  => $row['row_status'] ?? 'active'
                 ];
             }
         }
@@ -107,20 +107,28 @@ if ($hasDocumentTypesTable) {
 if (empty($documentTypes)) {
     $documentTypes = [
         [
-            'type_name' => 'SOP',
-            'description' => 'Controlled operational procedures used for standardized process execution.'
+            'type_name'   => 'Checklist',
+            'description' => 'Controlled checklist'
         ],
         [
-            'type_name' => 'Policy',
-            'description' => 'Governance and business rules that define required compliance expectations.'
+            'type_name'   => 'Form',
+            'description' => 'Controlled form'
         ],
         [
-            'type_name' => 'Guidance',
-            'description' => 'Supporting instructions, interpretation, and explanatory controlled content.'
+            'type_name'   => 'Guidance',
+            'description' => 'Guidance document'
         ],
         [
-            'type_name' => 'Forms',
-            'description' => 'Controlled forms used to capture data, sign-off, or quality evidence.'
+            'type_name'   => 'Policy',
+            'description' => 'Controlled policy document'
+        ],
+        [
+            'type_name'   => 'SOP',
+            'description' => 'Standard Operating Procedure'
+        ],
+        [
+            'type_name'   => 'Work Instruction',
+            'description' => 'Work instruction document'
         ]
     ];
 }
@@ -146,25 +154,43 @@ if (empty($documentTypes)) {
       background: rgba(33,37,41,.12);
       color: #212529;
     }
-    .badge {
-      padding: .45rem .7rem;
+    .badge-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: .45rem .9rem;
       border-radius: 999px;
       font-weight: 600;
-      margin-right: .25rem;
+      text-decoration: none;
+      border: none;
+      margin-right: .35rem;
+      margin-bottom: .25rem;
+      transition: all .2s ease;
+      cursor: pointer;
+    }
+    .badge-btn:hover {
+      opacity: .9;
+      transform: translateY(-1px);
+      text-decoration: none;
     }
     .cp-card {
       border: 1px solid rgba(0,0,0,.08);
-      border-radius: 18px;
+      border-radius: 24px;
       box-shadow: 0 6px 24px rgba(0,0,0,.06);
       background: #fff;
     }
     .page-title {
       font-size: 1.75rem;
       font-weight: 700;
+      color: #143f7d;
     }
     .page-subtitle,
     .card-subtitle {
       color: #6c757d;
+    }
+    .card-title {
+      color: #143f7d;
+      font-weight: 700;
     }
   </style>
 </head>
@@ -239,19 +265,22 @@ if (empty($documentTypes)) {
 
     <div class="row g-3">
       <?php foreach ($documentTypes as $type): ?>
+        <?php
+          $typeName = trim((string)($type['type_name'] ?? ''));
+          $typeDesc = trim((string)($type['description'] ?? ''));
+          $encodedType = urlencode($typeName);
+        ?>
         <div class="col-md-6 col-xl-4">
           <div class="card cp-card h-100">
             <div class="card-body">
-              <h2 class="card-title mb-1"><?php echo e($type['type_name']); ?></h2>
+              <h2 class="card-title mb-1"><?php echo e($typeName); ?></h2>
               <p class="card-subtitle mb-3">
-                <?php
-                  $desc = trim((string)($type['description'] ?? ''));
-                  echo e($desc !== '' ? $desc : 'Controlled document category used across the quality system.');
-                ?>
+                <?php echo e($typeDesc !== '' ? $typeDesc : 'Controlled document category used across the quality system.'); ?>
               </p>
-              <span class="badge badge-soft-success">Create</span>
-              <span class="badge badge-soft-info">Update</span>
-              <span class="badge badge-dark-soft">Retire</span>
+
+              <a href="create-document.php?document_type=<?php echo $encodedType; ?>" class="badge-btn badge-soft-success">Create</a>
+              <a href="update-document.php?document_type=<?php echo $encodedType; ?>" class="badge-btn badge-soft-info">Update</a>
+              <a href="retire-document.php?document_type=<?php echo $encodedType; ?>" class="badge-btn badge-dark-soft">Retire</a>
             </div>
           </div>
         </div>
