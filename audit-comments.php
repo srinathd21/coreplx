@@ -45,7 +45,7 @@ if (!function_exists('formatDateTimeDisplay')) {
         if (empty($datetime) || $datetime === '0000-00-00 00:00:00') {
             return '-';
         }
-        $ts = strtotime($datetime);
+        $ts = strtotime((string)$datetime);
         return $ts ? date('d-M-Y h:i A', $ts) : '-';
     }
 }
@@ -53,9 +53,6 @@ if (!function_exists('formatDateTimeDisplay')) {
 $currentUserName = isset($_SESSION['full_name']) && trim($_SESSION['full_name']) !== ''
     ? $_SESSION['full_name']
     : 'QA Admin';
-
-$successMessage = '';
-$errorMessage   = '';
 
 $search       = trim($_GET['search'] ?? '');
 $userFilter   = trim($_GET['user'] ?? '');
@@ -66,6 +63,7 @@ $dateTo       = trim($_GET['date_to'] ?? '');
 $export       = trim($_GET['export'] ?? '');
 
 $rows = [];
+$errorMessage = '';
 $dataSourceLabel = 'No audit comment table found.';
 
 $possibleSources = [];
@@ -353,66 +351,66 @@ if ($export === 'csv') {
 }
 
 if ($export === 'pdf') {
-    ?>
-    <!doctype html>
-    <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <title>Audit Comments Export</title>
-        <style>
-            body { font-family: Arial, sans-serif; font-size: 12px; color: #222; margin: 20px; }
-            h2 { margin: 0 0 6px 0; font-size: 20px; }
-            p { margin: 0 0 14px 0; color: #555; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #999; padding: 8px; vertical-align: top; text-align: left; }
-            th { background: #f2f2f2; }
-            .muted { color: #666; font-size: 11px; margin-top: 10px; }
-            @media print {
-                .no-print { display: none; }
-                body { margin: 0; }
-            }
-        </style>
-    </head>
-    <body>
-        <div class="no-print" style="margin-bottom:12px;">
-            <button onclick="window.print()">Print / Save as PDF</button>
-        </div>
-        <h2>Audit Trail - Approver Comments</h2>
-        <p>Captures who commented, when, full comment text, and linked document version.</p>
+?>
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Audit Comments Export</title>
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; color: #222; margin: 20px; }
+        h2 { margin: 0 0 6px 0; font-size: 20px; }
+        p { margin: 0 0 14px 0; color: #555; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #999; padding: 8px; vertical-align: top; text-align: left; }
+        th { background: #f2f2f2; }
+        .muted { color: #666; font-size: 11px; margin-top: 10px; }
+        @media print {
+            .no-print { display: none; }
+            body { margin: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="no-print" style="margin-bottom:12px;">
+    <button onclick="window.print()">Print / Save as PDF</button>
+</div>
+<h2>Audit Trail - Approver Comments</h2>
+<p>Captures who commented, when, full comment text, and linked document version.</p>
 
-        <table>
-            <thead>
+<table>
+    <thead>
+        <tr>
+            <th>Timestamp</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Document ID</th>
+            <th>Comment</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php if (!empty($rows)): ?>
+            <?php foreach ($rows as $row): ?>
                 <tr>
-                    <th>Timestamp</th>
-                    <th>User</th>
-                    <th>Action</th>
-                    <th>Document ID</th>
-                    <th>Comment</th>
+                    <td><?php echo e(formatDateTimeDisplay($row['event_time'])); ?></td>
+                    <td><?php echo e($row['user_name']); ?></td>
+                    <td><?php echo e($row['action_name']); ?></td>
+                    <td><?php echo e($row['document_id']); ?></td>
+                    <td><?php echo nl2br(e($row['comment_text'])); ?></td>
                 </tr>
-            </thead>
-            <tbody>
-                <?php if (!empty($rows)): ?>
-                    <?php foreach ($rows as $row): ?>
-                        <tr>
-                            <td><?php echo e(formatDateTimeDisplay($row['event_time'])); ?></td>
-                            <td><?php echo e($row['user_name']); ?></td>
-                            <td><?php echo e($row['action_name']); ?></td>
-                            <td><?php echo e($row['document_id']); ?></td>
-                            <td><?php echo nl2br(e($row['comment_text'])); ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="5">No records found.</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <tr>
+                <td colspan="5">No records found.</td>
+            </tr>
+        <?php endif; ?>
+    </tbody>
+</table>
 
-        <div class="muted">Export generated on <?php echo e(date('d-M-Y h:i A')); ?></div>
-    </body>
-    </html>
-    <?php
+<div class="muted">Export generated on <?php echo e(date('d-M-Y h:i A')); ?></div>
+</body>
+</html>
+<?php
     exit;
 }
 ?>
@@ -425,33 +423,15 @@ if ($export === 'pdf') {
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
   <style>
-    .cp-card {
-      border: 1px solid rgba(0,0,0,.08);
-      border-radius: 18px;
-      box-shadow: 0 6px 24px rgba(0,0,0,.06);
-      background: #fff;
-    }
-    .page-title {
-      font-size: 1.75rem;
-      font-weight: 700;
-    }
-    .page-subtitle,
-    .card-subtitle {
-      color: #6c757d;
-    }
     .table td,
     .table th {
       vertical-align: middle;
     }
-    .table td.comment-cell {
-      min-width: 280px;
-      white-space: normal;
-    }
     .filter-box {
       display: none;
-      border: 1px solid rgba(0,0,0,.08);
+      border: 1px solid #E0E7EF;
       border-radius: 14px;
-      background: #f8f9fa;
+      background: #f8fafc;
       padding: 1rem;
       margin-bottom: 1rem;
     }
@@ -471,8 +451,7 @@ if ($export === 'pdf') {
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
         <li class="nav-item"><a class="nav-link active" href="dashboard-admin.php">Dashboard</a></li>
 
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
+        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="create-document.php">Create Document</a></li>
             <li><a class="dropdown-item" href="update-document.php">Update Document</a></li>
@@ -481,8 +460,7 @@ if ($export === 'pdf') {
           </ul>
         </li>
 
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a>
+        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="document-types.php">Document Types</a></li>
             <li><a class="dropdown-item" href="document-id.php">Document ID</a></li>
@@ -497,12 +475,11 @@ if ($export === 'pdf') {
           </ul>
         </li>
 
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="audit-creation.php">Audit - Creation</a></li>
             <li><a class="dropdown-item" href="audit-approval.php">Audit - Approval</a></li>
-            <li><a class="dropdown-item" href="audit-comments.php">Audit - Comments</a></li>
+            <li><a class="dropdown-item active" href="audit-comments.php">Audit - Comments</a></li>
             <li><a class="dropdown-item" href="qa-admin.php">QA Admin</a></li>
             <li><a class="dropdown-item" href="employee-role.php">Employee Role</a></li>
             <li><a class="dropdown-item" href="super-admin.php">Super Admin</a></li>
@@ -523,125 +500,101 @@ if ($export === 'pdf') {
 </nav>
 
 <main class="app-shell">
-  <div class="content-wrap px-4 py-4 mx-auto">
-    <div class="mb-4">
-      <h1 class="page-title mb-2">Audit Trail - Approver Comments</h1>
-      <p class="page-subtitle mb-0">Review traceable comment history linked to document versions.</p>
-    </div>
+<div class="content-wrap px-4 py-4 mx-auto">
+<div class="mb-4">
+<h1 class="page-title mb-2">Audit Trail - Approver Comments</h1>
+<p class="page-subtitle mb-0">Review traceable comment history linked to document versions.</p>
+</div>
 
-    <?php if ($successMessage !== ''): ?>
-      <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <?php echo e($successMessage); ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-      </div>
-    <?php endif; ?>
-
-    <?php if ($errorMessage !== ''): ?>
-      <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        <?php echo e($errorMessage); ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-      </div>
-    <?php endif; ?>
-
-    <div class="card cp-card">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-          <div>
-            <h2 class="card-title mb-1">Audit Events</h2>
-            <p class="card-subtitle mb-0">Captures who commented, when, full comment text, and linked document version.</p>
-          </div>
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-outline-secondary" id="toggleFilterBtn">Filter</button>
-            <a href="?<?php echo e(http_build_query(array_merge($_GET, ['export' => 'pdf']))); ?>" class="btn btn-outline-primary">Export PDF</a>
-            <a href="?<?php echo e(http_build_query(array_merge($_GET, ['export' => 'excel']))); ?>" class="btn btn-outline-primary">Export Excel</a>
-          </div>
-        </div>
-
-        <div class="filter-box <?php echo ($search !== '' || $userFilter !== '' || $actionFilter !== '' || $docFilter !== '' || $dateFrom !== '' || $dateTo !== '') ? 'active' : ''; ?>" id="filterBox">
-          <form method="get">
-            <div class="row g-3">
-              <div class="col-md-4">
-                <label class="form-label">Search</label>
-                <input type="text" name="search" class="form-control" value="<?php echo e($search); ?>" placeholder="Search comment, user, document">
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">User</label>
-                <input type="text" name="user" class="form-control" value="<?php echo e($userFilter); ?>">
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">Action</label>
-                <input type="text" name="action_name" class="form-control" value="<?php echo e($actionFilter); ?>">
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">Document ID</label>
-                <input type="text" name="document_id" class="form-control" value="<?php echo e($docFilter); ?>">
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">From Date</label>
-                <input type="date" name="date_from" class="form-control" value="<?php echo e($dateFrom); ?>">
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">To Date</label>
-                <input type="date" name="date_to" class="form-control" value="<?php echo e($dateTo); ?>">
-              </div>
-            </div>
-            <div class="d-flex gap-2 mt-3">
-              <button type="submit" class="btn btn-primary">Apply Filter</button>
-              <a href="audit-comments.php" class="btn btn-outline-secondary">Reset</a>
-            </div>
-          </form>
-        </div>
-
-        <div class="table-responsive">
-          <table class="table align-middle">
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>User</th>
-                <th>Action</th>
-                <th>Document ID</th>
-                <th>Comment</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php if (!empty($rows)): ?>
-                <?php foreach ($rows as $row): ?>
-                  <tr>
-                    <td><?php echo e(formatDateTimeDisplay($row['event_time'])); ?></td>
-                    <td><?php echo e($row['user_name']); ?></td>
-                    <td><?php echo e($row['action_name']); ?></td>
-                    <td><?php echo e($row['document_id']); ?></td>
-                    <td class="comment-cell"><?php echo nl2br(e($row['comment_text'])); ?></td>
-                  </tr>
-                <?php endforeach; ?>
-              <?php else: ?>
-                <tr>
-                  <td colspan="5" class="text-center text-muted py-4">No audit comment records found.</td>
-                </tr>
-              <?php endif; ?>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="small text-secondary mt-2">
-          Export to PDF / Excel preserves full reason and comment text. Data source: <?php echo e($dataSourceLabel); ?>
-        </div>
-      </div>
-    </div>
+<?php if ($errorMessage !== ''): ?>
+  <div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <?php echo e($errorMessage); ?>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   </div>
-</main>
+<?php endif; ?>
 
+<div class="card cp-card"><div class="card-body">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+<div><h2 class="card-title mb-1">Audit Events</h2><p class="card-subtitle mb-0">Captures who commented, when, full comment text, and linked document version.</p></div>
+<div class="d-flex gap-2 flex-wrap">
+<button type="button" class="btn btn-outline-secondary" id="toggleFilterBtn">Filter</button>
+<a href="?<?php echo e(http_build_query(array_merge($_GET, ['export' => 'pdf']))); ?>" class="btn btn-outline-primary">Export PDF</a>
+<a href="?<?php echo e(http_build_query(array_merge($_GET, ['export' => 'excel']))); ?>" class="btn btn-outline-primary">Export Excel</a>
+</div>
+</div>
+
+<div class="filter-box <?php echo ($search !== '' || $userFilter !== '' || $actionFilter !== '' || $docFilter !== '' || $dateFrom !== '' || $dateTo !== '') ? 'active' : ''; ?>" id="filterBox">
+  <form method="get">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Search</label>
+        <input type="text" name="search" class="form-control" value="<?php echo e($search); ?>" placeholder="Search anything">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">User</label>
+        <input type="text" name="user" class="form-control" value="<?php echo e($userFilter); ?>">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Action</label>
+        <input type="text" name="action_name" class="form-control" value="<?php echo e($actionFilter); ?>">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Document ID</label>
+        <input type="text" name="document_id" class="form-control" value="<?php echo e($docFilter); ?>">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">From Date</label>
+        <input type="date" name="date_from" class="form-control" value="<?php echo e($dateFrom); ?>">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To Date</label>
+        <input type="date" name="date_to" class="form-control" value="<?php echo e($dateTo); ?>">
+      </div>
+    </div>
+    <div class="d-flex gap-2 mt-3">
+      <button type="submit" class="btn btn-primary">Apply Filter</button>
+      <a href="audit-comments.php" class="btn btn-outline-secondary">Reset</a>
+    </div>
+  </form>
+</div>
+
+<div class="table-responsive">
+<table class="table align-middle">
+<thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Document ID</th><th>Comment</th></tr></thead>
+<tbody>
+<?php if (!empty($rows)): ?>
+  <?php foreach ($rows as $row): ?>
+    <tr>
+      <td><?php echo e(formatDateTimeDisplay($row['event_time'])); ?></td>
+      <td><?php echo e($row['user_name']); ?></td>
+      <td><?php echo e($row['action_name']); ?></td>
+      <td><?php echo e($row['document_id']); ?></td>
+      <td><?php echo nl2br(e($row['comment_text'])); ?></td>
+    </tr>
+  <?php endforeach; ?>
+<?php else: ?>
+  <tr>
+    <td colspan="5" class="text-center text-secondary py-4">No records found.</td>
+  </tr>
+<?php endif; ?>
+</tbody>
+</table>
+</div>
+<div class="small text-secondary mt-2">Export to PDF / Excel should preserve full reason and comment text. Source: <?php echo e($dataSourceLabel); ?></div>
+</div></div>
+</div>
+</main>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    var toggleBtn = document.getElementById('toggleFilterBtn');
-    var filterBox = document.getElementById('filterBox');
+  var toggleBtn = document.getElementById('toggleFilterBtn');
+  var filterBox = document.getElementById('filterBox');
 
-    if (toggleBtn && filterBox) {
-        toggleBtn.addEventListener('click', function () {
-            filterBox.classList.toggle('active');
-        });
-    }
+  if (toggleBtn && filterBox) {
+    toggleBtn.addEventListener('click', function () {
+      filterBox.classList.toggle('active');
+    });
+  }
 });
 </script>
 </body>
