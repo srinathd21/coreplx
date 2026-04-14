@@ -14,6 +14,23 @@ if (!function_exists('e')) {
     }
 }
 
+if (!function_exists('tableExists')) {
+    function tableExists(mysqli $conn, $tableName) {
+        $tableName = mysqli_real_escape_string($conn, $tableName);
+        $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
+        return ($res && mysqli_num_rows($res) > 0);
+    }
+}
+
+if (!function_exists('columnExists')) {
+    function columnExists(mysqli $conn, $tableName, $columnName) {
+        $tableName = mysqli_real_escape_string($conn, $tableName);
+        $columnName = mysqli_real_escape_string($conn, $columnName);
+        $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$tableName}` LIKE '{$columnName}'");
+        return ($res && mysqli_num_rows($res) > 0);
+    }
+}
+
 if (!function_exists('generate_uuid_v4')) {
     function generate_uuid_v4() {
         $data = random_bytes(16);
@@ -41,12 +58,8 @@ if (!function_exists('normalize_content_format')) {
         $hasText = trim((string)$contentText) !== '';
         $hasFile = isset($file['tmp_name']) && is_uploaded_file($file['tmp_name']);
 
-        if ($hasText && $hasFile) {
-            return 'mixed';
-        }
-        if ($hasFile) {
-            return 'file';
-        }
+        if ($hasText && $hasFile) return 'mixed';
+        if ($hasFile) return 'file';
         return 'rich_text';
     }
 }
@@ -101,11 +114,6 @@ if (!function_exists('upload_document_file')) {
     }
 }
 
-/*
-|--------------------------------------------------------------------------
-| ADMIN LOGIN CHECK
-|--------------------------------------------------------------------------
-*/
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login-admin.php');
     exit;
@@ -118,13 +126,7 @@ if ($userId <= 0) {
     exit;
 }
 
-/*
-|--------------------------------------------------------------------------
-| CURRENT ADMIN
-|--------------------------------------------------------------------------
-*/
 $currentUser = null;
-
 $userSql = "
     SELECT
         u.id,
@@ -167,11 +169,6 @@ if ($displayName === '') {
 }
 $roleName = trim((string)($currentUser['role_name'] ?? ($_SESSION['role_name'] ?? 'QA Admin')));
 
-/*
-|--------------------------------------------------------------------------
-| LOAD DROPDOWNS
-|--------------------------------------------------------------------------
-*/
 $documentTypes = [];
 $departments = [];
 $owners = [];
@@ -213,7 +210,6 @@ foreach ($userOptionsQueries as $sql) {
             }
             $tempUsers[] = $row;
         }
-
         $owners = $tempUsers;
         foreach ($tempUsers as $u) {
             if ((int)$u['id'] !== $userId) {
@@ -224,11 +220,6 @@ foreach ($userOptionsQueries as $sql) {
     }
 }
 
-/*
-|--------------------------------------------------------------------------
-| FORM DEFAULTS
-|--------------------------------------------------------------------------
-*/
 $errors = [];
 $successMessage = '';
 $form = [
@@ -250,11 +241,6 @@ $form = [
 $badgeClass = 'badge badge-soft-secondary';
 $badgeLabel = 'Draft';
 
-/*
-|--------------------------------------------------------------------------
-| FORM SUBMIT
-|--------------------------------------------------------------------------
-*/
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? 'save_draft';
 
@@ -276,30 +262,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ownerUserId = (int)$form['owner_user_id'];
     $approverUserId = (int)$form['approver_user_id'];
 
-    if ($documentTypeId <= 0) {
-        $errors[] = 'Document Type is required.';
-    }
-    if ($form['title'] === '') {
-        $errors[] = 'Document Topic or Title is required.';
-    }
-    if ($form['document_number'] === '') {
-        $errors[] = 'Document Number / ID component is required.';
-    }
-    if ($ownerUserId <= 0) {
-        $errors[] = 'Owner is required.';
-    }
-    if ($approverUserId <= 0) {
-        $errors[] = 'Approver is required.';
-    }
-    if ($approverUserId === $userId) {
-        $errors[] = 'Creator cannot select self as approver.';
-    }
-    if ($form['effective_date'] === '') {
-        $errors[] = 'Effective Date is required.';
-    }
-    if ($form['review_date'] === '') {
-        $errors[] = 'Review Date is required.';
-    }
+    if ($documentTypeId <= 0) $errors[] = 'Document Type is required.';
+    if ($form['title'] === '') $errors[] = 'Document Topic or Title is required.';
+    if ($form['document_number'] === '') $errors[] = 'Document Number / ID component is required.';
+    if ($ownerUserId <= 0) $errors[] = 'Owner is required.';
+    if ($approverUserId <= 0) $errors[] = 'Approver is required.';
+    if ($approverUserId === $userId) $errors[] = 'Creator cannot select self as approver.';
+    if ($form['effective_date'] === '') $errors[] = 'Effective Date is required.';
+    if ($form['review_date'] === '') $errors[] = 'Review Date is required.';
 
     $hasFile = isset($_FILES['primary_file']) &&
         (int)($_FILES['primary_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
@@ -537,52 +507,167 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'approver_user_id'    => $approverUserId
             ], JSON_UNESCAPED_UNICODE);
 
-            $auditSql = "
-                INSERT INTO audit_logs (
-                    event_id,
-                    entity_type,
-                    entity_id,
-                    action,
-                    old_value,
-                    new_value,
-                    performed_by,
-                    remarks,
-                    ip_address,
-                    user_agent
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ";
-            $auditStmt = mysqli_prepare($conn, $auditSql);
-            if (!$auditStmt) {
-                throw new RuntimeException('Failed to prepare audit log insert.');
+            if (tableExists($conn, 'audit_logs')) {
+                $auditSql = "
+                    INSERT INTO audit_logs (
+                        event_id,
+                        entity_type,
+                        entity_id,
+                        action,
+                        old_value,
+                        new_value,
+                        performed_by,
+                        remarks,
+                        ip_address,
+                        user_agent
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ";
+                $auditStmt = mysqli_prepare($conn, $auditSql);
+                if (!$auditStmt) {
+                    throw new RuntimeException('Failed to prepare audit log insert.');
+                }
+
+                $entityType = 'document';
+                $oldValue = null;
+                $ipAddress = get_client_ip();
+                $userAgent = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
+                $eventId = generate_uuid_v4();
+
+                mysqli_stmt_bind_param(
+                    $auditStmt,
+                    "ssisssisss",
+                    $eventId,
+                    $entityType,
+                    $documentId,
+                    $auditAction,
+                    $oldValue,
+                    $auditPayload,
+                    $userId,
+                    $auditRemarks,
+                    $ipAddress,
+                    $userAgent
+                );
+
+                if (!mysqli_stmt_execute($auditStmt)) {
+                    throw new RuntimeException('Failed to write audit log: ' . mysqli_stmt_error($auditStmt));
+                }
+                mysqli_stmt_close($auditStmt);
             }
 
-            $entityType = 'document';
-            $oldValue = null;
-            $ipAddress = get_client_ip();
-            $userAgent = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
-            $eventId = generate_uuid_v4();
+            if (tableExists($conn, 'audit_creation')) {
+                $cols = [];
+                $vals = [];
+                $types = '';
+                $bind = [];
 
-            mysqli_stmt_bind_param(
-                $auditStmt,
-                "ssisssisss",
-                $eventId,
-                $entityType,
-                $documentId,
-                $auditAction,
-                $oldValue,
-                $auditPayload,
-                $userId,
-                $auditRemarks,
-                $ipAddress,
-                $userAgent
-            );
+                $map = [
+                    'document_id' => $documentId,
+                    'user_id' => $userId,
+                    'action_name' => ($action === 'submit_review') ? 'Document Created & Submitted' : 'Document Draft Created',
+                    'ip_address' => get_client_ip(),
+                    'created_at' => date('Y-m-d H:i:s')
+                ];
 
-            if (!mysqli_stmt_execute($auditStmt)) {
-                throw new RuntimeException('Failed to write audit log: ' . mysqli_stmt_error($auditStmt));
+                foreach ($map as $col => $val) {
+                    if (columnExists($conn, 'audit_creation', $col)) {
+                        $cols[] = "`{$col}`";
+                        $vals[] = "?";
+                        $types .= is_int($val) ? 'i' : 's';
+                        $bind[] = $val;
+                    }
+                }
+
+                if (!empty($cols)) {
+                    $sql = "INSERT INTO audit_creation (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ")";
+                    $stmt = mysqli_prepare($conn, $sql);
+                    if ($stmt) {
+                        mysqli_stmt_bind_param($stmt, $types, ...$bind);
+                        mysqli_stmt_execute($stmt);
+                        mysqli_stmt_close($stmt);
+                    }
+                }
             }
-            mysqli_stmt_close($auditStmt);
 
-            if ($action === 'submit_review') {
+            if ($form['change_summary'] !== '' && tableExists($conn, 'approver_comments')) {
+                $cols = [];
+                $vals = [];
+                $types = '';
+                $bind = [];
+
+                $map = [
+                    'document_id' => $documentId,
+                    'document_version_id' => $versionId,
+                    'user_id' => $userId,
+                    'commented_by' => $userId,
+                    'action_name' => 'Document Created',
+                    'comment_text' => $form['change_summary'],
+                    'comment' => $form['change_summary'],
+                    'comments' => $form['change_summary'],
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'commented_at' => date('Y-m-d H:i:s')
+                ];
+
+                foreach ($map as $col => $val) {
+                    if (columnExists($conn, 'approver_comments', $col)) {
+                        $cols[] = "`{$col}`";
+                        $vals[] = "?";
+                        $types .= is_int($val) ? 'i' : 's';
+                        $bind[] = $val;
+                    }
+                }
+
+                if (!empty($cols)) {
+                    $sql = "INSERT INTO approver_comments (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ")";
+                    $stmt = mysqli_prepare($conn, $sql);
+                    if ($stmt) {
+                        mysqli_stmt_bind_param($stmt, $types, ...$bind);
+                        mysqli_stmt_execute($stmt);
+                        mysqli_stmt_close($stmt);
+                    }
+                }
+            }
+
+            if ($action === 'submit_review' && tableExists($conn, 'document_approvals')) {
+                $cols = [];
+                $vals = [];
+                $types = '';
+                $bind = [];
+
+                $map = [
+                    'document_id' => $documentId,
+                    'document_version_id' => $versionId,
+                    'approver_id' => $approverUserId,
+                    'approved_by' => $approverUserId,
+                    'created_by' => $userId,
+                    'user_id' => $userId,
+                    'status' => 'Pending Review',
+                    'meaning' => 'Pending Review',
+                    'reason' => 'Document submitted for review by creator',
+                    'comments' => 'Document submitted for review by creator',
+                    'created_at' => date('Y-m-d H:i:s')
+                ];
+
+                foreach ($map as $col => $val) {
+                    if (columnExists($conn, 'document_approvals', $col)) {
+                        $cols[] = "`{$col}`";
+                        $vals[] = "?";
+                        $types .= is_int($val) ? 'i' : 's';
+                        $bind[] = $val;
+                    }
+                }
+
+                if (!empty($cols)) {
+                    $sql = "INSERT INTO document_approvals (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ")";
+                    $stmt = mysqli_prepare($conn, $sql);
+                    if ($stmt) {
+                        mysqli_stmt_bind_param($stmt, $types, ...$bind);
+                        mysqli_stmt_execute($stmt);
+                        mysqli_stmt_close($stmt);
+                    }
+                }
+            }
+
+            if ($action === 'submit_review' && tableExists($conn, 'notifications')) {
                 $notifSql = "
                     INSERT INTO notifications (
                         user_id,
@@ -614,11 +699,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($action === 'submit_review') {
                 $successMessage = 'Document created successfully and submitted for review.';
-                $badgeClass = 'badge bg-info-subtle text-info-emphasis border border-info-subtle';
+                $badgeClass = 'badge badge-soft-warning';
                 $badgeLabel = 'Pending Approval';
             } else {
                 $successMessage = 'Document draft created successfully.';
-                $badgeClass = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+                $badgeClass = 'badge badge-soft-secondary';
                 $badgeLabel = 'Draft';
             }
 
@@ -637,10 +722,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'version_label'       => '01',
                 'document_id_preview' => ''
             ];
-
         } catch (Throwable $e) {
             mysqli_rollback($conn);
-            $errors[] = 'Error: ' . $e->getMessage();
+            $errors[] = $e->getMessage();
         }
     }
 }
@@ -654,25 +738,148 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
   <style>
-    .readonly{background-color:#f8f9fa;}
-    .app-shell{min-height:calc(100vh - 72px);}
-    .content-wrap{max-width:1400px;}
-    .page-title{font-size:1.75rem;font-weight:700;color:#0D2144;}
-    .page-subtitle{color:#6c757d;}
-    .cp-card{border:1px solid #e9ecef;border-radius:16px;box-shadow:0 6px 18px rgba(15,23,42,.05);}
-    .card-title{font-size:1.1rem;font-weight:700;color:#0D2144;}
-    .card-subtitle{color:#6c757d;font-size:.95rem;}
-    .tab-pill{border-radius:999px;padding:.55rem 1rem;}
-    .upload-box{border:1.5px dashed #cfd6e4;border-radius:14px;background:#fbfcfe;}
-    .kv{background:#f8fbff;border:1px solid #d8e6ff;border-radius:12px;}
-    .note-list{padding-left:1rem;}
-    .badge-soft-secondary{
-        background:#eef2f7;
-        color:#5b6472;
-        border:1px solid #e2e8f0;
-        padding:.5rem .75rem;
-        border-radius:999px;
-        font-weight:600;
+    body {
+      background: #F5F7FA;
+      color: #1F2937;
+    }
+    .app-shell {
+      min-height: calc(100vh - 74px);
+    }
+    .content-wrap {
+      max-width: 100%;
+      width: 100%;
+      padding-left: 20px;
+      padding-right: 20px;
+    }
+    .cp-card {
+      border: 1px solid #E0E7EF;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      background: #fff;
+      height: 100%;
+    }
+    .page-title {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #1F4685;
+      margin-bottom: .35rem;
+    }
+    .page-subtitle,
+    .card-subtitle,
+    .form-text,
+    .note-list {
+      color: #6B7280;
+    }
+    .card-title {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #1F2937;
+    }
+    .form-label {
+      font-weight: 600;
+      color: #1F2937;
+      margin-bottom: .45rem;
+    }
+    .readonly {
+      background: #f8fafc;
+    }
+    .kv {
+      border: 1px solid #E0E7EF;
+      border-radius: 12px;
+      background: #F8FBFF;
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+    }
+    .upload-box {
+      border: 1px dashed #cbd5e1;
+      border-radius: 14px;
+      background: #fafcff;
+      cursor: pointer;
+      min-height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .upload-box:hover {
+      background: #f4f8ff;
+    }
+    .tab-pill {
+      border: 1px solid #dbe4ef;
+      border-radius: 999px !important;
+      color: #1F4685;
+      background: #fff;
+      padding: .45rem .9rem;
+      font-weight: 600;
+    }
+    .nav-pills .nav-link.active.tab-pill {
+      background: #1F4685;
+      color: #fff;
+      border-color: #1F4685;
+    }
+    .note-list {
+      padding-left: 1rem;
+      margin-bottom: 0;
+    }
+    .note-list li {
+      margin-bottom: .85rem;
+      line-height: 1.5;
+    }
+    .main-grid > .col-lg-8,
+    .main-grid > .col-lg-4 {
+      display: flex;
+      flex-direction: column;
+    }
+    .left-stack,
+    .right-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      height: 100%;
+      flex: 1;
+    }
+    .right-stack .cp-card {
+      flex: 1 1 0;
+    }
+    .document-content-card .card-body {
+      display: flex;
+      flex-direction: column;
+      min-height: 460px;
+    }
+    #richTextBlock,
+    #fileUploadBlock {
+      flex: 1;
+    }
+    .document-body-textarea {
+      min-height: 300px;
+      resize: vertical;
+    }
+    .top-action-bar {
+      margin-bottom: 1rem;
+    }
+    @media (min-width: 1400px) {
+      .content-wrap {
+        padding-left: 28px;
+        padding-right: 28px;
+      }
+      .document-content-card .card-body {
+        min-height: 520px;
+      }
+      .document-body-textarea {
+        min-height: 340px;
+      }
+    }
+    @media (max-width: 991.98px) {
+      .right-stack .cp-card {
+        flex: unset;
+      }
+      .document-content-card .card-body {
+        min-height: auto;
+      }
+      .upload-box {
+        min-height: 140px;
+      }
     }
   </style>
 </head>
@@ -690,7 +897,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
           <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="create-document.php">Create Document</a></li>
+            <li><a class="dropdown-item active" href="create-document.php">Create Document</a></li>
             <li><a class="dropdown-item" href="update-document.php">Update Document</a></li>
             <li><a class="dropdown-item" href="retire-document.php">Retire Document</a></li>
             <li><a class="dropdown-item" href="repository.php">Repository</a></li>
@@ -730,230 +937,357 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <li class="nav-item"><a class="nav-link" href="portal-select.php">Switch to User</a></li>
       </ul>
       <div class="d-flex align-items-center gap-3 ms-xl-3">
-        <span class="navbar-text small"><?php echo e($roleName); ?></span>
+        <span class="navbar-text small"><?php echo e($roleName ?: 'QA Admin'); ?></span>
         <a class="nav-link px-0" href="notifications.php">Notifications</a>
-        <span class="navbar-text small"><?php echo e($displayName); ?></span>
+        <span class="navbar-text small"><?php echo e($displayName ?: 'Profile'); ?></span>
       </div>
     </div>
   </div>
 </nav>
 
 <main class="app-shell">
-<div class="content-wrap px-4 py-4 mx-auto">
-<div class="mb-4">
-<h1 class="page-title mb-2">Create Controlled Document</h1>
-<p class="page-subtitle mb-0">Create a new controlled document with required metadata, ownership, and approval workflow.</p>
-</div>
+  <div class="content-wrap py-4 mx-auto">
+    <div class="mb-4">
+      <h1 class="page-title">Create Controlled Document</h1>
+      <p class="page-subtitle mb-0">Create a new controlled document with required metadata, ownership, and approval workflow.</p>
+    </div>
 
-<?php if (!empty($errors)): ?>
-    <div class="alert alert-danger rounded-4">
+    <?php if (!empty($errors)): ?>
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
         <strong>Please fix the following:</strong>
         <ul class="mb-0 mt-2">
-            <?php foreach ($errors as $error): ?>
-                <li><?php echo e($error); ?></li>
-            <?php endforeach; ?>
+          <?php foreach ($errors as $err): ?>
+            <li><?php echo e($err); ?></li>
+          <?php endforeach; ?>
         </ul>
-    </div>
-<?php endif; ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    <?php endif; ?>
 
-<?php if ($successMessage !== ''): ?>
-    <div class="alert alert-success rounded-4"><?php echo e($successMessage); ?></div>
-<?php endif; ?>
+    <?php if ($successMessage !== ''): ?>
+      <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <?php echo e($successMessage); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    <?php endif; ?>
 
-<form method="post" enctype="multipart/form-data" id="createDocumentForm">
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-<span class="<?php echo e($badgeClass); ?>"><?php echo e($badgeLabel); ?></span>
-<div class="d-flex gap-2 flex-wrap">
-<a class="btn btn-outline-secondary" href="dashboard-admin.php">Cancel</a>
-<button type="submit" name="action" value="save_draft" class="btn btn-outline-primary">Save Draft</button>
-<button type="submit" name="action" value="submit_review" class="btn btn-success">Submit for Review</button>
-</div>
-</div>
+    <form method="post" enctype="multipart/form-data" id="createDocumentForm">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 top-action-bar">
+        <span class="<?php echo e($badgeClass); ?>"><?php echo e($badgeLabel); ?></span>
+        <div class="d-flex gap-2 flex-wrap">
+          <a class="btn btn-outline-secondary" href="dashboard-admin.php">Cancel</a>
+          <button type="submit" name="action" value="save_draft" class="btn btn-outline-primary">Save Draft</button>
+          <button type="submit" name="action" value="submit_review" class="btn btn-success">Submit for Review</button>
+        </div>
+      </div>
 
-<div class="row g-3">
-<div class="col-lg-8">
-<div class="card cp-card mb-3">
-<div class="card-body">
-<h2 class="card-title mb-1">Document Information</h2>
-<p class="card-subtitle mb-3">Enter the required document metadata and ownership details.</p>
-<div class="row g-3">
-<div class="col-md-6">
-    <label class="form-label">Document Type</label>
-    <select class="form-select" name="document_type_id" id="document_type_id">
-        <option value="">Select document type</option>
-        <?php foreach ($documentTypes as $type): ?>
-            <option value="<?php echo (int)$type['id']; ?>" data-prefix="<?php echo e($type['prefix']); ?>" <?php echo ((string)$form['document_type_id'] === (string)$type['id']) ? 'selected' : ''; ?>>
-                <?php echo e($type['type_name']); ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-</div>
+      <div class="row g-3 main-grid">
+        <div class="col-lg-8">
+          <div class="left-stack">
+            <div class="card cp-card">
+              <div class="card-body">
+                <h2 class="card-title mb-1">Document Information</h2>
+                <p class="card-subtitle mb-3">Enter the required document metadata and ownership details.</p>
 
-<div class="col-md-6">
-    <label class="form-label">Document Topic</label>
-    <input class="form-control" type="text" name="title" id="title" value="<?php echo e($form['title']); ?>" placeholder="">
-</div>
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label">Document Type</label>
+                    <select name="document_type_id" class="form-select" required>
+                      <option value="">Select Document Type</option>
+                      <?php foreach ($documentTypes as $type): ?>
+                        <option value="<?php echo (int)$type['id']; ?>" <?php echo ((string)$form['document_type_id'] === (string)$type['id']) ? 'selected' : ''; ?>>
+                          <?php echo e($type['type_name']); ?>
+                        </option>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
 
-<div class="col-md-6">
-    <label class="form-label">Document Number</label>
-    <input class="form-control" type="text" name="document_number" id="document_number" value="<?php echo e($form['document_number']); ?>" placeholder="">
-</div>
+                  <div class="col-md-6">
+                    <label class="form-label">Document Topic</label>
+                    <input class="form-control" name="topic" value="<?php echo e($form['topic']); ?>">
+                  </div>
 
-<div class="col-md-6">
-    <label class="form-label">Version</label>
-    <input class="form-control readonly" readonly name="version_label" id="version_label" value="<?php echo e($form['version_label']); ?>">
-</div>
+                  <div class="col-md-6">
+                    <label class="form-label">Document Number</label>
+                    <input class="form-control" name="document_number" value="<?php echo e($form['document_number']); ?>" required>
+                  </div>
 
-<div class="col-md-6">
-    <label class="form-label">Owner</label>
-    <select class="form-select" name="owner_user_id">
-        <option value="">Select owner</option>
-        <?php foreach ($owners as $owner): ?>
-            <option value="<?php echo (int)$owner['id']; ?>" <?php echo ((string)$form['owner_user_id'] === (string)$owner['id']) ? 'selected' : ''; ?>>
-                <?php echo e($owner['name']); ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-</div>
+                  <div class="col-md-6">
+                    <label class="form-label">Version</label>
+                    <input class="form-control readonly" readonly value="<?php echo e($form['version_label']); ?>">
+                  </div>
 
-<div class="col-md-6">
-    <label class="form-label">Approver</label>
-    <select class="form-select" name="approver_user_id">
-        <option value="">Select approver</option>
-        <?php foreach ($approvers as $approver): ?>
-            <option value="<?php echo (int)$approver['id']; ?>" <?php echo ((string)$form['approver_user_id'] === (string)$approver['id']) ? 'selected' : ''; ?>>
-                <?php echo e($approver['name']); ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-    <div class="form-text">Creator cannot select themselves as approver.</div>
-</div>
+                  <div class="col-md-6">
+                    <label class="form-label">Owner</label>
+                    <select name="owner_user_id" class="form-select" required>
+                      <option value="">Select Owner</option>
+                      <?php foreach ($owners as $owner): ?>
+                        <option value="<?php echo (int)$owner['id']; ?>" <?php echo ((string)$form['owner_user_id'] === (string)$owner['id']) ? 'selected' : ''; ?>>
+                          <?php echo e($owner['name']); ?>
+                        </option>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
 
-<div class="col-md-6">
-    <label class="form-label">Effective Date</label>
-    <input class="form-control" type="date" name="effective_date" value="<?php echo e($form['effective_date']); ?>">
-</div>
+                  <div class="col-md-6">
+                    <label class="form-label">Approver</label>
+                    <select name="approver_user_id" class="form-select" required>
+                      <option value="">Select Approver</option>
+                      <?php foreach ($approvers as $approver): ?>
+                        <option value="<?php echo (int)$approver['id']; ?>" <?php echo ((string)$form['approver_user_id'] === (string)$approver['id']) ? 'selected' : ''; ?>>
+                          <?php echo e($approver['name']); ?>
+                        </option>
+                      <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Creator cannot select themselves as approver.</div>
+                  </div>
 
-<div class="col-md-6">
-    <label class="form-label">Review Date</label>
-    <input class="form-control" type="date" name="review_date" value="<?php echo e($form['review_date']); ?>">
-</div>
+                  <div class="col-md-6">
+                    <label class="form-label">Effective Date</label>
+                    <input class="form-control" type="date" name="effective_date" value="<?php echo e($form['effective_date']); ?>" required>
+                  </div>
 
-<div class="col-12">
-    <label class="form-label">Change Summary</label>
-    <textarea class="form-control" name="change_summary" placeholder="Enter document purpose or summary" rows="3"><?php echo e($form['change_summary']); ?></textarea>
-    <div class="form-text">Mandatory for traceability and approval context.</div>
-</div>
+                  <div class="col-md-6">
+                    <label class="form-label">Review Date</label>
+                    <input class="form-control" type="date" name="review_date" value="<?php echo e($form['review_date']); ?>" required>
+                  </div>
 
-<div class="col-12">
-    <label class="form-label">Document ID Preview</label>
-    <div class="kv p-3 fw-semibold text-primary" id="documentIdPreview"><?php echo e($form['document_id_preview'] !== '' ? $form['document_id_preview'] : ''); ?></div>
-    <div class="form-text">Format: [Type]-[Number]-[Topic]-[Version]</div>
-</div>
-</div>
-</div>
-</div>
+                  <div class="col-md-6">
+                    <label class="form-label">Department</label>
+                    <select name="department_id" class="form-select">
+                      <option value="">Select Department</option>
+                      <?php foreach ($departments as $dept): ?>
+                        <option value="<?php echo (int)$dept['id']; ?>" <?php echo ((string)$form['department_id'] === (string)$dept['id']) ? 'selected' : ''; ?>>
+                          <?php echo e($dept['department_name']); ?>
+                        </option>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
 
-<div class="card cp-card">
-<div class="card-body">
-<h2 class="card-title mb-1">Document Content</h2>
-<p class="card-subtitle mb-3">Add document content using rich text or controlled file upload.</p>
-<ul class="nav nav-pills gap-2 mb-3">
-<li class="nav-item"><a class="nav-link active tab-pill" href="javascript:void(0);">Rich Text Editor</a></li>
-<li class="nav-item"><a class="nav-link tab-pill" href="javascript:void(0);">File Upload</a></li>
-</ul>
-<div class="mb-3">
-    <label class="form-label">Document Body</label>
-    <textarea class="form-control" name="content_text" placeholder="Enter document content here" rows="9"><?php echo e($form['content_text']); ?></textarea>
-</div>
-<div class="mb-3">
-    <input type="file" name="primary_file" class="form-control">
-</div>
-<div class="upload-box p-4 text-center small text-secondary">
-    Drag and drop file here or click to browse.<br>Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
-</div>
-</div>
-</div>
-</div>
+                  <div class="col-md-6">
+                    <label class="form-label">Document Title</label>
+                    <input class="form-control" name="title" value="<?php echo e($form['title']); ?>" required>
+                  </div>
 
-<div class="col-lg-4">
-<div class="card cp-card mb-3">
-<div class="card-body">
-<h2 class="card-title mb-1">Submission Readiness</h2>
-<p class="card-subtitle mb-3">Verify required information before sending for approval.</p>
-<ul class="small text-secondary note-list mb-0">
-<li>Metadata completed.</li>
-<li>Unique document ID validated.</li>
-<li>Content entered or file attached.</li>
-<li>Approver selected and validated.</li>
-<li>Email notification will be generated on submit.</li>
-</ul>
-</div>
-</div>
+                  <div class="col-12">
+                    <label class="form-label">Change Summary</label>
+                    <textarea class="form-control" name="change_summary" placeholder="Enter document purpose or summary" rows="3"><?php echo e($form['change_summary']); ?></textarea>
+                    <div class="form-text">Mandatory for traceability and approval context.</div>
+                  </div>
 
-<div class="card cp-card">
-<div class="card-body">
-<h2 class="card-title mb-1">Audit Controls</h2>
-<p class="card-subtitle mb-3">Key controls expected for an audit-grade process.</p>
-<ul class="small text-secondary note-list mb-0">
-<li>Every save and submit action is logged.</li>
-<li>Version starts from 01 for first draft.</li>
-<li>Duplicate document number is blocked.</li>
-<li>Self approval is not allowed.</li>
-<li>Document remains controlled through review workflow.</li>
-</ul>
-</div>
-</div>
-</div>
-</div>
-</form>
-</div>
+                  <div class="col-12">
+                    <label class="form-label">Document ID Preview</label>
+                    <div class="kv p-3 fw-semibold text-primary" id="docIdPreview">
+                      <?php echo e($form['document_id_preview'] !== '' ? $form['document_id_preview'] : 'Format: [Type]-[Number]-[Topic]-[Version]'); ?>
+                    </div>
+                    <div class="form-text">Format: [Type]-[Number]-[Topic]-[Version]</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card cp-card document-content-card">
+              <div class="card-body">
+                <h2 class="card-title mb-1">Document Content</h2>
+                <p class="card-subtitle mb-3">Add document content using rich text or controlled file upload.</p>
+
+                <ul class="nav nav-pills gap-2 mb-3">
+                  <li class="nav-item">
+                    <button type="button" class="nav-link active tab-pill" id="tabTextBtn">Rich Text Editor</button>
+                  </li>
+                  <li class="nav-item">
+                    <button type="button" class="nav-link tab-pill" id="tabFileBtn">File Upload</button>
+                  </li>
+                </ul>
+
+                <div id="richTextBlock">
+                  <div class="mb-3 h-100 d-flex flex-column">
+                    <label class="form-label">Document Body</label>
+                    <textarea class="form-control document-body-textarea flex-grow-1" name="content_text" placeholder="Enter document content here"><?php echo e($form['content_text']); ?></textarea>
+                  </div>
+                </div>
+
+                <div id="fileUploadBlock" style="display:none;">
+                  <label class="form-label">Upload File</label>
+                  <input type="file" name="primary_file" class="form-control d-none" id="primaryFileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt">
+                  <div class="upload-box p-4 text-center small text-secondary" id="uploadBox">
+                    <div>
+                      Drag and drop file here or click to browse.<br>
+                      Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
+                    </div>
+                  </div>
+                  <div class="mt-2 small text-secondary" id="selectedFileName"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="right-stack">
+            <div class="card cp-card">
+              <div class="card-body d-flex flex-column">
+                <div>
+                  <h2 class="card-title mb-1">Submission Readiness</h2>
+                  <p class="card-subtitle mb-3">Verify required information before sending for approval.</p>
+                </div>
+                <ul class="small text-secondary note-list mt-auto mb-0">
+                  <li>Metadata completed.</li>
+                  <li>Unique document ID validated.</li>
+                  <li>Content entered or file attached.</li>
+                  <li>Approver selected and validated.</li>
+                  <li>Email notification will be generated on submit.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="card cp-card">
+              <div class="card-body d-flex flex-column">
+                <div>
+                  <h2 class="card-title mb-1">Audit Controls</h2>
+                  <p class="card-subtitle mb-3">Key controls expected for an audit-grade process.</p>
+                </div>
+                <ul class="small text-secondary note-list mt-auto mb-0">
+                  <li>Created by / created on / IP address captured automatically.</li>
+                  <li>Draft saves logged with timestamp.</li>
+                  <li>Critical field changes stored with old and new values.</li>
+                  <li>Immutable audit record for every workflow action.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="card cp-card">
+              <div class="card-body d-flex flex-column">
+                <div>
+                  <h2 class="card-title mb-1">Workflow Status</h2>
+                  <p class="card-subtitle mb-3">Current flow for this document once you save or submit.</p>
+                </div>
+                <ul class="small text-secondary note-list mt-auto mb-0">
+                  <li>Save Draft → document stays in draft status.</li>
+                  <li>Submit for Review → document moves to pending approval.</li>
+                  <li>Creation audit is saved automatically.</li>
+                  <li>Change summary is stored in comments when entered.</li>
+                  <li>Approver notification is generated on submit.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 (function () {
-    const typeSelect = document.getElementById('document_type_id');
-    const numberInput = document.getElementById('document_number');
-    const titleInput = document.getElementById('title');
-    const versionInput = document.getElementById('version_label');
-    const previewBox = document.getElementById('documentIdPreview');
+  const textBtn = document.getElementById('tabTextBtn');
+  const fileBtn = document.getElementById('tabFileBtn');
+  const textBlock = document.getElementById('richTextBlock');
+  const fileBlock = document.getElementById('fileUploadBlock');
+  const uploadBox = document.getElementById('uploadBox');
+  const fileInput = document.getElementById('primaryFileInput');
+  const selectedFileName = document.getElementById('selectedFileName');
 
-    function slugify(str) {
-        return (str || '')
-            .toUpperCase()
-            .replace(/[^A-Z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-    }
-
-    function updatePreview() {
-        const selected = typeSelect.options[typeSelect.selectedIndex];
-        const prefix = selected ? (selected.getAttribute('data-prefix') || 'DOC') : 'DOC';
-        const number = (numberInput.value || '').trim();
-        const topic = (titleInput.value || '').trim();
-        const version = (versionInput.value || '01').trim();
-
-        if (!typeSelect.value && !number && !topic) {
-            previewBox.textContent = '';
-            return;
-        }
-
-        let preview = prefix;
-        if (number) preview += '-' + number;
-        if (topic) preview += '-' + slugify(topic);
-        preview += '-' + version;
-
-        previewBox.textContent = preview;
-    }
-
-    [typeSelect, numberInput, titleInput].forEach(el => {
-        if (el) {
-            el.addEventListener('input', updatePreview);
-            el.addEventListener('change', updatePreview);
-        }
+  if (textBtn && fileBtn && textBlock && fileBlock) {
+    textBtn.addEventListener('click', function () {
+      textBtn.classList.add('active');
+      fileBtn.classList.remove('active');
+      textBlock.style.display = '';
+      fileBlock.style.display = 'none';
     });
 
-    updatePreview();
+    fileBtn.addEventListener('click', function () {
+      fileBtn.classList.add('active');
+      textBtn.classList.remove('active');
+      fileBlock.style.display = '';
+      textBlock.style.display = 'none';
+    });
+  }
+
+  if (uploadBox && fileInput) {
+    uploadBox.addEventListener('click', function () {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files.length > 0) {
+        selectedFileName.textContent = 'Selected: ' + fileInput.files[0].name;
+      } else {
+        selectedFileName.textContent = '';
+      }
+    });
+
+    ['dragenter', 'dragover'].forEach(function (eventName) {
+      uploadBox.addEventListener(eventName, function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadBox.classList.add('border-primary');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(function (eventName) {
+      uploadBox.addEventListener(eventName, function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadBox.classList.remove('border-primary');
+      });
+    });
+
+    uploadBox.addEventListener('drop', function (e) {
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        fileInput.files = e.dataTransfer.files;
+        selectedFileName.textContent = 'Selected: ' + e.dataTransfer.files[0].name;
+      }
+    });
+  }
+
+  const docType = document.querySelector('[name="document_type_id"]');
+  const docNumber = document.querySelector('[name="document_number"]');
+  const topic = document.querySelector('[name="topic"]');
+  const title = document.querySelector('[name="title"]');
+  const preview = document.getElementById('docIdPreview');
+
+  function makeSlug(text) {
+    return String(text || '')
+      .trim()
+      .replace(/[^A-Za-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toUpperCase();
+  }
+
+  function updatePreview() {
+    if (!preview) return;
+
+    let prefix = 'DOC';
+    if (docType && docType.selectedIndex > 0) {
+      const label = docType.options[docType.selectedIndex].text || '';
+      prefix = makeSlug(label.split('(')[0]) || 'DOC';
+    }
+
+    const number = makeSlug(docNumber ? docNumber.value : '');
+    const topicText = makeSlug((topic && topic.value) ? topic.value : ((title && title.value) ? title.value : ''));
+    const version = '01';
+
+    if (!number && !topicText) {
+      preview.textContent = 'Format: [Type]-[Number]-[Topic]-[Version]';
+      return;
+    }
+
+    let out = prefix;
+    if (number) out += '-' + number;
+    if (topicText) out += '-' + topicText;
+    out += '-' + version;
+
+    preview.textContent = out;
+  }
+
+  [docType, docNumber, topic, title].forEach(function (el) {
+    if (el) el.addEventListener('input', updatePreview);
+    if (el) el.addEventListener('change', updatePreview);
+  });
+
+  updatePreview();
 })();
 </script>
 </body>
