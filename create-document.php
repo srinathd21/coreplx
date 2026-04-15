@@ -114,6 +114,40 @@ if (!function_exists('upload_document_file')) {
     }
 }
 
+if (!function_exists('slug_part')) {
+    function slug_part($text) {
+        $text = strtoupper(trim((string)$text));
+        $text = preg_replace('/[^A-Z0-9]+/', '-', $text);
+        $text = trim((string)$text, '-');
+        return $text;
+    }
+}
+
+if (!function_exists('build_document_id_preview')) {
+    function build_document_id_preview($prefix, $documentNumber, $topic, $title, $versionLabel = '01') {
+        $prefix = slug_part($prefix !== '' ? $prefix : 'DOC');
+        $numberPart = slug_part($documentNumber);
+        $topicSource = trim((string)$topic) !== '' ? $topic : $title;
+        $topicPart = slug_part($topicSource);
+        $versionPart = slug_part($versionLabel !== '' ? $versionLabel : '01');
+
+        $parts = [];
+        $parts[] = $prefix !== '' ? $prefix : 'DOC';
+
+        if ($numberPart !== '') {
+            $parts[] = $numberPart;
+        }
+
+        if ($topicPart !== '') {
+            $parts[] = $topicPart;
+        }
+
+        $parts[] = $versionPart !== '' ? $versionPart : '01';
+
+        return implode('-', $parts);
+    }
+}
+
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login-admin.php');
     exit;
@@ -292,9 +326,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $versionLabel = '01';
     $prefix = $selectedType['prefix'] ?? 'DOC';
-    $topicPart = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '-', ($form['topic'] !== '' ? $form['topic'] : $form['title'])));
-    $topicPart = trim($topicPart, '-');
-    $form['document_id_preview'] = $prefix . '-' . $form['document_number'] . ($topicPart !== '' ? '-' . $topicPart : '') . '-' . $versionLabel;
+    $form['document_id_preview'] = build_document_id_preview(
+        $prefix,
+        $form['document_number'],
+        $form['topic'],
+        $form['title'],
+        $versionLabel
+    );
 
     if (!$errors) {
         $checkSql = "SELECT id FROM documents WHERE document_number = ? LIMIT 1";
@@ -504,7 +542,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'topic'               => $form['topic'],
                 'status'              => $documentStatus,
                 'version_label'       => $versionLabel,
-                'approver_user_id'    => $approverUserId
+                'approver_user_id'    => $approverUserId,
+                'document_id_preview' => $form['document_id_preview']
             ], JSON_UNESCAPED_UNICODE);
 
             if (tableExists($conn, 'audit_logs')) {
@@ -992,10 +1031,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="row g-3">
                   <div class="col-md-6">
                     <label class="form-label">Document Type</label>
-                    <select name="document_type_id" class="form-select" required>
+                    <select name="document_type_id" class="form-select" id="document_type_id" required>
                       <option value="">Select Document Type</option>
                       <?php foreach ($documentTypes as $type): ?>
-                        <option value="<?php echo (int)$type['id']; ?>" <?php echo ((string)$form['document_type_id'] === (string)$type['id']) ? 'selected' : ''; ?>>
+                        <option
+                          value="<?php echo (int)$type['id']; ?>"
+                          data-prefix="<?php echo e($type['prefix'] ?: 'DOC'); ?>"
+                          <?php echo ((string)$form['document_type_id'] === (string)$type['id']) ? 'selected' : ''; ?>
+                        >
                           <?php echo e($type['type_name']); ?>
                         </option>
                       <?php endforeach; ?>
@@ -1004,17 +1047,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                   <div class="col-md-6">
                     <label class="form-label">Document Topic</label>
-                    <input class="form-control" name="topic" value="<?php echo e($form['topic']); ?>">
+                    <input class="form-control" name="topic" id="topic" value="<?php echo e($form['topic']); ?>">
                   </div>
 
                   <div class="col-md-6">
                     <label class="form-label">Document Number</label>
-                    <input class="form-control" name="document_number" value="<?php echo e($form['document_number']); ?>" required>
+                    <input class="form-control" name="document_number" id="document_number" value="<?php echo e($form['document_number']); ?>" required>
                   </div>
 
                   <div class="col-md-6">
                     <label class="form-label">Version</label>
-                    <input class="form-control readonly" readonly value="<?php echo e($form['version_label']); ?>">
+                    <input class="form-control readonly" id="version_label" readonly value="<?php echo e($form['version_label']); ?>">
                   </div>
 
                   <div class="col-md-6">
@@ -1066,7 +1109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                   <div class="col-md-6">
                     <label class="form-label">Document Title</label>
-                    <input class="form-control" name="title" value="<?php echo e($form['title']); ?>" required>
+                    <input class="form-control" name="title" id="title" value="<?php echo e($form['title']); ?>" required>
                   </div>
 
                   <div class="col-12">
@@ -1242,18 +1285,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
   }
 
-  const docType = document.querySelector('[name="document_type_id"]');
-  const docNumber = document.querySelector('[name="document_number"]');
-  const topic = document.querySelector('[name="topic"]');
-  const title = document.querySelector('[name="title"]');
+  const docType = document.getElementById('document_type_id');
+  const docNumber = document.getElementById('document_number');
+  const topic = document.getElementById('topic');
+  const title = document.getElementById('title');
+  const version = document.getElementById('version_label');
   const preview = document.getElementById('docIdPreview');
 
   function makeSlug(text) {
     return String(text || '')
       .trim()
-      .replace(/[^A-Za-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .toUpperCase();
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
   }
 
   function updatePreview() {
@@ -1261,30 +1305,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     let prefix = 'DOC';
     if (docType && docType.selectedIndex > 0) {
-      const label = docType.options[docType.selectedIndex].text || '';
-      prefix = makeSlug(label.split('(')[0]) || 'DOC';
+      const selected = docType.options[docType.selectedIndex];
+      const dbPrefix = selected.getAttribute('data-prefix') || '';
+      prefix = makeSlug(dbPrefix || 'DOC');
     }
 
-    const number = makeSlug(docNumber ? docNumber.value : '');
-    const topicText = makeSlug((topic && topic.value) ? topic.value : ((title && title.value) ? title.value : ''));
-    const version = '01';
+    const numberPart = makeSlug(docNumber ? docNumber.value : '');
+    const topicSource = (topic && topic.value.trim() !== '')
+      ? topic.value
+      : (title ? title.value : '');
+    const topicPart = makeSlug(topicSource);
+    const versionPart = makeSlug(version ? version.value : '01') || '01';
 
-    if (!number && !topicText) {
-      preview.textContent = 'Format: [Type]-[Number]-[Topic]-[Version]';
-      return;
-    }
+    const parts = [];
+    parts.push(prefix || 'DOC');
+    if (numberPart) parts.push(numberPart);
+    if (topicPart) parts.push(topicPart);
+    parts.push(versionPart);
 
-    let out = prefix;
-    if (number) out += '-' + number;
-    if (topicText) out += '-' + topicText;
-    out += '-' + version;
-
-    preview.textContent = out;
+    preview.textContent = parts.join('-');
   }
 
   [docType, docNumber, topic, title].forEach(function (el) {
-    if (el) el.addEventListener('input', updatePreview);
-    if (el) el.addEventListener('change', updatePreview);
+    if (el) {
+      el.addEventListener('input', updatePreview);
+      el.addEventListener('change', updatePreview);
+    }
   });
 
   updatePreview();
