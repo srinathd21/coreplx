@@ -34,9 +34,7 @@ if (!function_exists('columnExists')) {
 if (!function_exists('safeCountQuery')) {
     function safeCountQuery(mysqli $conn, $sql, $types = '', $params = []) {
         $stmt = mysqli_prepare($conn, $sql);
-        if (!$stmt) {
-            return 0;
-        }
+        if (!$stmt) return 0;
 
         if ($types !== '' && !empty($params)) {
             mysqli_stmt_bind_param($stmt, $types, ...$params);
@@ -62,9 +60,7 @@ if (!function_exists('safeRowsQuery')) {
     function safeRowsQuery(mysqli $conn, $sql, $types = '', $params = []) {
         $rows = [];
         $stmt = mysqli_prepare($conn, $sql);
-        if (!$stmt) {
-            return $rows;
-        }
+        if (!$stmt) return $rows;
 
         if ($types !== '' && !empty($params)) {
             mysqli_stmt_bind_param($stmt, $types, ...$params);
@@ -111,12 +107,12 @@ if (!function_exists('statusBadgeClass')) {
     function statusBadgeClass($status, $reviewDate = '') {
         $status = strtolower(trim((string)$status));
 
-        if ($status === 'pending_approval' || $status === 'pending approval' || $status === 'pending review' || $status === 'pending') {
+        if (in_array($status, ['pending_approval', 'pending approval', 'pending review', 'pending'], true)) {
             return 'badge badge-soft-warning';
         }
         if ($status === 'draft') return 'badge badge-soft-secondary';
         if ($status === 'pending_retirement') return 'badge badge-soft-warning';
-        if ($status === 'retired') return 'badge badge-soft-secondary';
+        if ($status === 'retired' || $status === 'obsolete') return 'badge badge-soft-secondary';
         if ($status === 'deleted') return 'badge badge-soft-danger';
         if ($status === 'in_progress') return 'badge badge-soft-info';
 
@@ -153,6 +149,7 @@ if (!function_exists('displayStatusLabel')) {
         if ($status === 'in_progress') return 'In Progress';
         if ($status === 'pending_retirement') return 'Pending Retirement';
         if ($status === 'retired') return 'Retired';
+        if ($status === 'obsolete') return 'Obsolete';
         if ($status === 'deleted') return 'Deleted';
 
         return $status !== '' ? ucwords(str_replace('_', ' ', $status)) : 'Effective';
@@ -180,7 +177,8 @@ $userSql = "
         u.email,
         u.employee_code,
         u.department_id,
-        r.role_name
+        r.role_name,
+        r.role_code
     FROM users u
     LEFT JOIN roles r ON r.id = u.current_role_id
     WHERE u.id = ?
@@ -203,83 +201,104 @@ if (!$currentUser) {
 
 $displayName = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
 if ($displayName === '') {
-    $displayName = $_SESSION['admin_name'] ?? 'QA Admin';
+    $displayName = $_SESSION['admin_name'] ?? 'Admin';
 }
-$roleName = trim((string)($currentUser['role_name'] ?? 'QA Admin'));
+$roleName = trim((string)($currentUser['role_name'] ?? 'Super Admin'));
+$roleCode = strtolower(trim((string)($currentUser['role_code'] ?? '')));
 $userInitial = strtoupper(substr($displayName, 0, 1));
 
-$documentsOwned = 0;
+$isSuperAdmin = ($roleCode === 'super_admin' || strtolower($roleName) === 'super admin');
+
+$documentsOwned   = 0;
 $pendingApprovals = 0;
-$overdueReviews = 0;
-$unreadAlerts = 0;
-$myDrafts = 0;
+$overdueReviews   = 0;
+$unreadAlerts     = 0;
+$myDrafts         = 0;
 $effectiveRecords = 0;
 
 if (tableExists($conn, 'documents')) {
-    if (columnExists($conn, 'documents', 'owner_user_id')) {
+    if ($isSuperAdmin) {
         $documentsOwned = safeCountQuery(
             $conn,
-            "SELECT COUNT(*) FROM documents WHERE owner_user_id = ? AND LOWER(COALESCE(current_status,'')) <> 'deleted'",
-            "i",
-            [$userId]
+            "SELECT COUNT(*)
+             FROM documents
+             WHERE LOWER(TRIM(COALESCE(current_status,''))) <> 'deleted'"
         );
-    } elseif (columnExists($conn, 'documents', 'created_by')) {
+    } else {
         $documentsOwned = safeCountQuery(
             $conn,
-            "SELECT COUNT(*) FROM documents WHERE created_by = ? AND LOWER(COALESCE(current_status,'')) <> 'deleted'",
+            "SELECT COUNT(*)
+             FROM documents
+             WHERE owner_user_id = ?
+               AND LOWER(TRIM(COALESCE(current_status,''))) <> 'deleted'",
             "i",
             [$userId]
         );
     }
 
-    $myDrafts = safeCountQuery(
-        $conn,
-        "SELECT COUNT(*) FROM documents WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'draft'"
-    );
+    if ($isSuperAdmin) {
+        $myDrafts = safeCountQuery(
+            $conn,
+            "SELECT COUNT(*)
+             FROM documents
+             WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'draft'"
+        );
+    } else {
+        $myDrafts = safeCountQuery(
+            $conn,
+            "SELECT COUNT(*)
+             FROM documents
+             WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'draft'
+               AND (owner_user_id = ? OR created_by = ?)",
+            "ii",
+            [$userId, $userId]
+        );
+    }
 
     $effectiveRecords = safeCountQuery(
         $conn,
-        "SELECT COUNT(*) FROM documents WHERE LOWER(TRIM(COALESCE(current_status,'effective'))) IN ('effective','approved')"
+        "SELECT COUNT(*)
+         FROM documents
+         WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'effective'"
     );
-}
 
-if (tableExists($conn, 'document_approvals')) {
-    $statusCondition = "
-        LOWER(TRIM(COALESCE(status,''))) IN ('pending review','pending approval','pending')
-        OR LOWER(TRIM(COALESCE(meaning,''))) IN ('pending review','pending approval','pending')
-    ";
-
-    if (columnExists($conn, 'document_approvals', 'approver_id')) {
+    if ($isSuperAdmin) {
         $pendingApprovals = safeCountQuery(
             $conn,
-            "SELECT COUNT(*) FROM document_approvals WHERE approver_id = ? AND ({$statusCondition})",
-            "i",
-            [$userId]
-        );
-    } elseif (columnExists($conn, 'document_approvals', 'approved_by')) {
-        $pendingApprovals = safeCountQuery(
-            $conn,
-            "SELECT COUNT(*) FROM document_approvals WHERE approved_by = ? AND ({$statusCondition})",
-            "i",
-            [$userId]
+            "SELECT COUNT(*)
+             FROM documents
+             WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'pending_approval'"
         );
     } else {
         $pendingApprovals = safeCountQuery(
             $conn,
-            "SELECT COUNT(*) FROM document_approvals WHERE {$statusCondition}"
+            "SELECT COUNT(*)
+             FROM documents
+             WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'pending_approval'
+               AND TRIM(COALESCE(approver,'')) = ?",
+            "s",
+            [(string)$userId]
         );
     }
 }
 
-if ($pendingApprovals === 0 && tableExists($conn, 'documents')) {
-    if (columnExists($conn, 'documents', 'approver')) {
-        $pendingApprovals = safeCountQuery(
+if (tableExists($conn, 'document_retirement_requests')) {
+    if ($isSuperAdmin) {
+        $pendingApprovals += safeCountQuery(
             $conn,
-            "SELECT COUNT(*) FROM documents
-             WHERE TRIM(COALESCE(approver,'')) = ?
-               AND LOWER(TRIM(COALESCE(current_status,''))) IN ('pending_approval','pending approval','pending review','pending')",
-            "s",
-            [(string)$userId]
+            "SELECT COUNT(*)
+             FROM document_retirement_requests
+             WHERE LOWER(TRIM(COALESCE(status,''))) = 'pending_approval'"
+        );
+    } else {
+        $pendingApprovals += safeCountQuery(
+            $conn,
+            "SELECT COUNT(*)
+             FROM document_retirement_requests
+             WHERE approver_user_id = ?
+               AND LOWER(TRIM(COALESCE(status,''))) = 'pending_approval'",
+            "i",
+            [$userId]
         );
     }
 }
@@ -293,29 +312,25 @@ if (tableExists($conn, 'document_versions') && columnExists($conn, 'document_ver
          WHERE dv.review_date IS NOT NULL
            AND dv.review_date <> '0000-00-00'
            AND dv.review_date < CURDATE()
-           AND LOWER(COALESCE(d.current_status,'effective')) NOT IN ('deleted','retired')"
+           AND LOWER(TRIM(COALESCE(d.current_status,''))) NOT IN ('retired','obsolete','deleted')"
     );
 }
 
 if (tableExists($conn, 'notifications')) {
-    if (columnExists($conn, 'notifications', 'is_read')) {
+    if ($isSuperAdmin) {
         $unreadAlerts = safeCountQuery(
             $conn,
-            "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND COALESCE(is_read,0) = 0",
-            "i",
-            [$userId]
-        );
-    } elseif (columnExists($conn, 'notifications', 'status')) {
-        $unreadAlerts = safeCountQuery(
-            $conn,
-            "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND LOWER(TRIM(COALESCE(status,''))) IN ('unread','new','pending')",
-            "i",
-            [$userId]
+            "SELECT COUNT(*)
+             FROM notifications
+             WHERE is_read = 0"
         );
     } else {
         $unreadAlerts = safeCountQuery(
             $conn,
-            "SELECT COUNT(*) FROM notifications WHERE user_id = ?",
+            "SELECT COUNT(*)
+             FROM notifications
+             WHERE user_id = ?
+               AND is_read = 0",
             "i",
             [$userId]
         );
@@ -324,82 +339,138 @@ if (tableExists($conn, 'notifications')) {
 
 $workQueue = [];
 if (tableExists($conn, 'documents') && tableExists($conn, 'document_versions')) {
-    $workQueueSql = "
-        SELECT
-            d.id,
-            d.document_number,
-            d.title,
-            d.topic,
-            d.current_status,
-            dv.review_date,
-            CASE
-                WHEN LOWER(TRIM(COALESCE(d.current_status,''))) IN ('pending_approval','pending approval','pending review','pending') THEN 'Approval Required'
-                WHEN dv.review_date IS NOT NULL AND dv.review_date <> '0000-00-00' AND dv.review_date < CURDATE() THEN 'Periodic Review'
-                WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'draft' THEN 'Draft Review'
-                ELSE 'General Review'
-            END AS task_name
-        FROM documents d
-        LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-        WHERE LOWER(TRIM(COALESCE(d.current_status,''))) IN ('draft','pending_approval','pending approval','pending review','pending','effective','approved')
-        ORDER BY
-            CASE
-                WHEN LOWER(TRIM(COALESCE(d.current_status,''))) IN ('pending_approval','pending approval','pending review','pending') THEN 1
-                WHEN dv.review_date IS NOT NULL AND dv.review_date <> '0000-00-00' AND dv.review_date < CURDATE() THEN 2
-                WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'draft' THEN 3
-                ELSE 4
-            END,
-            d.id DESC
-        LIMIT 4
-    ";
-    $workQueue = safeRowsQuery($conn, $workQueueSql);
+    if ($isSuperAdmin) {
+        $workQueueSql = "
+            SELECT
+                d.id,
+                d.document_number,
+                d.title,
+                d.topic,
+                d.current_status,
+                dv.review_date,
+                CASE
+                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'pending_approval' THEN 'Approval Required'
+                    WHEN dv.review_date IS NOT NULL AND dv.review_date <> '0000-00-00' AND dv.review_date < CURDATE() THEN 'Periodic Review'
+                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'draft' THEN 'Draft Review'
+                    ELSE 'General Review'
+                END AS task_name
+            FROM documents d
+            LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+            WHERE LOWER(TRIM(COALESCE(d.current_status,''))) IN ('draft','pending_approval','effective')
+            ORDER BY
+                CASE
+                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'pending_approval' THEN 1
+                    WHEN dv.review_date IS NOT NULL AND dv.review_date <> '0000-00-00' AND dv.review_date < CURDATE() THEN 2
+                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'draft' THEN 3
+                    ELSE 4
+                END,
+                d.id DESC
+            LIMIT 4
+        ";
+        $workQueue = safeRowsQuery($conn, $workQueueSql);
+    } else {
+        $workQueueSql = "
+            SELECT
+                d.id,
+                d.document_number,
+                d.title,
+                d.topic,
+                d.current_status,
+                dv.review_date,
+                CASE
+                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'pending_approval' THEN 'Approval Required'
+                    WHEN dv.review_date IS NOT NULL AND dv.review_date <> '0000-00-00' AND dv.review_date < CURDATE() THEN 'Periodic Review'
+                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'draft' THEN 'Draft Review'
+                    ELSE 'General Review'
+                END AS task_name
+            FROM documents d
+            LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+            WHERE (
+                    d.owner_user_id = ?
+                    OR d.created_by = ?
+                    OR TRIM(COALESCE(d.approver,'')) = ?
+                  )
+              AND LOWER(TRIM(COALESCE(d.current_status,''))) IN ('draft','pending_approval','effective')
+            ORDER BY
+                CASE
+                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'pending_approval' THEN 1
+                    WHEN dv.review_date IS NOT NULL AND dv.review_date <> '0000-00-00' AND dv.review_date < CURDATE() THEN 2
+                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'draft' THEN 3
+                    ELSE 4
+                END,
+                d.id DESC
+            LIMIT 4
+        ";
+        $workQueue = safeRowsQuery($conn, $workQueueSql, "iis", [$userId, $userId, (string)$userId]);
+    }
 }
 
 $recentActivity = [];
 if (tableExists($conn, 'audit_logs')) {
-    $recentActivitySql = "
-        SELECT
-            action,
-            remarks,
-            created_at
-        FROM audit_logs
-        ORDER BY id DESC
-        LIMIT 4
-    ";
-    if (columnExists($conn, 'audit_logs', 'created_at')) {
-        $recentActivity = safeRowsQuery($conn, $recentActivitySql);
-    } elseif (columnExists($conn, 'audit_logs', 'performed_at')) {
-        $recentActivitySql = "
-            SELECT
-                action,
-                remarks,
-                performed_at AS created_at
-            FROM audit_logs
-            ORDER BY id DESC
-            LIMIT 4
-        ";
-        $recentActivity = safeRowsQuery($conn, $recentActivitySql);
+    if ($isSuperAdmin) {
+        $recentActivity = safeRowsQuery(
+            $conn,
+            "SELECT action, remarks, performed_at AS created_at
+             FROM audit_logs
+             ORDER BY id DESC
+             LIMIT 4"
+        );
+    } else {
+        $recentActivity = safeRowsQuery(
+            $conn,
+            "SELECT action, remarks, performed_at AS created_at
+             FROM audit_logs
+             WHERE performed_by = ?
+             ORDER BY id DESC
+             LIMIT 4",
+            "i",
+            [$userId]
+        );
     }
 }
 
 $recentDocuments = [];
 if (tableExists($conn, 'documents')) {
-    $recentDocumentsSql = "
-        SELECT
-            d.id,
-            d.document_number,
-            d.title,
-            d.topic,
-            d.current_status,
-            dt.type_name,
-            dv.review_date
-        FROM documents d
-        LEFT JOIN document_types dt ON dt.id = d.document_type_id
-        LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-        WHERE LOWER(COALESCE(d.current_status,'')) <> 'deleted'
-        ORDER BY d.id DESC
-        LIMIT 3
-    ";
-    $recentDocuments = safeRowsQuery($conn, $recentDocumentsSql);
+    if ($isSuperAdmin) {
+        $recentDocuments = safeRowsQuery(
+            $conn,
+            "SELECT
+                d.id,
+                d.document_number,
+                d.title,
+                d.topic,
+                d.current_status,
+                dt.type_name,
+                dv.review_date
+             FROM documents d
+             LEFT JOIN document_types dt ON dt.id = d.document_type_id
+             LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+             WHERE LOWER(TRIM(COALESCE(d.current_status,''))) <> 'deleted'
+             ORDER BY d.id DESC
+             LIMIT 3"
+        );
+    } else {
+        $recentDocuments = safeRowsQuery(
+            $conn,
+            "SELECT
+                d.id,
+                d.document_number,
+                d.title,
+                d.topic,
+                d.current_status,
+                dt.type_name,
+                dv.review_date
+             FROM documents d
+             LEFT JOIN document_types dt ON dt.id = d.document_type_id
+             LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+             WHERE LOWER(TRIM(COALESCE(d.current_status,''))) <> 'deleted'
+               AND (d.owner_user_id = ? OR d.created_by = ? OR TRIM(COALESCE(d.approver,'')) = ?)
+             ORDER BY d.id DESC
+             LIMIT 3",
+            "iis",
+            [$userId, $userId, (string)$userId]
+        );
+    }
 }
 ?>
 <!doctype html>
@@ -492,7 +563,7 @@ if (tableExists($conn, 'documents')) {
               <form action="repository.php" method="get">
                 <div class="input-group input-group-lg search-group">
                   <span class="input-group-text bg-white border-end-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1.0 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
                   </span>
                   <input type="text" name="search" class="form-control border-start-0 ps-0" placeholder="Search documents, IDs, owners, or keywords">
                 </div>
