@@ -54,9 +54,6 @@ $currentUserName = isset($_SESSION['full_name']) && trim($_SESSION['full_name'])
     ? $_SESSION['full_name']
     : 'QA Admin';
 
-$successMessage = '';
-$errorMessage   = '';
-
 $search       = trim($_GET['search'] ?? '');
 $userFilter   = trim($_GET['user'] ?? '');
 $actionFilter = trim($_GET['action_name'] ?? '');
@@ -67,11 +64,12 @@ $dateTo       = trim($_GET['date_to'] ?? '');
 $export       = trim($_GET['export'] ?? '');
 
 $rows = [];
+$errorMessage = '';
 $dataSourceLabel = 'No document creation audit table found.';
 
 $possibleSources = [];
-if (tableExists($conn, 'document_audit'))   $possibleSources[] = 'document_audit';
 if (tableExists($conn, 'audit_creation'))   $possibleSources[] = 'audit_creation';
+if (tableExists($conn, 'document_audit'))   $possibleSources[] = 'document_audit';
 if (tableExists($conn, 'audit_trail'))      $possibleSources[] = 'audit_trail';
 if (tableExists($conn, 'audit_logs'))       $possibleSources[] = 'audit_logs';
 if (tableExists($conn, 'activity_logs'))    $possibleSources[] = 'activity_logs';
@@ -91,7 +89,7 @@ if ($selectedSource !== '') {
 
     $timestampCol = firstExistingColumn($conn, $selectedSource, [
         'created_at', 'action_at', 'logged_at', 'updated_at',
-        'timestamp', 'event_time', 'date_time', 'entry_date'
+        'timestamp', 'event_time', 'date_time', 'entry_date', 'performed_at'
     ]);
     $orderCol = $timestampCol ?: firstExistingColumn($conn, $selectedSource, ['id']);
 
@@ -101,7 +99,7 @@ if ($selectedSource !== '') {
 
     $documentCol = firstExistingColumn($conn, $selectedSource, [
         'document_id', 'document_code', 'doc_no', 'document_number',
-        'doc_id', 'doc_code', 'reference_no'
+        'doc_id', 'doc_code', 'reference_no', 'entity_id'
     ]);
 
     $ipCol = firstExistingColumn($conn, $selectedSource, [
@@ -113,8 +111,10 @@ if ($selectedSource !== '') {
     ]);
 
     $userIdCol = firstExistingColumn($conn, $selectedSource, [
-        'user_id', 'created_by', 'actor_id', 'employee_id'
+        'user_id', 'created_by', 'actor_id', 'employee_id', 'performed_by'
     ]);
+
+    $entityTypeCol = firstExistingColumn($conn, $selectedSource, ['entity_type']);
 
     $joins = [];
 
@@ -137,8 +137,13 @@ if ($selectedSource !== '') {
             LOWER(COALESCE({$actionExpr}, '')) LIKE '%created%' OR
             LOWER(COALESCE({$actionExpr}, '')) LIKE '%draft%' OR
             LOWER(COALESCE({$actionExpr}, '')) LIKE '%save%' OR
+            LOWER(COALESCE({$actionExpr}, '')) LIKE '%submit%' OR
             LOWER(COALESCE({$actionExpr}, '')) LIKE '%new document%'
         )";
+    }
+
+    if ($selectedSource === 'audit_logs' && $entityTypeCol !== null) {
+        $where[] = "LOWER(COALESCE(a.`{$entityTypeCol}`, '')) = 'document'";
     }
 
     if ($search !== '') {
@@ -286,66 +291,62 @@ if ($export === 'csv') {
 }
 
 if ($export === 'pdf') {
-    ?>
-    <!doctype html>
-    <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <title>Audit Creation Export</title>
-        <style>
-            body { font-family: Arial, sans-serif; font-size: 12px; color: #222; margin: 20px; }
-            h2 { margin: 0 0 6px 0; font-size: 20px; }
-            p { margin: 0 0 14px 0; color: #555; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #999; padding: 8px; vertical-align: top; text-align: left; }
-            th { background: #f2f2f2; }
-            .muted { color: #666; font-size: 11px; margin-top: 10px; }
-            @media print {
-                .no-print { display: none; }
-                body { margin: 0; }
-            }
-        </style>
-    </head>
-    <body>
-        <div class="no-print" style="margin-bottom:12px;">
-            <button onclick="window.print()">Print / Save as PDF</button>
-        </div>
-        <h2>Audit Trail - Document Creation</h2>
-        <p>Captures who created, when, which document, and IP address.</p>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>Timestamp</th>
-                    <th>User</th>
-                    <th>Action</th>
-                    <th>Document ID</th>
-                    <th>IP Address</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (!empty($rows)): ?>
-                    <?php foreach ($rows as $row): ?>
-                        <tr>
-                            <td><?php echo e(formatDateTimeDisplay($row['event_time'])); ?></td>
-                            <td><?php echo e($row['user_name']); ?></td>
-                            <td><?php echo e($row['action_name']); ?></td>
-                            <td><?php echo e($row['document_id']); ?></td>
-                            <td><?php echo e($row['ip_address']); ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="5">No records found.</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
-
-        <div class="muted">Export generated on <?php echo e(date('d-M-Y h:i A')); ?></div>
-    </body>
-    </html>
-    <?php
+?>
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Audit Creation Export</title>
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; color: #222; margin: 20px; }
+        h2 { margin: 0 0 6px 0; font-size: 20px; }
+        p { margin: 0 0 14px 0; color: #555; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #999; padding: 8px; vertical-align: top; text-align: left; }
+        th { background: #f2f2f2; }
+        .muted { color: #666; font-size: 11px; margin-top: 10px; }
+        @media print {
+            .no-print { display: none; }
+            body { margin: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="no-print" style="margin-bottom:12px;">
+    <button onclick="window.print()">Print / Save as PDF</button>
+</div>
+<h2>Audit Trail - Document Creation</h2>
+<p>Captures who created, when, which document, and IP address.</p>
+<table>
+    <thead>
+        <tr>
+            <th>Timestamp</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Document ID</th>
+            <th>IP Address</th>
+        </tr>
+    </thead>
+    <tbody>
+    <?php if (!empty($rows)): ?>
+        <?php foreach ($rows as $row): ?>
+            <tr>
+                <td><?php echo e(formatDateTimeDisplay($row['event_time'])); ?></td>
+                <td><?php echo e($row['user_name']); ?></td>
+                <td><?php echo e($row['action_name']); ?></td>
+                <td><?php echo e($row['document_id']); ?></td>
+                <td><?php echo e($row['ip_address']); ?></td>
+            </tr>
+        <?php endforeach; ?>
+    <?php else: ?>
+        <tr><td colspan="5">No records found.</td></tr>
+    <?php endif; ?>
+    </tbody>
+</table>
+<div class="muted">Export generated on <?php echo e(date('d-M-Y h:i A')); ?></div>
+</body>
+</html>
+<?php
     exit;
 }
 ?>
@@ -358,34 +359,20 @@ if ($export === 'pdf') {
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
   <style>
-    .cp-card {
-      border: 1px solid rgba(0,0,0,.08);
-      border-radius: 18px;
-      box-shadow: 0 6px 24px rgba(0,0,0,.06);
-      background: #fff;
-    }
-    .page-title {
-      font-size: 1.75rem;
-      font-weight: 700;
-    }
-    .page-subtitle,
-    .card-subtitle {
-      color: #6c757d;
-    }
-    .table td,
-    .table th {
-      vertical-align: middle;
-    }
     .filter-box {
       display: none;
-      border: 1px solid rgba(0,0,0,.08);
+      border: 1px solid #E0E7EF;
       border-radius: 14px;
-      background: #f8f9fa;
+      background: #f8fafc;
       padding: 1rem;
       margin-bottom: 1rem;
     }
     .filter-box.active {
       display: block;
+    }
+    .table td,
+    .table th {
+      vertical-align: middle;
     }
   </style>
 </head>
@@ -429,7 +416,7 @@ if ($export === 'pdf') {
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
           <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="audit-creation.php">Audit - Creation</a></li>
+            <li><a class="dropdown-item active" href="audit-creation.php">Audit - Creation</a></li>
             <li><a class="dropdown-item" href="audit-approval.php">Audit - Approval</a></li>
             <li><a class="dropdown-item" href="audit-comments.php">Audit - Comments</a></li>
             <li><a class="dropdown-item" href="qa-admin.php">QA Admin</a></li>
@@ -458,13 +445,6 @@ if ($export === 'pdf') {
       <p class="page-subtitle mb-0">View immutable records of document creation activities and system traceability.</p>
     </div>
 
-    <?php if ($successMessage !== ''): ?>
-      <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <?php echo e($successMessage); ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-      </div>
-    <?php endif; ?>
-
     <?php if ($errorMessage !== ''): ?>
       <div class="alert alert-danger alert-dismissible fade show" role="alert">
         <?php echo e($errorMessage); ?>
@@ -479,7 +459,7 @@ if ($export === 'pdf') {
             <h2 class="card-title mb-1">Audit Events</h2>
             <p class="card-subtitle mb-0">Captures who created, when, which document, and IP address.</p>
           </div>
-          <div class="d-flex gap-2">
+          <div class="d-flex gap-2 flex-wrap">
             <button type="button" class="btn btn-outline-secondary" id="toggleFilterBtn">Filter</button>
             <a href="?<?php echo e(http_build_query(array_merge($_GET, ['export' => 'pdf']))); ?>" class="btn btn-outline-primary">Export PDF</a>
             <a href="?<?php echo e(http_build_query(array_merge($_GET, ['export' => 'excel']))); ?>" class="btn btn-outline-primary">Export Excel</a>
@@ -489,9 +469,9 @@ if ($export === 'pdf') {
         <div class="filter-box <?php echo ($search !== '' || $userFilter !== '' || $actionFilter !== '' || $docFilter !== '' || $ipFilter !== '' || $dateFrom !== '' || $dateTo !== '') ? 'active' : ''; ?>" id="filterBox">
           <form method="get">
             <div class="row g-3">
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label">Search</label>
-                <input type="text" name="search" class="form-control" value="<?php echo e($search); ?>" placeholder="Search action, user, document, IP">
+                <input type="text" name="search" class="form-control" value="<?php echo e($search); ?>" placeholder="Search anything">
               </div>
               <div class="col-md-2">
                 <label class="form-label">User</label>
@@ -505,7 +485,7 @@ if ($export === 'pdf') {
                 <label class="form-label">Document ID</label>
                 <input type="text" name="document_id" class="form-control" value="<?php echo e($docFilter); ?>">
               </div>
-              <div class="col-md-2">
+              <div class="col-md-3">
                 <label class="form-label">IP Address</label>
                 <input type="text" name="ip_address" class="form-control" value="<?php echo e($ipFilter); ?>">
               </div>
@@ -549,7 +529,7 @@ if ($export === 'pdf') {
                 <?php endforeach; ?>
               <?php else: ?>
                 <tr>
-                  <td colspan="5" class="text-center text-muted py-4">No creation audit records found.</td>
+                  <td colspan="5" class="text-center text-secondary py-4">No records found.</td>
                 </tr>
               <?php endif; ?>
             </tbody>
@@ -557,7 +537,7 @@ if ($export === 'pdf') {
         </div>
 
         <div class="small text-secondary mt-2">
-          Export to PDF and Excel. Data source: <?php echo e($dataSourceLabel); ?>
+          Export to PDF and Excel. Source: <?php echo e($dataSourceLabel); ?>
         </div>
       </div>
     </div>
@@ -567,14 +547,14 @@ if ($export === 'pdf') {
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    var toggleBtn = document.getElementById('toggleFilterBtn');
-    var filterBox = document.getElementById('filterBox');
+  var toggleBtn = document.getElementById('toggleFilterBtn');
+  var filterBox = document.getElementById('filterBox');
 
-    if (toggleBtn && filterBox) {
-        toggleBtn.addEventListener('click', function () {
-            filterBox.classList.toggle('active');
-        });
-    }
+  if (toggleBtn && filterBox) {
+    toggleBtn.addEventListener('click', function () {
+      filterBox.classList.toggle('active');
+    });
+  }
 });
 </script>
 </body>
