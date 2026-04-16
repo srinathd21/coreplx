@@ -5,7 +5,6 @@ require_once __DIR__ . '/includes/db.php';
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die("Database connection not found. Please check includes/db.php");
 }
-
 mysqli_set_charset($conn, 'utf8mb4');
 
 if (!function_exists('e')) {
@@ -16,7 +15,7 @@ if (!function_exists('e')) {
 }
 
 if (!function_exists('tableExists')) {
-    function tableExists(mysqli $conn, $tableName)
+    function tableExists(mysqli $conn, string $tableName): bool
     {
         $tableName = mysqli_real_escape_string($conn, $tableName);
         $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
@@ -25,7 +24,7 @@ if (!function_exists('tableExists')) {
 }
 
 if (!function_exists('columnExists')) {
-    function columnExists(mysqli $conn, $tableName, $columnName)
+    function columnExists(mysqli $conn, string $tableName, string $columnName): bool
     {
         $tableName = mysqli_real_escape_string($conn, $tableName);
         $columnName = mysqli_real_escape_string($conn, $columnName);
@@ -35,7 +34,7 @@ if (!function_exists('columnExists')) {
 }
 
 if (!function_exists('generate_uuid_v4')) {
-    function generate_uuid_v4()
+    function generate_uuid_v4(): string
     {
         $data = random_bytes(16);
         $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
@@ -45,7 +44,7 @@ if (!function_exists('generate_uuid_v4')) {
 }
 
 if (!function_exists('get_client_ip')) {
-    function get_client_ip()
+    function get_client_ip(): string
     {
         $keys = ['HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
         foreach ($keys as $key) {
@@ -59,7 +58,7 @@ if (!function_exists('get_client_ip')) {
 }
 
 if (!function_exists('normalize_content_format')) {
-    function normalize_content_format($contentText, $file)
+    function normalize_content_format($contentText, $file): string
     {
         $hasText = trim((string)$contentText) !== '';
         $hasFile = isset($file['tmp_name']) && is_uploaded_file($file['tmp_name']);
@@ -71,7 +70,7 @@ if (!function_exists('normalize_content_format')) {
 }
 
 if (!function_exists('upload_document_file')) {
-    function upload_document_file($file)
+    function upload_document_file($file): ?array
     {
         if (
             !isset($file['tmp_name'], $file['name']) ||
@@ -122,9 +121,9 @@ if (!function_exists('upload_document_file')) {
 }
 
 if (!function_exists('increment_version_label')) {
-    function increment_version_label($current)
+    function increment_version_label(string $current): string
     {
-        $current = trim((string)$current);
+        $current = trim($current);
         if ($current === '') return '02';
 
         if (preg_match('/^([A-Za-z]+)(\d+)$/', $current, $m)) {
@@ -135,17 +134,6 @@ if (!function_exists('increment_version_label')) {
         }
 
         if (ctype_digit($current)) {
-            return str_pad((string)(((int)$current) + 1), max(2, strlen($current)), '0', STR_PAD_LEFT);
-        }
-
-        if (preg_match('/^(\d+)(\.\d+)?$/', $current)) {
-            if (strpos($current, '.') !== false) {
-                $parts = explode('.', $current);
-                $major = (int)$parts[0];
-                $minor = isset($parts[1]) ? (int)$parts[1] : 0;
-                $minor++;
-                return $major . '.' . $minor;
-            }
             return str_pad((string)(((int)$current) + 1), max(2, strlen($current)), '0', STR_PAD_LEFT);
         }
 
@@ -169,15 +157,12 @@ $currentUser = null;
 $userSql = "
     SELECT
         u.id,
-        u.employee_code,
         u.first_name,
         u.last_name,
         u.email,
-        u.phone,
         u.current_role_id,
         u.department_id,
         u.status,
-        u.last_login_at,
         r.role_code,
         r.role_name,
         d.department_name
@@ -213,53 +198,42 @@ $departments = [];
 $owners = [];
 $approvers = [];
 
-$docTypeSql = "SELECT id, type_name, prefix FROM document_types WHERE status = 'active' ORDER BY type_name ASC";
-$docTypeRes = mysqli_query($conn, $docTypeSql);
+$docTypeRes = mysqli_query($conn, "SELECT id, type_name, prefix FROM document_types WHERE status = 'active' ORDER BY type_name ASC");
 if ($docTypeRes) {
     while ($row = mysqli_fetch_assoc($docTypeRes)) {
         $documentTypes[] = $row;
     }
 }
 
-$deptSql = "SELECT id, department_name FROM departments WHERE is_active = 1 ORDER BY department_name ASC";
-$deptRes = mysqli_query($conn, $deptSql);
+$deptRes = mysqli_query($conn, "SELECT id, department_name FROM departments WHERE is_active = 1 ORDER BY department_name ASC");
 if ($deptRes) {
     while ($row = mysqli_fetch_assoc($deptRes)) {
         $departments[] = $row;
     }
 }
 
-$userOptionsQueries = [
-    "SELECT id, CONCAT(COALESCE(first_name,''), ' ', COALESCE(last_name,'')) AS name FROM users WHERE status = 'active' ORDER BY first_name ASC, last_name ASC",
-    "SELECT id, full_name AS name FROM users WHERE status = 'active' ORDER BY full_name ASC",
-    "SELECT id, username AS name FROM users WHERE status = 'active' ORDER BY username ASC",
-    "SELECT id, CONCAT(COALESCE(first_name,''), ' ', COALESCE(last_name,'')) AS name FROM users ORDER BY first_name ASC, last_name ASC",
-    "SELECT id, full_name AS name FROM users ORDER BY full_name ASC",
-    "SELECT id, username AS name FROM users ORDER BY username ASC"
-];
-
-foreach ($userOptionsQueries as $sql) {
-    $res = @mysqli_query($conn, $sql);
-    if ($res) {
-        $tempUsers = [];
-        while ($row = mysqli_fetch_assoc($res)) {
-            $row['name'] = trim((string)($row['name'] ?? ''));
-            if ($row['name'] === '') {
-                $row['name'] = 'User #' . (int)$row['id'];
-            }
-            $tempUsers[] = $row;
+$userOptionSql = "
+    SELECT id, TRIM(CONCAT(COALESCE(first_name,''), ' ', COALESCE(last_name,''))) AS name
+    FROM users
+    WHERE status = 'active'
+    ORDER BY first_name ASC, last_name ASC, email ASC
+";
+$userOptionRes = mysqli_query($conn, $userOptionSql);
+if ($userOptionRes) {
+    while ($row = mysqli_fetch_assoc($userOptionRes)) {
+        $name = trim((string)$row['name']);
+        if ($name === '') {
+            $name = 'User #' . (int)$row['id'];
         }
-        $owners = $tempUsers;
-        foreach ($tempUsers as $u) {
-            if ((int)$u['id'] !== $userId) {
-                $approvers[] = $u;
-            }
+        $row['name'] = $name;
+        $owners[] = $row;
+        if ((int)$row['id'] !== $userId) {
+            $approvers[] = $row;
         }
-        break;
     }
 }
 
-$filterId = trim($_GET['filter_id'] ?? '');
+$filterId = trim((string)($_GET['filter_id'] ?? ''));
 $selectedDocumentId = (int)($_GET['id'] ?? 0);
 
 $documentList = [];
@@ -275,7 +249,6 @@ $listSql = "
         d.document_type_id,
         d.department_id,
         dt.type_name,
-        dt.id AS type_id,
         dt.prefix,
         dv.version_label,
         dv.effective_date,
@@ -283,23 +256,23 @@ $listSql = "
     FROM documents d
     LEFT JOIN document_types dt ON dt.id = d.document_type_id
     LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-    WHERE d.current_status IN ('draft','pending_approval','effective','approved','published')
+    WHERE d.current_status IN ('draft','pending_approval','effective')
 ";
-$listParams = [];
 $listTypes = '';
+$listParams = [];
 
 if ($filterId !== '') {
     $listSql .= " AND (d.document_number LIKE ? OR d.id = ?)";
+    $listTypes = 'si';
     $listParams[] = '%' . $filterId . '%';
     $listParams[] = (int)$filterId;
-    $listTypes .= 'si';
 }
 
-$listSql .= " ORDER BY dt.type_name ASC, d.document_number ASC, d.id DESC";
+$listSql .= " ORDER BY dt.type_name ASC, d.id DESC";
 
 $listStmt = mysqli_prepare($conn, $listSql);
 if ($listStmt) {
-    if (!empty($listParams)) {
+    if ($listTypes !== '') {
         mysqli_stmt_bind_param($listStmt, $listTypes, ...$listParams);
     }
     mysqli_stmt_execute($listStmt);
@@ -322,7 +295,7 @@ foreach ($documentList as $doc) {
     $ownerName = '';
     foreach ($owners as $owner) {
         if ((int)$owner['id'] === (int)$doc['owner_user_id']) {
-            $ownerName = $owner['name'];
+            $ownerName = (string)$owner['name'];
             break;
         }
     }
@@ -359,8 +332,7 @@ $form = [
     'change_summary'      => '',
     'content_text'        => '',
     'current_version'     => '',
-    'next_version'        => '',
-    'document_id_preview' => ''
+    'next_version'        => ''
 ];
 
 $errors = [];
@@ -422,451 +394,7 @@ if ($selectedDocumentId > 0) {
         $form['content_text'] = (string)($selectedDocument['content_text'] ?? '');
         $form['current_version'] = $currentVersionLabel;
         $form['next_version'] = $nextVersionLabel;
-
-        $selectedPrefix = $selectedDocument['prefix'] ?? 'DOC';
-        $topicPart = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '-', ($form['topic'] !== '' ? $form['topic'] : $form['title'])));
-        $topicPart = trim($topicPart, '-');
-        $form['document_id_preview'] = $selectedPrefix . '-' . $form['document_number'] . ($topicPart !== '' ? '-' . $topicPart : '') . '-' . $nextVersionLabel;
-    } else {
-        $errors[] = 'Selected document not found.';
     }
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? 'save_draft';
-    $selectedDocumentId = (int)($_POST['document_id'] ?? 0);
-    $currentVersionId = (int)($_POST['current_version_id'] ?? 0);
-
-    $form['document_id'] = (string)$selectedDocumentId;
-    $form['document_type_id'] = trim((string)($_POST['document_type_id'] ?? ''));
-    $form['department_id'] = trim((string)($_POST['department_id'] ?? ''));
-    $form['title'] = trim((string)($_POST['title'] ?? ''));
-    $form['topic'] = trim((string)($_POST['topic'] ?? ''));
-    $form['document_number'] = trim((string)($_POST['document_number'] ?? ''));
-    $form['owner_user_id'] = trim((string)($_POST['owner_user_id'] ?? ''));
-    $form['approver_user_id'] = trim((string)($_POST['approver_user_id'] ?? ''));
-    $form['effective_date'] = trim((string)($_POST['effective_date'] ?? ''));
-    $form['review_date'] = trim((string)($_POST['review_date'] ?? ''));
-    $form['change_summary'] = trim((string)($_POST['change_summary'] ?? ''));
-    $form['content_text'] = trim((string)($_POST['content_text'] ?? ''));
-    $form['current_version'] = trim((string)($_POST['current_version'] ?? ''));
-    $form['next_version'] = trim((string)($_POST['next_version'] ?? ''));
-
-    $documentTypeId = (int)$form['document_type_id'];
-    $departmentId = ($form['department_id'] !== '') ? (int)$form['department_id'] : null;
-    $ownerUserId = (int)$form['owner_user_id'];
-    $approverUserId = (int)$form['approver_user_id'];
-
-    if ($selectedDocumentId <= 0) $errors[] = 'Please select a document to update.';
-    if ($documentTypeId <= 0) $errors[] = 'Document Type is required.';
-    if ($form['title'] === '' && $form['topic'] === '') $errors[] = 'Document Title / Topic is required.';
-    if ($form['document_number'] === '') $errors[] = 'Document Number is required.';
-    if ($ownerUserId <= 0) $errors[] = 'Owner is required.';
-    if ($approverUserId <= 0) $errors[] = 'Approver is required.';
-    if ($approverUserId === $userId) $errors[] = 'Creator cannot select self as approver.';
-    if ($form['effective_date'] === '') $errors[] = 'Effective Date is required.';
-    if ($form['review_date'] === '') $errors[] = 'Review Date is required.';
-    if ($form['change_summary'] === '') $errors[] = 'Change Summary is required.';
-
-    $hasFile = isset($_FILES['primary_file']) &&
-        (int)($_FILES['primary_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
-
-    if ($form['content_text'] === '' && !$hasFile) {
-        $errors[] = 'Document Content or File Upload is required.';
-    }
-
-    $selectedType = null;
-    foreach ($documentTypes as $type) {
-        if ((int)$type['id'] === $documentTypeId) {
-            $selectedType = $type;
-            break;
-        }
-    }
-    if (!$selectedType) {
-        $errors[] = 'Invalid Document Type selected.';
-    }
-
-    $prefix = $selectedType['prefix'] ?? 'DOC';
-    $topicPart = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '-', ($form['topic'] !== '' ? $form['topic'] : $form['title'])));
-    $topicPart = trim($topicPart, '-');
-    $form['document_id_preview'] = $prefix . '-' . $form['document_number'] . ($topicPart !== '' ? '-' . $topicPart : '') . '-' . $form['next_version'];
-
-    if (!$errors) {
-        mysqli_begin_transaction($conn);
-
-        try {
-            $checkCurrentSql = "
-                SELECT d.*, dv.version_sequence
-                FROM documents d
-                LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-                WHERE d.id = ?
-                LIMIT 1
-            ";
-            $checkCurrentStmt = mysqli_prepare($conn, $checkCurrentSql);
-            if (!$checkCurrentStmt) {
-                throw new RuntimeException('Unable to load selected document.');
-            }
-            mysqli_stmt_bind_param($checkCurrentStmt, "i", $selectedDocumentId);
-            mysqli_stmt_execute($checkCurrentStmt);
-            $checkCurrentRes = mysqli_stmt_get_result($checkCurrentStmt);
-            $selectedDocument = ($checkCurrentRes && mysqli_num_rows($checkCurrentRes) > 0) ? mysqli_fetch_assoc($checkCurrentRes) : null;
-            mysqli_stmt_close($checkCurrentStmt);
-
-            if (!$selectedDocument) {
-                throw new RuntimeException('Selected document not found.');
-            }
-
-            $uploadedFile = upload_document_file($_FILES['primary_file'] ?? []);
-            $contentFormat = normalize_content_format($form['content_text'], $_FILES['primary_file'] ?? []);
-            $documentStatus = ($action === 'submit_review') ? 'pending_approval' : 'draft';
-            $versionStatus = ($action === 'submit_review') ? 'pending_approval' : 'draft';
-            $nextSequence = ((int)($selectedDocument['version_sequence'] ?? 0)) + 1;
-            if ($nextSequence <= 0) $nextSequence = 1;
-
-            $titleValue = ($form['title'] !== '') ? $form['title'] : $form['topic'];
-            $topicValue = ($form['topic'] !== '') ? $form['topic'] : null;
-            $changeSummaryValue = $form['change_summary'];
-            $contentTextValue = ($form['content_text'] !== '') ? $form['content_text'] : null;
-            $primaryFileName = $uploadedFile['original_name'] ?? null;
-            $primaryFilePath = $uploadedFile['path'] ?? null;
-            $primaryFileMime = $uploadedFile['mime'] ?? null;
-            $primaryFileSize = $uploadedFile['size'] ?? null;
-            $checksumSha256 = $uploadedFile['sha256'] ?? null;
-            $submittedBy = ($action === 'submit_review') ? $userId : null;
-            $submittedAt = ($action === 'submit_review') ? date('Y-m-d H:i:s') : null;
-
-            $verSql = "
-                INSERT INTO document_versions (
-                    document_id,
-                    previous_version_id,
-                    version_sequence,
-                    version_label,
-                    title_snapshot,
-                    topic_snapshot,
-                    owner_user_id,
-                    created_by,
-                    change_summary,
-                    effective_date,
-                    review_date,
-                    status,
-                    content_format,
-                    content_text,
-                    primary_file_name,
-                    primary_file_path,
-                    primary_file_mime,
-                    primary_file_size,
-                    checksum_sha256,
-                    submitted_by,
-                    submitted_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ";
-            $verStmt = mysqli_prepare($conn, $verSql);
-            if (!$verStmt) {
-                throw new RuntimeException('Failed to prepare revision version insert.');
-            }
-
-            mysqli_stmt_bind_param(
-                $verStmt,
-                "iiisssiisssssssssisis",
-                $selectedDocumentId,
-                $currentVersionId,
-                $nextSequence,
-                $form['next_version'],
-                $titleValue,
-                $topicValue,
-                $ownerUserId,
-                $userId,
-                $changeSummaryValue,
-                $form['effective_date'],
-                $form['review_date'],
-                $versionStatus,
-                $contentFormat,
-                $contentTextValue,
-                $primaryFileName,
-                $primaryFilePath,
-                $primaryFileMime,
-                $primaryFileSize,
-                $checksumSha256,
-                $submittedBy,
-                $submittedAt
-            );
-
-            if (!mysqli_stmt_execute($verStmt)) {
-                throw new RuntimeException('Failed to create revision version: ' . mysqli_stmt_error($verStmt));
-            }
-            mysqli_stmt_close($verStmt);
-
-            $newVersionId = (int)mysqli_insert_id($conn);
-
-            $updateDocSql = "
-                UPDATE documents
-                SET
-                    document_type_id = ?,
-                    department_id = ?,
-                    title = ?,
-                    topic = ?,
-                    owner_user_id = ?,
-                    current_status = ?,
-                    remarks = ?,
-                    approver = ?,
-                    current_version_id = ?
-                WHERE id = ?
-            ";
-            $updateDocStmt = mysqli_prepare($conn, $updateDocSql);
-            if (!$updateDocStmt) {
-                throw new RuntimeException('Failed to prepare document update.');
-            }
-
-            $approverValue = (string)$approverUserId;
-
-            mysqli_stmt_bind_param(
-                $updateDocStmt,
-                "iississsii",
-                $documentTypeId,
-                $departmentId,
-                $titleValue,
-                $topicValue,
-                $ownerUserId,
-                $documentStatus,
-                $changeSummaryValue,
-                $approverValue,
-                $newVersionId,
-                $selectedDocumentId
-            );
-
-            if (!mysqli_stmt_execute($updateDocStmt)) {
-                throw new RuntimeException('Failed to update document header: ' . mysqli_stmt_error($updateDocStmt));
-            }
-            mysqli_stmt_close($updateDocStmt);
-
-            if ($uploadedFile && tableExists($conn, 'document_version_attachments')) {
-                $attSql = "
-                    INSERT INTO document_version_attachments (
-                        document_version_id,
-                        attachment_type,
-                        original_file_name,
-                        stored_file_name,
-                        file_path,
-                        mime_type,
-                        file_size,
-                        checksum_sha256,
-                        uploaded_by
-                    ) VALUES (?, 'primary', ?, ?, ?, ?, ?, ?, ?)
-                ";
-                $attStmt = mysqli_prepare($conn, $attSql);
-                if (!$attStmt) {
-                    throw new RuntimeException('Failed to prepare attachment insert.');
-                }
-
-                mysqli_stmt_bind_param(
-                    $attStmt,
-                    "issssisi",
-                    $newVersionId,
-                    $uploadedFile['original_name'],
-                    $uploadedFile['stored_name'],
-                    $uploadedFile['path'],
-                    $uploadedFile['mime'],
-                    $uploadedFile['size'],
-                    $uploadedFile['sha256'],
-                    $userId
-                );
-
-                if (!mysqli_stmt_execute($attStmt)) {
-                    throw new RuntimeException('Failed to save attachment: ' . mysqli_stmt_error($attStmt));
-                }
-                mysqli_stmt_close($attStmt);
-            }
-
-            if (tableExists($conn, 'audit_logs')) {
-                $auditAction = ($action === 'submit_review') ? 'revision_submit' : 'revision_draft';
-                $auditRemarks = ($action === 'submit_review')
-                    ? 'Document revision created and submitted for review.'
-                    : 'Document revision draft created.';
-
-                $oldPayload = json_encode([
-                    'previous_version_id'    => $currentVersionId,
-                    'previous_version_label' => $form['current_version']
-                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
-                $newPayload = json_encode([
-                    'document_id'         => $selectedDocumentId,
-                    'document_version_id' => $newVersionId,
-                    'document_number'     => $form['document_number'],
-                    'title'               => $titleValue,
-                    'topic'               => $form['topic'],
-                    'status'              => $documentStatus,
-                    'current_version'     => $form['current_version'],
-                    'next_version'        => $form['next_version'],
-                    'approver_user_id'    => $approverUserId,
-                    'change_summary'      => $form['change_summary']
-                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
-                $auditSql = "
-                    INSERT INTO audit_logs (
-                        event_id,
-                        entity_type,
-                        entity_id,
-                        action,
-                        old_value,
-                        new_value,
-                        performed_by,
-                        remarks,
-                        ip_address,
-                        user_agent
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ";
-                $auditStmt = mysqli_prepare($conn, $auditSql);
-                if (!$auditStmt) {
-                    throw new RuntimeException('Failed to prepare audit log insert.');
-                }
-
-                $entityType = 'document';
-                $ipAddress = get_client_ip();
-                $userAgent = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
-                $eventId = generate_uuid_v4();
-
-                mysqli_stmt_bind_param(
-                    $auditStmt,
-                    "ssisssisss",
-                    $eventId,
-                    $entityType,
-                    $selectedDocumentId,
-                    $auditAction,
-                    $oldPayload,
-                    $newPayload,
-                    $userId,
-                    $auditRemarks,
-                    $ipAddress,
-                    $userAgent
-                );
-
-                if (!mysqli_stmt_execute($auditStmt)) {
-                    throw new RuntimeException('Failed to write audit log: ' . mysqli_stmt_error($auditStmt));
-                }
-                mysqli_stmt_close($auditStmt);
-            }
-
-            if ($form['change_summary'] !== '' && tableExists($conn, 'approver_comments')) {
-                $cols = [];
-                $vals = [];
-                $types = '';
-                $bind = [];
-
-                $map = [
-                    'document_id'         => $selectedDocumentId,
-                    'document_version_id' => $newVersionId,
-                    'user_id'             => $userId,
-                    'commented_by'        => $userId,
-                    'action_name'         => 'Revision Created',
-                    'comment_text'        => $form['change_summary'],
-                    'comment'             => $form['change_summary'],
-                    'comments'            => $form['change_summary'],
-                    'created_at'          => date('Y-m-d H:i:s'),
-                    'commented_at'        => date('Y-m-d H:i:s')
-                ];
-
-                foreach ($map as $col => $val) {
-                    if (columnExists($conn, 'approver_comments', $col)) {
-                        $cols[] = "`{$col}`";
-                        $vals[] = "?";
-                        $types .= is_int($val) ? 'i' : 's';
-                        $bind[] = $val;
-                    }
-                }
-
-                if (!empty($cols)) {
-                    $sql = "INSERT INTO approver_comments (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ")";
-                    $stmt = mysqli_prepare($conn, $sql);
-                    if ($stmt) {
-                        mysqli_stmt_bind_param($stmt, $types, ...$bind);
-                        mysqli_stmt_execute($stmt);
-                        mysqli_stmt_close($stmt);
-                    }
-                }
-            }
-
-            if ($action === 'submit_review' && tableExists($conn, 'document_approvals')) {
-                $cols = [];
-                $vals = [];
-                $types = '';
-                $bind = [];
-
-                $map = [
-                    'document_id'         => $selectedDocumentId,
-                    'document_version_id' => $newVersionId,
-                    'approver_id'         => $approverUserId,
-                    'approved_by'         => $approverUserId,
-                    'created_by'          => $userId,
-                    'user_id'             => $userId,
-                    'status'              => 'Pending Review',
-                    'meaning'             => 'Pending Review',
-                    'reason'              => 'Document revision submitted for review',
-                    'comments'            => 'Document revision submitted for review',
-                    'created_at'          => date('Y-m-d H:i:s')
-                ];
-
-                foreach ($map as $col => $val) {
-                    if (columnExists($conn, 'document_approvals', $col)) {
-                        $cols[] = "`{$col}`";
-                        $vals[] = "?";
-                        $types .= is_int($val) ? 'i' : 's';
-                        $bind[] = $val;
-                    }
-                }
-
-                if (!empty($cols)) {
-                    $sql = "INSERT INTO document_approvals (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ")";
-                    $stmt = mysqli_prepare($conn, $sql);
-                    if ($stmt) {
-                        mysqli_stmt_bind_param($stmt, $types, ...$bind);
-                        mysqli_stmt_execute($stmt);
-                        mysqli_stmt_close($stmt);
-                    }
-                }
-            }
-
-            if ($action === 'submit_review' && tableExists($conn, 'notifications')) {
-                $notifSql = "
-                    INSERT INTO notifications (
-                        user_id,
-                        notification_type,
-                        reference_type,
-                        reference_id,
-                        title,
-                        message
-                    ) VALUES (?, 'submit', 'document_version', ?, ?, ?)
-                ";
-                $notifStmt = mysqli_prepare($conn, $notifSql);
-                if ($notifStmt) {
-                    $notifTitle = 'Document Revision Submitted';
-                    $notifMessage = 'A revision for document "' . $titleValue . '" has been submitted for your review.';
-                    mysqli_stmt_bind_param(
-                        $notifStmt,
-                        "iiss",
-                        $approverUserId,
-                        $newVersionId,
-                        $notifTitle,
-                        $notifMessage
-                    );
-                    mysqli_stmt_execute($notifStmt);
-                    mysqli_stmt_close($notifStmt);
-                }
-            }
-
-            mysqli_commit($conn);
-            header('Location: update-document.php?id=' . $selectedDocumentId . '&updated=1');
-            exit;
-        } catch (Throwable $e) {
-            mysqli_rollback($conn);
-            $errors[] = $e->getMessage();
-        }
-    }
-}
-
-if (isset($_GET['updated']) && $_GET['updated'] == '1') {
-    $successMessage = 'Document revision saved successfully.';
-    $badgeClass = 'badge badge-soft-success';
-    $badgeLabel = 'Updated';
 }
 
 $documentsByTypeJson = json_encode($documentsByType, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -957,251 +485,205 @@ $documentsByTypeJson = json_encode($documentsByType, JSON_UNESCAPED_UNICODE | JS
     <p class="page-subtitle mb-0">Select the document you want to update. All existing details will load automatically — only the fields you need to change should be edited.</p>
   </div>
 
-  <?php if (!empty($errors)): ?>
-    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-      <strong>Please fix the following:</strong>
-      <ul class="mb-0 mt-2">
-        <?php foreach ($errors as $err): ?>
-          <li><?php echo e($err); ?></li>
-        <?php endforeach; ?>
-      </ul>
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <span class="<?php echo e($badgeClass); ?>"><?php echo e($badgeLabel); ?></span>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary" href="dashboard-admin.php">Cancel</a>
+      <button type="button" class="btn btn-outline-primary">Save Draft</button>
+      <button type="button" class="btn btn-success">Submit for Review</button>
     </div>
-  <?php endif; ?>
+  </div>
 
-  <?php if ($successMessage !== ''): ?>
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-      <?php echo e($successMessage); ?>
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-  <?php endif; ?>
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Document Selection</h2>
+          <p class="card-subtitle mb-3">Select the document type first, then choose the specific document to update.</p>
 
-  <form method="post" enctype="multipart/form-data" id="updateForm">
-    <input type="hidden" name="document_id" id="document_id" value="<?php echo (int)$selectedDocumentId; ?>">
-    <input type="hidden" name="current_version_id" id="current_version_id" value="<?php echo (int)$currentVersionId; ?>">
-    <input type="hidden" name="document_type_id" id="document_type_id" value="<?php echo e($form['document_type_id']); ?>">
-    <input type="hidden" name="document_number" id="document_number" value="<?php echo e($form['document_number']); ?>">
-    <input type="hidden" name="current_version" id="current_version" value="<?php echo e($form['current_version']); ?>">
-    <input type="hidden" name="next_version" id="next_version" value="<?php echo e($form['next_version']); ?>">
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">
+                Step 1 — Document Type <span class="text-danger">*</span>
+              </label>
+              <select class="form-select" id="docTypeSelect" onchange="onTypeChange(this.value)">
+                <option value="">-- Select Type --</option>
+                <?php foreach ($documentTypes as $type): ?>
+                  <option value="<?php echo e($type['type_name']); ?>" <?php echo ($selectedDocument && $selectedDocument['type_name'] === $type['type_name']) ? 'selected' : ''; ?>>
+                    <?php echo e($type['type_name']); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+              <div class="form-text">Documents from your database will appear in the next dropdown.</div>
+            </div>
 
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-      <span class="<?php echo e($badgeClass); ?>"><?php echo e($badgeLabel); ?></span>
-      <div class="d-flex gap-2 flex-wrap">
-        <a class="btn btn-outline-secondary" href="update-document.php">Cancel</a>
-        <button type="submit" name="action" value="save_draft" class="btn btn-outline-primary">Save Draft</button>
-        <button type="submit" name="action" value="submit_review" class="btn btn-success">Submit for Review</button>
+            <div class="col-md-6">
+              <label class="form-label">
+                Step 2 — Select Document <span class="text-danger">*</span>
+              </label>
+              <select class="form-select" id="docSelect" disabled onchange="onDocSelect(this.value)">
+                <option value="">-- Select Type first --</option>
+              </select>
+              <div class="form-text" id="docSelectHint">Choose a document type above to populate this list.</div>
+            </div>
+          </div>
+
+          <div id="docInfoPanel" class="<?php echo $selectedDocument ? '' : 'd-none'; ?> mb-1">
+            <div class="di-id" id="diId"><?php echo e($form['document_number'] ?: '—'); ?></div>
+            <div class="di-meta" id="diMeta">—</div>
+          </div>
+
+        </div>
       </div>
-    </div>
 
-    <div class="row g-3">
-      <div class="col-lg-8">
-        <div class="card cp-card mb-3">
-          <div class="card-body">
-            <h2 class="card-title mb-1">Document Selection</h2>
-            <p class="card-subtitle mb-3">Select the document type first, then choose the specific document to update.</p>
+      <div class="card cp-card mb-3 <?php echo $selectedDocument ? '' : 'd-none'; ?>" id="docDetailsCard">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Document Information</h2>
+          <p class="card-subtitle mb-3">Existing values are pre-filled. Edit only what needs to change in this version.</p>
 
-            <div class="row g-3 mb-3">
-              <div class="col-md-6">
-                <label class="form-label">Step 1 — Document Type <span class="text-danger">*</span></label>
-                <select class="form-select" id="docTypeSelect" onchange="onTypeChange(this.value)">
-                  <option value="">-- Select Type --</option>
-                  <?php foreach ($documentTypes as $type): ?>
-                    <option value="<?php echo e($type['type_name']); ?>" <?php echo (($selectedDocument && $selectedDocument['type_name'] === $type['type_name']) ? 'selected' : ''); ?>>
-                      <?php echo e($type['type_name']); ?>
-                    </option>
-                  <?php endforeach; ?>
-                </select>
-                <div class="form-text">Only Effective documents will appear in the next dropdown.</div>
-              </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Document ID</label>
+              <input class="form-control field-locked" id="fDocId" readonly value="<?php echo e($form['document_number']); ?>">
+              <div class="form-text">Auto-generated — cannot be changed.</div>
+            </div>
 
-              <div class="col-md-6">
-                <label class="form-label">Step 2 — Select Document <span class="text-danger">*</span></label>
-                <select class="form-select" id="docSelect" <?php echo $selectedDocument ? '' : 'disabled'; ?> onchange="onDocSelect(this.value)">
-                  <option value=""><?php echo $selectedDocument ? '-- Select Document --' : '-- Select Type first --'; ?></option>
-                </select>
-                <div class="form-text" id="docSelectHint">Choose a document type above to populate this list.</div>
+            <div class="col-md-6">
+              <label class="form-label">Document Title / Topic</label>
+              <input class="form-control" id="fDocTopic" value="<?php echo e($form['title'] !== '' ? $form['title'] : $form['topic']); ?>">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Current Version</label>
+              <input class="form-control field-locked" id="fCurrentVersion" readonly value="<?php echo e($form['current_version']); ?>">
+              <div class="form-text">The version currently in effect.</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">New Version <span class="text-success">(auto)</span></label>
+              <input class="form-control field-locked" id="fNewVersion" readonly value="<?php echo e($form['next_version']); ?>">
+              <div class="form-text">System generated — incremented automatically.</div>
+            </div>
+
+            <div class="col-12">
+              <div class="version-strip" id="versionStrip">
+                <span class="vs-label">Current:</span>
+                <span class="vs-val" id="vsCurrentBadge"><?php echo e($form['current_version'] ?: '—'); ?></span>
+                <span class="vs-arrow">→</span>
+                <span class="vs-label">New version after update:</span>
+                <span class="vs-new" id="vsNewBadge"><?php echo e($form['next_version'] ?: '—'); ?></span>
               </div>
             </div>
 
-            <div id="docInfoPanel" class="<?php echo $selectedDocument ? '' : 'd-none'; ?> mb-1">
-              <div class="di-id" id="diId"><?php echo e($form['document_number']); ?></div>
-              <div class="di-meta" id="diMeta">
-                Topic: <?php echo e($form['topic'] !== '' ? $form['topic'] : $form['title']); ?>
-                · Owner:
-                <?php
-                  $ownerLabel = '—';
-                  foreach ($owners as $owner) {
-                      if ((string)$owner['id'] === (string)$form['owner_user_id']) {
-                          $ownerLabel = $owner['name'];
-                          break;
-                      }
-                  }
-                  echo e($ownerLabel);
-                ?>
-                · Effective:
-                <?php echo e($form['effective_date'] !== '' ? date('d M Y', strtotime($form['effective_date'])) : '—'); ?>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card cp-card mb-3 <?php echo $selectedDocument ? '' : 'd-none'; ?>" id="docDetailsCard">
-          <div class="card-body">
-            <h2 class="card-title mb-1">Document Information</h2>
-            <p class="card-subtitle mb-3">Existing values are pre-filled. Edit only what needs to change in this version.</p>
-
-            <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label">Document ID</label>
-                <input class="form-control field-locked" id="fDocId" readonly value="<?php echo e($form['document_number']); ?>">
-                <div class="form-text">Auto-generated — cannot be changed.</div>
-              </div>
-
-              <div class="col-md-6">
-                <label class="form-label">Document Title / Topic</label>
-                <input class="form-control" id="fDocTopic" name="title" value="<?php echo e($form['title'] !== '' ? $form['title'] : $form['topic']); ?>">
-                <input type="hidden" name="topic" id="topic_hidden" value="<?php echo e($form['topic']); ?>">
-              </div>
-
-              <div class="col-md-6">
-                <label class="form-label">Current Version</label>
-                <input class="form-control field-locked" id="fCurrentVersion" readonly value="<?php echo e($form['current_version']); ?>">
-                <div class="form-text">The version currently in effect.</div>
-              </div>
-
-              <div class="col-md-6">
-                <label class="form-label">New Version <span class="text-success">(auto)</span></label>
-                <input class="form-control field-locked" id="fNewVersion" readonly value="<?php echo e($form['next_version']); ?>">
-                <div class="form-text">System generated — incremented automatically.</div>
-              </div>
-
-              <div class="col-12">
-                <div class="version-strip" id="versionStrip">
-                  <span class="vs-label">Current:</span>
-                  <span class="vs-val" id="vsCurrentBadge"><?php echo e($form['current_version'] !== '' ? $form['current_version'] : '—'); ?></span>
-                  <span class="vs-arrow">→</span>
-                  <span class="vs-label">New version after update:</span>
-                  <span class="vs-new" id="vsNewBadge"><?php echo e($form['next_version'] !== '' ? $form['next_version'] : '—'); ?></span>
-                </div>
-              </div>
-
-              <div class="col-md-6">
-                <label class="form-label">Owner</label>
-                <select class="form-select" id="fOwner" name="owner_user_id">
-                  <option value="">-- Select Owner --</option>
-                  <?php foreach ($owners as $owner): ?>
-                    <option value="<?php echo (int)$owner['id']; ?>" <?php echo ((string)$form['owner_user_id'] === (string)$owner['id']) ? 'selected' : ''; ?>>
-                      <?php echo e($owner['name']); ?>
-                    </option>
-                  <?php endforeach; ?>
-                </select>
-              </div>
-
-              <div class="col-md-6">
-                <label class="form-label">Approver <span class="text-danger">*</span></label>
-                <select class="form-select" id="fApprover" name="approver_user_id">
-                  <option value="">-- Select Approver --</option>
-                  <?php foreach ($approvers as $approver): ?>
-                    <option value="<?php echo (int)$approver['id']; ?>" <?php echo ((string)$form['approver_user_id'] === (string)$approver['id']) ? 'selected' : ''; ?>>
-                      <?php echo e($approver['name']); ?>
-                    </option>
-                  <?php endforeach; ?>
-                </select>
-                <div class="form-text">Creator cannot select themselves as approver.</div>
-              </div>
-
-              <div class="col-md-6">
-                <label class="form-label">Effective Date <span class="text-danger">*</span></label>
-                <input class="form-control" id="fEffectiveDate" type="date" name="effective_date" value="<?php echo e($form['effective_date']); ?>">
-              </div>
-
-              <div class="col-md-6">
-                <label class="form-label">Review Date <span class="text-danger">*</span></label>
-                <input class="form-control" id="fReviewDate" type="date" name="review_date" value="<?php echo e($form['review_date']); ?>">
-              </div>
-
-              <div class="col-12">
-                <label class="form-label">Change Summary <span class="text-danger">*</span></label>
-                <textarea class="form-control" id="fChangeSummary" name="change_summary" placeholder="Describe what changed in this version and why — e.g. updated escalation path in Section 3, revised approval thresholds" rows="3"><?php echo e($form['change_summary']); ?></textarea>
-                <div class="form-text">Mandatory — used in the approval notification, audit trail, and version history.</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card cp-card <?php echo $selectedDocument ? '' : 'd-none'; ?>" id="contentCard">
-          <div class="card-body">
-            <h2 class="card-title mb-1">Updated Document Content</h2>
-            <p class="card-subtitle mb-3">Replace or revise the document content for the new version.</p>
-            <ul class="nav nav-pills gap-2 mb-3">
-              <li class="nav-item"><a class="nav-link active tab-pill" href="#" id="tabTextBtn">Rich Text Editor</a></li>
-              <li class="nav-item"><a class="nav-link tab-pill" href="#" id="tabFileBtn">File Upload</a></li>
-            </ul>
-
-            <div id="richTextBlock">
-              <div class="mb-3">
-                <label class="form-label">Document Body</label>
-                <textarea class="form-control" name="content_text" id="content_text" placeholder="Enter updated document content here" rows="9"><?php echo e($form['content_text']); ?></textarea>
-              </div>
+            <div class="col-md-6">
+              <label class="form-label">Owner</label>
+              <select class="form-select" id="fOwner">
+                <?php foreach ($owners as $owner): ?>
+                  <option value="<?php echo e($owner['name']); ?>" <?php echo ((string)$owner['id'] === (string)$form['owner_user_id']) ? 'selected' : ''; ?>>
+                    <?php echo e($owner['name']); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
             </div>
 
-            <div id="fileUploadBlock" style="display:none;">
-              <input type="file" name="primary_file" class="form-control d-none" id="primaryFileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt">
-              <div class="upload-box p-4 text-center small text-secondary" id="uploadBox">
-                Drag and drop file here or click to browse.<br/>
-                Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
-              </div>
-              <div class="mt-2 small text-secondary" id="selectedFileName">
-                <?php echo $existingFileName !== '' ? 'Current File: ' . e($existingFileName) : ''; ?>
-              </div>
+            <div class="col-md-6">
+              <label class="form-label">Approver <span class="text-danger">*</span></label>
+              <select class="form-select" id="fApprover">
+                <option value="">-- Select Approver --</option>
+                <?php foreach ($approvers as $approver): ?>
+                  <option value="<?php echo (int)$approver['id']; ?>" <?php echo ((string)$approver['id'] === (string)$form['approver_user_id']) ? 'selected' : ''; ?>>
+                    <?php echo e($approver['name']); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+              <div class="form-text">Creator cannot select themselves as approver.</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Effective Date <span class="text-danger">*</span></label>
+              <input class="form-control" id="fEffectiveDate" type="date" value="<?php echo e($form['effective_date']); ?>">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Review Date <span class="text-danger">*</span></label>
+              <input class="form-control" id="fReviewDate" type="date" value="<?php echo e($form['review_date']); ?>">
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Change Summary <span class="text-danger">*</span></label>
+              <textarea class="form-control" id="fChangeSummary" rows="3" placeholder="Describe what changed in this version and why — e.g. updated escalation path in Section 3, revised approval thresholds"><?php echo e($form['change_summary']); ?></textarea>
+              <div class="form-text">Mandatory — used in the approval notification, audit trail, and version history.</div>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="col-lg-4">
-        <div class="card cp-card mb-3">
-          <div class="card-body">
-            <h2 class="card-title mb-1">Submission Readiness</h2>
-            <p class="card-subtitle mb-3">Verify required information before sending for approval.</p>
-            <ul class="small text-secondary note-list mb-0">
-              <li>Document selected from effective repository.</li>
-              <li>Version auto-incremented by system.</li>
-              <li>Change Summary entered.</li>
-              <li>Approver selected and validated.</li>
-              <li>Email notification will be generated on submit.</li>
-            </ul>
+      <div class="card cp-card d-none <?php echo $selectedDocument ? '' : 'd-none'; ?>" id="contentCard">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Updated Document Content</h2>
+          <p class="card-subtitle mb-3">Replace or revise the document content for the new version.</p>
+          <ul class="nav nav-pills gap-2 mb-3">
+            <li class="nav-item"><a class="nav-link active tab-pill" href="#">Rich Text Editor</a></li>
+            <li class="nav-item"><a class="nav-link tab-pill" href="#">File Upload</a></li>
+          </ul>
+          <div class="mb-3">
+            <label class="form-label">Document Body</label>
+            <textarea class="form-control" rows="9" placeholder="Enter updated document content here"><?php echo e($form['content_text']); ?></textarea>
           </div>
-        </div>
-        <div class="card cp-card">
-          <div class="card-body">
-            <h2 class="card-title mb-1">Audit Controls</h2>
-            <p class="card-subtitle mb-3">Key controls expected for an audit-grade process.</p>
-            <ul class="small text-secondary note-list mb-0">
-              <li>Previous version archived automatically on submit.</li>
-              <li>Created by / updated on / IP address captured.</li>
-              <li>Draft saves logged with timestamp.</li>
-              <li>Old and new field values stored for every change.</li>
-              <li>Immutable audit record for every workflow action.</li>
-            </ul>
+          <div class="upload-box p-4 text-center small text-secondary">
+            Drag and drop file here or click to browse.<br/>
+            Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
+            <?php if ($existingFileName !== ''): ?>
+              <div class="mt-2">Current File: <?php echo e($existingFileName); ?></div>
+            <?php endif; ?>
           </div>
         </div>
       </div>
     </div>
-  </form>
 
+    <div class="col-lg-4">
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Submission Readiness</h2>
+          <p class="card-subtitle mb-3">Verify required information before sending for approval.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Document selected from database list.</li>
+            <li>Version auto-incremented by system.</li>
+            <li>Change Summary entered.</li>
+            <li>Approver selected and validated.</li>
+            <li>Email notification will be generated on submit.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card cp-card">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Audit Controls</h2>
+          <p class="card-subtitle mb-3">Key controls expected for an audit-grade process.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Previous version archived automatically on submit.</li>
+            <li>Created by / updated on / IP address captured.</li>
+            <li>Draft saves logged with timestamp.</li>
+            <li>Old and new field values stored for every change.</li>
+            <li>Immutable audit record for every workflow action.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
 </div>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 var EFFECTIVE_DOCS = <?php echo $documentsByTypeJson ?: '{}'; ?>;
+var SELECTED_DOC_ID = "<?php echo (int)$selectedDocumentId; ?>";
 
 function onTypeChange(type) {
   var docSel  = document.getElementById('docSelect');
   var hint    = document.getElementById('docSelectHint');
 
-  resetDocDetails(true);
+  resetDocDetails();
 
   if (!type) {
     docSel.disabled = true;
@@ -1217,100 +699,58 @@ function onTypeChange(type) {
     var opt = document.createElement('option');
     opt.value = doc.id;
     opt.textContent = (doc.doc_id || ('ID #' + doc.id)) + '  —  ' + (doc.topic || 'Untitled');
-    if (String(doc.id) === String(<?php echo (int)$selectedDocumentId; ?>)) {
+    if (String(doc.id) === String(SELECTED_DOC_ID)) {
       opt.selected = true;
     }
     docSel.appendChild(opt);
   });
 
   docSel.disabled = false;
-  hint.textContent = docs.length + ' effective ' + type + ' document' + (docs.length !== 1 ? 's' : '') + ' available.';
+  hint.textContent = docs.length + ' document' + (docs.length !== 1 ? 's' : '') + ' available.';
 }
 
 function onDocSelect(docId) {
-  if (!docId) {
-    resetDocDetails(true);
-    return;
-  }
+  resetDocDetails();
+  if (!docId) return;
   window.location.href = 'update-document.php?id=' + encodeURIComponent(docId);
 }
 
-function resetDocDetails(resetAll) {
-  if (!resetAll) return;
-  document.getElementById('docInfoPanel').classList.add('d-none');
-  document.getElementById('docDetailsCard').classList.add('d-none');
-  document.getElementById('contentCard').classList.add('d-none');
+function resetDocDetails() {
+  if (!SELECTED_DOC_ID) {
+    document.getElementById('docInfoPanel').classList.add('d-none');
+    document.getElementById('docDetailsCard').classList.add('d-none');
+    document.getElementById('contentCard').classList.add('d-none');
+  }
 }
 
-(function initTypeAndDoc() {
+(function initDocType() {
   var typeSel = document.getElementById('docTypeSelect');
   if (typeSel.value) {
     onTypeChange(typeSel.value);
   }
 })();
 
-(function () {
-  const textBtn = document.getElementById('tabTextBtn');
-  const fileBtn = document.getElementById('tabFileBtn');
-  const textBlock = document.getElementById('richTextBlock');
-  const fileBlock = document.getElementById('fileUploadBlock');
-  const uploadBox = document.getElementById('uploadBox');
-  const fileInput = document.getElementById('primaryFileInput');
-  const selectedFileName = document.getElementById('selectedFileName');
+(function initInfoPanel() {
+  if (!SELECTED_DOC_ID) return;
+  var typeSel = document.getElementById('docTypeSelect');
+  var type = typeSel.value;
+  var docs = EFFECTIVE_DOCS[type] || [];
+  var doc = docs.find(function(d) { return String(d.id) === String(SELECTED_DOC_ID); });
+  if (!doc) return;
 
-  if (textBtn && fileBtn && textBlock && fileBlock) {
-    textBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      textBtn.classList.add('active');
-      fileBtn.classList.remove('active');
-      textBlock.style.display = '';
-      fileBlock.style.display = 'none';
-    });
-
-    fileBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      fileBtn.classList.add('active');
-      textBtn.classList.remove('active');
-      fileBlock.style.display = '';
-      textBlock.style.display = 'none';
-    });
-  }
-
-  if (uploadBox && fileInput) {
-    uploadBox.addEventListener('click', function () {
-      fileInput.click();
-    });
-
-    fileInput.addEventListener('change', function () {
-      if (fileInput.files.length > 0) {
-        selectedFileName.textContent = 'Selected: ' + fileInput.files[0].name;
-      }
-    });
-
-    ['dragenter', 'dragover'].forEach(function (eventName) {
-      uploadBox.addEventListener(eventName, function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadBox.classList.add('border-primary');
-      });
-    });
-
-    ['dragleave', 'drop'].forEach(function (eventName) {
-      uploadBox.addEventListener(eventName, function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadBox.classList.remove('border-primary');
-      });
-    });
-
-    uploadBox.addEventListener('drop', function (e) {
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        fileInput.files = e.dataTransfer.files;
-        selectedFileName.textContent = 'Selected: ' + e.dataTransfer.files[0].name;
-      }
-    });
-  }
+  document.getElementById('diId').textContent = doc.doc_id || '—';
+  document.getElementById('diMeta').textContent =
+    'Topic: ' + (doc.topic || '—') +
+    '  ·  Owner: ' + (doc.owner || '—') +
+    '  ·  Effective: ' + formatDate(doc.effectiveDate);
 })();
+
+function formatDate(str) {
+  if (!str) return '—';
+  var d = new Date(str);
+  if (isNaN(d.getTime())) return str;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 </script>
 </body>
 </html>
