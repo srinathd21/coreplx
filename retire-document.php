@@ -9,13 +9,15 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 mysqli_set_charset($conn, 'utf8mb4');
 
 if (!function_exists('e')) {
-    function e($value) {
+    function e($value)
+    {
         return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
     }
 }
 
 if (!function_exists('tableExists')) {
-    function tableExists(mysqli $conn, $tableName) {
+    function tableExists(mysqli $conn, $tableName)
+    {
         $tableName = mysqli_real_escape_string($conn, $tableName);
         $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
         return ($res && mysqli_num_rows($res) > 0);
@@ -23,7 +25,8 @@ if (!function_exists('tableExists')) {
 }
 
 if (!function_exists('columnExists')) {
-    function columnExists(mysqli $conn, $tableName, $columnName) {
+    function columnExists(mysqli $conn, $tableName, $columnName)
+    {
         $tableName = mysqli_real_escape_string($conn, $tableName);
         $columnName = mysqli_real_escape_string($conn, $columnName);
         $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$tableName}` LIKE '{$columnName}'");
@@ -32,7 +35,8 @@ if (!function_exists('columnExists')) {
 }
 
 if (!function_exists('generate_uuid_v4')) {
-    function generate_uuid_v4() {
+    function generate_uuid_v4()
+    {
         $data = random_bytes(16);
         $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
         $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
@@ -41,7 +45,8 @@ if (!function_exists('generate_uuid_v4')) {
 }
 
 if (!function_exists('get_client_ip')) {
-    function get_client_ip() {
+    function get_client_ip()
+    {
         $keys = ['HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
         foreach ($keys as $key) {
             if (!empty($_SERVER[$key])) {
@@ -105,6 +110,15 @@ if ($displayName === '') {
 }
 $roleName = trim((string)($currentUser['role_name'] ?? ($_SESSION['role_name'] ?? 'QA Admin')));
 
+$documentTypes = [];
+$docTypeSql = "SELECT id, type_name, prefix FROM document_types WHERE status='active' ORDER BY type_name ASC";
+$docTypeRes = mysqli_query($conn, $docTypeSql);
+if ($docTypeRes) {
+    while ($row = mysqli_fetch_assoc($docTypeRes)) {
+        $documentTypes[] = $row;
+    }
+}
+
 $users = [];
 $userQueries = [
     "SELECT id, CONCAT(COALESCE(first_name,''), ' ', COALESCE(last_name,'')) AS name FROM users WHERE status='active' ORDER BY first_name, last_name",
@@ -119,10 +133,14 @@ foreach ($userQueries as $sql) {
     if ($res) {
         while ($row = mysqli_fetch_assoc($res)) {
             $name = trim((string)($row['name'] ?? ''));
-            if ($name === '') $name = 'User #' . (int)$row['id'];
+            if ($name === '') {
+                $name = 'User #' . (int)$row['id'];
+            }
             $users[] = ['id' => (int)$row['id'], 'name' => $name];
         }
-        if (!empty($users)) break;
+        if (!empty($users)) {
+            break;
+        }
     }
 }
 
@@ -133,10 +151,7 @@ foreach ($users as $u) {
     }
 }
 
-$filterId = trim($_GET['filter_id'] ?? '');
-$selectedDocumentId = (int)($_GET['id'] ?? 0);
-
-$documents = [];
+$documentsRaw = [];
 $listSql = "
     SELECT
         d.id,
@@ -145,58 +160,75 @@ $listSql = "
         d.topic,
         d.current_status,
         d.owner_user_id,
-        d.current_version_id
+        d.current_version_id,
+        d.document_type_id,
+        dt.type_name,
+        dv.version_label,
+        dv.effective_date,
+        dv.review_date
     FROM documents d
-    WHERE 1=1
+    LEFT JOIN document_types dt ON dt.id = d.document_type_id
+    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+    WHERE d.current_status IN ('effective','approved','published','draft','pending_approval')
+    ORDER BY dt.type_name ASC, d.id DESC
 ";
-$listParams = [];
-$listTypes = '';
-
-if ($filterId !== '') {
-    $listSql .= " AND (d.document_number LIKE ? OR d.id = ?)";
-    $listParams[] = '%' . $filterId . '%';
-    $listParams[] = (int)$filterId;
-    $listTypes .= 'si';
+$listRes = mysqli_query($conn, $listSql);
+if ($listRes) {
+    while ($row = mysqli_fetch_assoc($listRes)) {
+        $documentsRaw[] = $row;
+    }
 }
 
-$listSql .= " ORDER BY d.id DESC LIMIT 100";
-
-$listStmt = mysqli_prepare($conn, $listSql);
-if ($listStmt) {
-    if (!empty($listParams)) {
-        mysqli_stmt_bind_param($listStmt, $listTypes, ...$listParams);
+$documentsByType = [];
+foreach ($documentsRaw as $doc) {
+    $typeName = (string)($doc['type_name'] ?? 'Other');
+    if (!isset($documentsByType[$typeName])) {
+        $documentsByType[$typeName] = [];
     }
-    mysqli_stmt_execute($listStmt);
-    $listRes = mysqli_stmt_get_result($listStmt);
-    if ($listRes) {
-        while ($row = mysqli_fetch_assoc($listRes)) {
-            $documents[] = $row;
+
+    $ownerName = 'Owner #' . (int)$doc['owner_user_id'];
+    foreach ($users as $u) {
+        if ($u['id'] === (int)$doc['owner_user_id']) {
+            $ownerName = $u['name'];
+            break;
         }
     }
-    mysqli_stmt_close($listStmt);
+
+    $documentsByType[$typeName][] = [
+        'id' => (int)$doc['id'],
+        'doc_id' => (string)($doc['document_number'] ?? ''),
+        'topic' => (string)($doc['title'] ?: $doc['topic']),
+        'number' => (string)($doc['document_number'] ?? ''),
+        'version' => (string)($doc['version_label'] ?: '01'),
+        'owner' => $ownerName,
+        'effectiveDate' => (string)($doc['effective_date'] ?? ''),
+        'status' => ucfirst((string)($doc['current_status'] ?: 'effective'))
+    ];
 }
 
 $replacementDocuments = [];
-$repSql = "SELECT id, document_number, title FROM documents ORDER BY id DESC LIMIT 200";
-$repRes = mysqli_query($conn, $repSql);
-if ($repRes) {
-    while ($row = mysqli_fetch_assoc($repRes)) {
-        $replacementDocuments[] = $row;
-    }
+foreach ($documentsRaw as $row) {
+    $replacementDocuments[] = [
+        'id' => (int)$row['id'],
+        'document_number' => (string)($row['document_number'] ?? ''),
+        'title' => (string)($row['title'] ?: $row['topic'] ?: 'Untitled'),
+    ];
 }
 
+$selectedDocumentId = (int)($_GET['id'] ?? $_POST['document_id'] ?? 0);
+$selectedDocument = null;
 $form = [
     'document_id' => '',
     'document_number' => '',
-    'current_status' => '',
+    'current_status' => 'Effective',
     'owner_name' => '',
     'requested_by' => $displayName,
     'retirement_reason' => '',
     'replacement_document_id' => '',
-    'approver_user_id' => ''
+    'approver_user_id' => '',
+    'document_type_name' => ''
 ];
 
-$selectedDocument = null;
 $errors = [];
 $successMessage = '';
 
@@ -210,10 +242,12 @@ if ($selectedDocumentId > 0) {
             d.title,
             d.topic,
             d.current_version_id,
+            d.document_type_id,
+            dt.type_name,
             dv.version_label,
-            dv.title_snapshot,
-            dv.topic_snapshot
+            dv.effective_date
         FROM documents d
+        LEFT JOIN document_types dt ON dt.id = d.document_type_id
         LEFT JOIN document_versions dv ON dv.id = d.current_version_id
         WHERE d.id = ?
         LIMIT 1
@@ -238,16 +272,14 @@ if ($selectedDocumentId > 0) {
 
         $form['document_id'] = (string)$selectedDocument['id'];
         $form['document_number'] = (string)$selectedDocument['document_number'];
-        $form['current_status'] = (string)($selectedDocument['current_status'] ?: 'Effective');
+        $form['current_status'] = ucfirst((string)($selectedDocument['current_status'] ?: 'effective'));
         $form['owner_name'] = $ownerName;
-    } else {
-        $errors[] = 'Selected document not found.';
+        $form['document_type_name'] = (string)($selectedDocument['type_name'] ?? '');
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $selectedDocumentId = (int)($_POST['document_id'] ?? 0);
-
     $form['document_id'] = (string)$selectedDocumentId;
     $form['document_number'] = trim((string)($_POST['document_number'] ?? ''));
     $form['current_status'] = trim((string)($_POST['current_status'] ?? ''));
@@ -256,6 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $form['retirement_reason'] = trim((string)($_POST['retirement_reason'] ?? ''));
     $form['replacement_document_id'] = trim((string)($_POST['replacement_document_id'] ?? ''));
     $form['approver_user_id'] = trim((string)($_POST['approver_user_id'] ?? ''));
+    $form['document_type_name'] = trim((string)($_POST['document_type_name'] ?? ''));
 
     $approverUserId = (int)$form['approver_user_id'];
     $replacementDocumentId = $form['replacement_document_id'] !== '' ? (int)$form['replacement_document_id'] : null;
@@ -319,7 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'replacement_document_id' => $replacementDocumentId,
                     'retirement_reason' => $form['retirement_reason'],
                     'new_status' => $newStatus
-                ], JSON_UNESCAPED_UNICODE);
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
                 $auditSql = "
                     INSERT INTO audit_logs (
@@ -345,7 +378,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $action = 'retirement_request';
                 $oldValue = json_encode([
                     'status' => $form['current_status']
-                ], JSON_UNESCAPED_UNICODE);
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                 $remarks = 'Document retirement requested';
                 $ipAddress = get_client_ip();
                 $userAgent = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
@@ -479,7 +512,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             mysqli_commit($conn);
-            $successMessage = 'Retirement request submitted successfully.';
             header('Location: retire-document.php?id=' . $selectedDocumentId . '&success=1');
             exit;
         } catch (Throwable $e) {
@@ -492,6 +524,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_GET['success']) && $_GET['success'] == '1') {
     $successMessage = 'Retirement request submitted successfully.';
 }
+
+$documentsByTypeJson = json_encode($documentsByType, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+$replacementDocumentsJson = json_encode($replacementDocuments, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 ?>
 <!doctype html>
 <html lang="en">
@@ -501,13 +536,25 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
   <style>
-    .doc-list-table td,
-    .doc-list-table th {
-      vertical-align: middle;
+    .field-locked {
+      background: #f5f7fa !important;
+      color: #6b7280 !important;
+      cursor: not-allowed;
     }
-    .readonly {
+    select:disabled {
+      background: #f5f7fa;
+      color: #aaa;
+      cursor: not-allowed;
+    }
+    #docInfoPanel {
       background: #f8fafc;
+      border: 1px solid #dde3ec;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
     }
+    #docInfoPanel .di-id   { font-weight: 700; color: #2563eb; font-size: 14px; }
+    #docInfoPanel .di-meta { color: #6b7280; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -520,176 +567,325 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
     <div class="collapse navbar-collapse" id="topNav">
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
         <li class="nav-item"><a class="nav-link active" href="dashboard-admin.php">Dashboard</a></li>
-
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.php">Create Document</a></li><li><a class="dropdown-item" href="update-document.php">Update Document</a></li><li><a class="dropdown-item active" href="retire-document.php">Retire Document</a></li><li><a class="dropdown-item" href="repository.php">Repository</a></li></ul></li>
-
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="document-types.php">Document Types</a></li><li><a class="dropdown-item" href="document-id.php">Document ID</a></li><li><a class="dropdown-item" href="content-editor.php">Content Editor</a></li><li><a class="dropdown-item" href="form-builder.php">Form Builder</a></li><li><a class="dropdown-item" href="form-type-name.php">Form Type &amp; Name</a></li><li><a class="dropdown-item" href="approver-selection.php">Approver Selection</a></li><li><a class="dropdown-item" href="submit-review.php">Submit for Review</a></li><li><a class="dropdown-item" href="electronic-signature.php">Electronic Signature</a></li><li><a class="dropdown-item" href="approver-comments.php">Approver Comments</a></li><li><a class="dropdown-item" href="notifications.php">Notifications</a></li></ul></li>
-
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="audit-creation.php">Audit - Creation</a></li><li><a class="dropdown-item" href="audit-approval.php">Audit - Approval</a></li><li><a class="dropdown-item" href="audit-comments.php">Audit - Comments</a></li><li><a class="dropdown-item" href="qa-admin.php">QA Admin</a></li><li><a class="dropdown-item" href="employee-role.php">Employee Role</a></li><li><a class="dropdown-item" href="super-admin.php">Super Admin</a></li><li><a class="dropdown-item" href="user-management.php">User Management</a></li><li><a class="dropdown-item" href="role-assignment.php">Role Assignment</a></li></ul></li>
-
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.php">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.php">Update Document</a></li>
+            <li><a class="dropdown-item active" href="retire-document.php">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.php">Repository</a></li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.php">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.php">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.php">User Management</a></li>
+          </ul>
+        </li>
         <li class="nav-item"><a class="nav-link" href="portal-select.php">Switch to User</a></li>
       </ul>
-      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small"><?php echo e($roleName ?: 'QA Admin'); ?></span><a class="nav-link px-0" href="notifications.php">Notifications</a><span class="navbar-text small"><?php echo e($displayName ?: 'Profile'); ?></span></div>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small"><?php echo e($roleName ?: 'QA Admin'); ?></span>
+        <a class="nav-link px-0" href="notifications.php">Notifications</a>
+        <span class="navbar-text small"><?php echo e($displayName ?: 'Profile'); ?></span>
+      </div>
     </div>
   </div>
 </nav>
 
 <main class="app-shell">
 <div class="content-wrap px-4 py-4 mx-auto">
-<div class="mb-4">
-<h1 class="page-title mb-2">Retire Controlled Document</h1>
-<p class="page-subtitle mb-0">Submit a controlled document for retirement with reason, review, and approval.</p>
-</div>
 
-<?php if (!empty($errors)): ?>
-  <div class="alert alert-danger alert-dismissible fade show" role="alert">
-    <strong>Please fix the following:</strong>
-    <ul class="mb-0 mt-2">
-      <?php foreach ($errors as $err): ?>
-        <li><?php echo e($err); ?></li>
-      <?php endforeach; ?>
-    </ul>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Retire Controlled Document</h1>
+    <p class="page-subtitle mb-0">Submit a controlled document for retirement with reason, review, and approval.</p>
   </div>
-<?php endif; ?>
 
-<?php if ($successMessage !== ''): ?>
-  <div class="alert alert-success alert-dismissible fade show" role="alert">
-    <?php echo e($successMessage); ?>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-  </div>
-<?php endif; ?>
-
-<div class="card cp-card mb-3">
-  <div class="card-body">
-    <h2 class="card-title mb-1">Select Document</h2>
-    <p class="card-subtitle mb-3">Filter and choose a document to submit for retirement.</p>
-
-    <form method="get" class="row g-3 mb-3">
-      <div class="col-md-4">
-        <label class="form-label">Filter by ID / Document Number</label>
-        <input type="text" name="filter_id" class="form-control" value="<?php echo e($filterId); ?>" placeholder="Enter ID or document number">
-      </div>
-      <div class="col-md-2 d-flex align-items-end">
-        <button type="submit" class="btn btn-outline-primary w-100">Filter</button>
-      </div>
-      <div class="col-md-2 d-flex align-items-end">
-        <a href="retire-document.php" class="btn btn-outline-secondary w-100">Reset</a>
-      </div>
-    </form>
-
-    <div class="table-responsive">
-      <table class="table align-middle doc-list-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Document Number</th>
-            <th>Title</th>
-            <th>Status</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php if (!empty($documents)): ?>
-            <?php foreach ($documents as $doc): ?>
-              <tr>
-                <td><?php echo (int)$doc['id']; ?></td>
-                <td><?php echo e($doc['document_number'] ?: '-'); ?></td>
-                <td><?php echo e($doc['title'] ?: ($doc['topic'] ?: '-')); ?></td>
-                <td><?php echo e($doc['current_status'] ?: '-'); ?></td>
-                <td>
-                  <a href="retire-document.php?id=<?php echo (int)$doc['id']; ?>" class="btn btn-sm btn-outline-primary">Select</a>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          <?php else: ?>
-            <tr>
-              <td colspan="5" class="text-center text-secondary py-4">No documents found.</td>
-            </tr>
-          <?php endif; ?>
-        </tbody>
-      </table>
+  <?php if (!empty($errors)): ?>
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+      <strong>Please fix the following:</strong>
+      <ul class="mb-0 mt-2">
+        <?php foreach ($errors as $err): ?>
+          <li><?php echo e($err); ?></li>
+        <?php endforeach; ?>
+      </ul>
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
-  </div>
-</div>
+  <?php endif; ?>
 
-<?php if ($selectedDocument): ?>
-<form method="post">
-  <input type="hidden" name="document_id" value="<?php echo (int)$selectedDocumentId; ?>">
-  <input type="hidden" name="document_number" value="<?php echo e($form['document_number']); ?>">
-  <input type="hidden" name="current_status" value="<?php echo e($form['current_status']); ?>">
-  <input type="hidden" name="owner_name" value="<?php echo e($form['owner_name']); ?>">
-  <input type="hidden" name="requested_by" value="<?php echo e($form['requested_by']); ?>">
+  <?php if ($successMessage !== ''): ?>
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+      <?php echo e($successMessage); ?>
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  <?php endif; ?>
 
-  <div class="row g-3">
-    <div class="col-lg-8">
-      <div class="card cp-card"><div class="card-body">
-        <h2 class="card-title mb-1">Retire Request</h2>
-        <p class="card-subtitle mb-3">Retirement requires approval and must not be immediate.</p>
-        <div class="row g-3">
-          <div class="col-md-6"><label class="form-label">Document ID</label><input class="form-control readonly" readonly value="<?php echo e($form['document_number']); ?>"></div>
-          <div class="col-md-6"><label class="form-label">Current Status</label><input class="form-control readonly" readonly value="<?php echo e($form['current_status']); ?>"></div>
-          <div class="col-md-6"><label class="form-label">Owner</label><input class="form-control readonly" readonly value="<?php echo e($form['owner_name']); ?>"></div>
-          <div class="col-md-6"><label class="form-label">Requested By</label><input class="form-control readonly" readonly value="<?php echo e($form['requested_by']); ?>"></div>
+  <form method="post" id="retireForm">
+    <input type="hidden" name="document_id" id="document_id" value="<?php echo e($form['document_id']); ?>">
+    <input type="hidden" name="document_number" id="document_number" value="<?php echo e($form['document_number']); ?>">
+    <input type="hidden" name="current_status" id="current_status" value="<?php echo e($form['current_status']); ?>">
+    <input type="hidden" name="owner_name" id="owner_name" value="<?php echo e($form['owner_name']); ?>">
+    <input type="hidden" name="requested_by" id="requested_by" value="<?php echo e($form['requested_by']); ?>">
+    <input type="hidden" name="document_type_name" id="document_type_name" value="<?php echo e($form['document_type_name']); ?>">
 
-          <div class="col-12">
-            <label class="form-label">Retirement Reason</label>
-            <textarea name="retirement_reason" class="form-control" placeholder="Minimum 20 characters required" rows="4"><?php echo e($form['retirement_reason']); ?></textarea>
-            <div class="form-text">Retirement reason is mandatory and fully auditable.</div>
-          </div>
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="card cp-card">
+          <div class="card-body">
+            <h2 class="card-title mb-1">Retire Request</h2>
+            <p class="card-subtitle mb-3">Retirement requires approval and must not be immediate.</p>
 
-          <div class="col-md-6">
-            <label class="form-label">Replacement Document</label>
-            <select name="replacement_document_id" class="form-select">
-              <option value="">Select replacement if applicable</option>
-              <?php foreach ($replacementDocuments as $rep): ?>
-                <?php if ((int)$rep['id'] !== (int)$selectedDocumentId): ?>
-                  <option value="<?php echo (int)$rep['id']; ?>" <?php echo ((string)$form['replacement_document_id'] === (string)$rep['id']) ? 'selected' : ''; ?>>
-                    <?php echo e($rep['document_number'] . ' - ' . ($rep['title'] ?: 'Untitled')); ?>
-                  </option>
-                <?php endif; ?>
-              <?php endforeach; ?>
-            </select>
-          </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Step 1 — Document Type <span class="text-danger">*</span></label>
+                <select class="form-select" id="docTypeSelect" onchange="onTypeChange(this.value)">
+                  <option value="">-- Select Type --</option>
+                  <?php foreach ($documentTypes as $type): ?>
+                    <option value="<?php echo e($type['type_name']); ?>" <?php echo ($form['document_type_name'] === $type['type_name']) ? 'selected' : ''; ?>>
+                      <?php echo e($type['type_name']); ?>
+                    </option>
+                  <?php endforeach; ?>
+                </select>
+                <div class="form-text">Only Effective documents will appear below.</div>
+              </div>
 
-          <div class="col-md-6">
-            <label class="form-label">Approver</label>
-            <select name="approver_user_id" class="form-select">
-              <option value="">Select Approver</option>
-              <?php foreach ($approvers as $approver): ?>
-                <option value="<?php echo (int)$approver['id']; ?>" <?php echo ((string)$form['approver_user_id'] === (string)$approver['id']) ? 'selected' : ''; ?>>
-                  <?php echo e($approver['name']); ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
+              <div class="col-md-6">
+                <label class="form-label">Step 2 — Select Document <span class="text-danger">*</span></label>
+                <select class="form-select" id="docSelect" disabled onchange="onDocSelect(this.value)">
+                  <option value="">-- Select Type first --</option>
+                </select>
+                <div class="form-text" id="docSelectHint">Choose a document type above to populate this list.</div>
+              </div>
+
+              <div class="col-12 <?php echo $selectedDocument ? '' : 'd-none'; ?>" id="docInfoWrap">
+                <div id="docInfoPanel">
+                  <div class="di-id" id="diId"><?php echo e($form['document_number'] ?: '—'); ?></div>
+                  <div class="di-meta" id="diMeta">—</div>
+                </div>
+              </div>
+
+              <div class="col-md-6 <?php echo $selectedDocument ? '' : 'd-none'; ?> doc-field">
+                <label class="form-label">Current Status</label>
+                <input class="form-control field-locked" id="fStatus" readonly value="<?php echo e($form['current_status'] ?: 'Effective'); ?>">
+              </div>
+
+              <div class="col-md-6 <?php echo $selectedDocument ? '' : 'd-none'; ?> doc-field">
+                <label class="form-label">Owner</label>
+                <input class="form-control field-locked" id="fOwner" readonly value="<?php echo e($form['owner_name']); ?>">
+              </div>
+
+              <div class="col-md-6 <?php echo $selectedDocument ? '' : 'd-none'; ?> doc-field">
+                <label class="form-label">Requested By</label>
+                <input class="form-control field-locked" id="fRequestedBy" readonly value="<?php echo e($form['requested_by']); ?>">
+              </div>
+
+              <div class="col-md-6 <?php echo $selectedDocument ? '' : 'd-none'; ?> doc-field">
+                <label class="form-label">Retirement Date <span class="text-danger">*</span></label>
+                <input class="form-control field-locked" id="fRetireDate" readonly value="<?php echo e(date('Y-m-d')); ?>">
+                <div class="form-text">Auto-set to today — read only.</div>
+              </div>
+
+              <div class="col-12 <?php echo $selectedDocument ? '' : 'd-none'; ?> doc-field">
+                <label class="form-label">Retirement Reason <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="fReason" name="retirement_reason" placeholder="Minimum 20 characters required — describe why this document is being retired" rows="4"><?php echo e($form['retirement_reason']); ?></textarea>
+                <div class="form-text d-flex justify-content-between">
+                  <span>Retirement reason is mandatory and fully auditable.</span>
+                  <span id="charCount" class="text-secondary">0 / 20 min</span>
+                </div>
+              </div>
+
+              <div class="col-md-6 <?php echo $selectedDocument ? '' : 'd-none'; ?> doc-field">
+                <label class="form-label">Replacement Document <span class="text-secondary fw-normal">(if applicable)</span></label>
+                <select class="form-select" id="fReplacement" name="replacement_document_id">
+                  <option value="">None — no replacement</option>
+                </select>
+                <div class="form-text">Select a replacement document if this one is being superseded.</div>
+              </div>
+
+              <div class="col-md-6 <?php echo $selectedDocument ? '' : 'd-none'; ?> doc-field">
+                <label class="form-label">Approver <span class="text-danger">*</span></label>
+                <select class="form-select" id="fApprover" name="approver_user_id">
+                  <option value="">-- Select Approver --</option>
+                  <?php foreach ($approvers as $approver): ?>
+                    <option value="<?php echo (int)$approver['id']; ?>" <?php echo ((string)$form['approver_user_id'] === (string)$approver['id']) ? 'selected' : ''; ?>>
+                      <?php echo e($approver['name']); ?>
+                    </option>
+                  <?php endforeach; ?>
+                </select>
+                <div class="form-text">Creator cannot select themselves as approver.</div>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+              <a class="btn btn-outline-secondary" href="retire-document.php">Cancel</a>
+              <button type="submit" class="btn btn-danger" id="submitBtn" <?php echo $selectedDocument ? '' : 'disabled'; ?>>
+                Submit Retirement Request
+              </button>
+            </div>
+
           </div>
         </div>
+      </div>
 
-        <div class="d-flex gap-2 mt-4">
-          <a href="retire-document.php" class="btn btn-outline-secondary">Cancel</a>
-          <button type="submit" class="btn btn-danger">Submit Retirement Request</button>
+      <div class="col-lg-4">
+        <div class="card cp-card">
+          <div class="card-body">
+            <h2 class="card-title mb-1">Control Notes</h2>
+            <p class="card-subtitle mb-3">Retired records remain traceable.</p>
+            <ul class="small text-secondary note-list mb-0">
+              <li>Status moves to Pending Retirement until approved.</li>
+              <li>Repository history still shows prior effective versions.</li>
+              <li>Delete is never available for controlled records.</li>
+              <li>Approval, denial, and comment actions are fully logged.</li>
+              <li>Retirement date and approver are captured in the audit trail.</li>
+            </ul>
+          </div>
         </div>
-      </div></div>
+      </div>
     </div>
-
-    <div class="col-lg-4">
-      <div class="card cp-card"><div class="card-body">
-        <h2 class="card-title mb-1">Control Notes</h2>
-        <p class="card-subtitle mb-3">Retired records remain traceable.</p>
-        <ul class="small text-secondary note-list mb-0">
-          <li>Status should move to Pending Retirement until approved.</li>
-          <li>Repository history must still show prior effective versions.</li>
-          <li>Delete should never be available for controlled records.</li>
-          <li>Approval, denial, and comment actions must be fully logged.</li>
-        </ul>
-      </div></div>
-    </div>
-  </div>
-</form>
-<?php endif; ?>
+  </form>
 
 </div>
 </main>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+var EFFECTIVE_DOCS = <?php echo $documentsByTypeJson ?: '{}'; ?>;
+var REPLACEMENT_DOCS = <?php echo $replacementDocumentsJson ?: '[]'; ?>;
+var SELECTED_DOC_ID = "<?php echo e($form['document_id']); ?>";
+var SELECTED_DOC_TYPE = "<?php echo e($form['document_type_name']); ?>";
+var SELECTED_APPROVER = "<?php echo e($form['approver_user_id']); ?>";
+var SELECTED_REPLACEMENT = "<?php echo e($form['replacement_document_id']); ?>";
+
+function onTypeChange(type) {
+  var docSel = document.getElementById('docSelect');
+  var hint   = document.getElementById('docSelectHint');
+  resetFields();
+
+  if (!type) {
+    docSel.disabled = true;
+    docSel.innerHTML = '<option value="">-- Select Type first --</option>';
+    hint.textContent = 'Choose a document type above to populate this list.';
+    return;
+  }
+
+  var docs = EFFECTIVE_DOCS[type] || [];
+  docSel.innerHTML = '<option value="">-- Select a ' + type + ' document --</option>';
+
+  docs.forEach(function(doc) {
+    var opt = document.createElement('option');
+    opt.value = doc.id;
+    opt.textContent = doc.doc_id + '  —  ' + doc.topic;
+    if (String(doc.id) === String(SELECTED_DOC_ID)) {
+      opt.selected = true;
+    }
+    docSel.appendChild(opt);
+  });
+
+  docSel.disabled = false;
+  hint.textContent = docs.length + ' effective ' + type + ' document' + (docs.length !== 1 ? 's' : '') + ' available.';
+}
+
+function onDocSelect(docId) {
+  resetFields();
+  if (!docId) return;
+  window.location.href = 'retire-document.php?id=' + encodeURIComponent(docId);
+}
+
+function resetFields() {
+  if (!SELECTED_DOC_ID) {
+    document.getElementById('docInfoWrap').classList.add('d-none');
+    document.querySelectorAll('.doc-field').forEach(function(el) {
+      el.classList.add('d-none');
+    });
+    document.getElementById('submitBtn').disabled = true;
+  }
+}
+
+function populateSelectedInfo() {
+  if (!SELECTED_DOC_ID || !SELECTED_DOC_TYPE) return;
+
+  var docs = EFFECTIVE_DOCS[SELECTED_DOC_TYPE] || [];
+  var doc  = docs.find(function(d) { return String(d.id) === String(SELECTED_DOC_ID); });
+  if (!doc) return;
+
+  document.getElementById('diId').textContent = doc.doc_id || '—';
+  document.getElementById('diMeta').textContent =
+    'Topic: ' + (doc.topic || '—') +
+    '  ·  Version: ' + (doc.version || '—') +
+    '  ·  Owner: ' + (doc.owner || '—') +
+    '  ·  Effective: ' + formatDate(doc.effectiveDate);
+
+  var repSel = document.getElementById('fReplacement');
+  repSel.innerHTML = '<option value="">None — no replacement</option>';
+  REPLACEMENT_DOCS.forEach(function(d) {
+    if (String(d.id) !== String(SELECTED_DOC_ID)) {
+      var opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.document_number + '  —  ' + d.title;
+      if (String(d.id) === String(SELECTED_REPLACEMENT)) {
+        opt.selected = true;
+      }
+      repSel.appendChild(opt);
+    }
+  });
+}
+
+function updateCharCount() {
+  var txt = document.getElementById('fReason');
+  var el = document.getElementById('charCount');
+  if (!txt || !el) return;
+  var len = txt.value.trim().length;
+  if (len < 20) {
+    el.textContent = len + ' / 20 min';
+    el.className = 'text-danger';
+  } else {
+    el.textContent = len + ' chars ✓';
+    el.className = 'text-success';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (SELECTED_DOC_TYPE) {
+    onTypeChange(SELECTED_DOC_TYPE);
+  }
+  populateSelectedInfo();
+  updateCharCount();
+
+  var reason = document.getElementById('fReason');
+  if (reason) {
+    reason.addEventListener('input', updateCharCount);
+  }
+
+  var form = document.getElementById('retireForm');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      var reasonText = document.getElementById('fReason') ? document.getElementById('fReason').value.trim() : '';
+      var approver = document.getElementById('fApprover') ? document.getElementById('fApprover').value : '';
+      if (reasonText.length < 20) {
+        e.preventDefault();
+        alert('Retirement Reason must be at least 20 characters.');
+        document.getElementById('fReason').focus();
+        return false;
+      }
+      if (!approver) {
+        e.preventDefault();
+        alert('Please select an Approver before submitting.');
+        document.getElementById('fApprover').focus();
+        return false;
+      }
+    });
+  }
+});
+
+function formatDate(str) {
+  if (!str) return '—';
+  var d = new Date(str);
+  if (isNaN(d.getTime())) return str;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+</script>
 </body>
 </html>
