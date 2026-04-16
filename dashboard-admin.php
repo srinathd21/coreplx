@@ -9,469 +9,223 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 mysqli_set_charset($conn, 'utf8mb4');
 
 if (!function_exists('e')) {
-    function e($value) {
-        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+    function e($value): string
+    {
+        return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
     }
 }
 
-if (!function_exists('tableExists')) {
-    function tableExists(mysqli $conn, $tableName) {
-        $tableName = mysqli_real_escape_string($conn, $tableName);
-        $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
-        return ($res && mysqli_num_rows($res) > 0);
-    }
+$currentUserId = (int)($_SESSION['user_id'] ?? $_SESSION['admin_id'] ?? 0);
+$currentRoleCode = (string)($_SESSION['role_code'] ?? '');
+$currentRoleName = (string)($_SESSION['role_name'] ?? 'QA Admin');
+$currentDisplayName = (string)($_SESSION['full_name'] ?? $_SESSION['admin_name'] ?? 'Profile');
+
+if ($currentUserId <= 0) {
+    header('Location: login-admin.php');
+    exit;
 }
 
-if (!function_exists('columnExists')) {
-    function columnExists(mysqli $conn, $tableName, $columnName) {
-        $tableName = mysqli_real_escape_string($conn, $tableName);
-        $columnName = mysqli_real_escape_string($conn, $columnName);
-        $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$tableName}` LIKE '{$columnName}'");
-        return ($res && mysqli_num_rows($res) > 0);
-    }
+if (!in_array($currentRoleCode, ['qa_admin', 'super_admin'], true)) {
+    die('Access denied.');
 }
 
-if (!function_exists('safeCountQuery')) {
-    function safeCountQuery(mysqli $conn, $sql, $types = '', $params = []) {
-        $stmt = mysqli_prepare($conn, $sql);
-        if (!$stmt) return 0;
-
-        if ($types !== '' && !empty($params)) {
-            mysqli_stmt_bind_param($stmt, $types, ...$params);
-        }
-
-        if (!mysqli_stmt_execute($stmt)) {
-            mysqli_stmt_close($stmt);
-            return 0;
-        }
-
-        $res = mysqli_stmt_get_result($stmt);
-        $count = 0;
-        if ($res && ($row = mysqli_fetch_row($res))) {
-            $count = (int)($row[0] ?? 0);
-        }
-
-        mysqli_stmt_close($stmt);
-        return $count;
+function fetch_one(mysqli $conn, string $sql, string $types = '', array $params = [])
+{
+    $stmt = mysqli_prepare($conn, $sql);
+    if (!$stmt) {
+        return null;
     }
+
+    if ($types !== '' && !empty($params)) {
+        mysqli_stmt_bind_param($stmt, $types, ...$params);
+    }
+
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $row = $result ? mysqli_fetch_assoc($result) : null;
+    mysqli_stmt_close($stmt);
+    return $row;
 }
 
-if (!function_exists('safeRowsQuery')) {
-    function safeRowsQuery(mysqli $conn, $sql, $types = '', $params = []) {
-        $rows = [];
-        $stmt = mysqli_prepare($conn, $sql);
-        if (!$stmt) return $rows;
-
-        if ($types !== '' && !empty($params)) {
-            mysqli_stmt_bind_param($stmt, $types, ...$params);
-        }
-
-        if (!mysqli_stmt_execute($stmt)) {
-            mysqli_stmt_close($stmt);
-            return $rows;
-        }
-
-        $res = mysqli_stmt_get_result($stmt);
-        if ($res) {
-            while ($row = mysqli_fetch_assoc($res)) {
-                $rows[] = $row;
-            }
-        }
-
-        mysqli_stmt_close($stmt);
+function fetch_all(mysqli $conn, string $sql, string $types = '', array $params = []): array
+{
+    $rows = [];
+    $stmt = mysqli_prepare($conn, $sql);
+    if (!$stmt) {
         return $rows;
     }
-}
 
-if (!function_exists('formatDateDisplay')) {
-    function formatDateDisplay($date) {
-        if (empty($date) || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
-            return '-';
-        }
-        $ts = strtotime((string)$date);
-        return $ts ? date('d-M-Y', $ts) : (string)$date;
+    if ($types !== '' && !empty($params)) {
+        mysqli_stmt_bind_param($stmt, $types, ...$params);
     }
-}
 
-if (!function_exists('formatTimeDisplay')) {
-    function formatTimeDisplay($datetime) {
-        if (empty($datetime) || $datetime === '0000-00-00 00:00:00') {
-            return '-';
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    if ($result) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $rows[] = $row;
         }
-        $ts = strtotime((string)$datetime);
-        return $ts ? date('H:i', $ts) : '-';
     }
+    mysqli_stmt_close($stmt);
+    return $rows;
 }
 
-if (!function_exists('statusBadgeClass')) {
-    function statusBadgeClass($status, $reviewDate = '') {
-        $status = strtolower(trim((string)$status));
+function count_query(mysqli $conn, string $sql, string $types = '', array $params = []): int
+{
+    $row = fetch_one($conn, $sql, $types, $params);
+    return (int)($row['cnt'] ?? 0);
+}
 
-        if (in_array($status, ['pending_approval', 'pending approval', 'pending review', 'pending'], true)) {
-            return 'badge badge-soft-warning';
-        }
-        if ($status === 'draft') return 'badge badge-soft-secondary';
-        if ($status === 'pending_retirement') return 'badge badge-soft-warning';
-        if ($status === 'retired' || $status === 'obsolete') return 'badge badge-soft-secondary';
-        if ($status === 'deleted') return 'badge badge-soft-danger';
-        if ($status === 'in_progress') return 'badge badge-soft-info';
+function status_badge(string $status): string
+{
+    $status = strtolower(trim($status));
 
-        if ($reviewDate !== '' && $reviewDate !== '0000-00-00') {
-            $reviewTs = strtotime($reviewDate);
-            if ($reviewTs && $reviewTs < strtotime(date('Y-m-d'))) {
-                return 'badge badge-soft-danger';
-            }
-        }
-
-        return 'badge badge-soft-success';
+    if (in_array($status, ['effective', 'approved', 'published'], true)) {
+        return '<span class="badge badge-soft-success">Effective</span>';
     }
-}
-
-if (!function_exists('displayStatusLabel')) {
-    function displayStatusLabel($status, $reviewDate = '') {
-        $status = strtolower(trim((string)$status));
-
-        if (in_array($status, ['effective', 'approved'], true)) {
-            if ($reviewDate !== '' && $reviewDate !== '0000-00-00') {
-                $reviewTs = strtotime($reviewDate);
-                if ($reviewTs && $reviewTs < strtotime(date('Y-m-d'))) {
-                    return 'Overdue';
-                }
-            }
-            return 'Effective';
-        }
-
-        if (in_array($status, ['pending_approval', 'pending approval', 'pending review', 'pending'], true)) {
-            return 'Pending Approval';
-        }
-
-        if ($status === 'draft') return 'Draft';
-        if ($status === 'in_progress') return 'In Progress';
-        if ($status === 'pending_retirement') return 'Pending Retirement';
-        if ($status === 'retired') return 'Retired';
-        if ($status === 'obsolete') return 'Obsolete';
-        if ($status === 'deleted') return 'Deleted';
-
-        return $status !== '' ? ucwords(str_replace('_', ' ', $status)) : 'Effective';
+    if (in_array($status, ['pending_approval', 'pending approval'], true)) {
+        return '<span class="badge badge-soft-warning">Pending Approval</span>';
     }
+    if (in_array($status, ['draft'], true)) {
+        return '<span class="badge badge-soft-secondary">Draft</span>';
+    }
+    if (in_array($status, ['overdue'], true)) {
+        return '<span class="badge badge-soft-danger">Overdue</span>';
+    }
+    if (in_array($status, ['in_progress', 'in progress'], true)) {
+        return '<span class="badge badge-soft-info">In Progress</span>';
+    }
+
+    return '<span class="badge badge-soft-info">' . e(ucwords(str_replace('_', ' ', $status))) . '</span>';
 }
 
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login-admin.php');
-    exit;
+function short_name(array $row): string
+{
+    $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+    return $name !== '' ? $name : (string)($row['email'] ?? 'User');
 }
 
-$userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
-if ($userId <= 0) {
-    session_destroy();
-    header('Location: login-admin.php');
-    exit;
-}
-
-$currentUser = null;
-$userSql = "
-    SELECT
-        u.id,
-        u.first_name,
-        u.last_name,
-        u.email,
-        u.employee_code,
-        u.department_id,
-        r.role_name,
-        r.role_code
+$userRow = fetch_one($conn, "
+    SELECT u.id, u.first_name, u.last_name, u.email, r.role_name
     FROM users u
     LEFT JOIN roles r ON r.id = u.current_role_id
     WHERE u.id = ?
     LIMIT 1
-";
-$userStmt = mysqli_prepare($conn, $userSql);
-if ($userStmt) {
-    mysqli_stmt_bind_param($userStmt, "i", $userId);
-    mysqli_stmt_execute($userStmt);
-    $userRes = mysqli_stmt_get_result($userStmt);
-    $currentUser = ($userRes && mysqli_num_rows($userRes) > 0) ? mysqli_fetch_assoc($userRes) : null;
-    mysqli_stmt_close($userStmt);
-}
+", 'i', [$currentUserId]);
 
-if (!$currentUser) {
-    session_destroy();
-    header('Location: login-admin.php');
-    exit;
-}
+$welcomeName = $userRow ? short_name($userRow) : $currentDisplayName;
+$avatarLetter = strtoupper(substr($welcomeName, 0, 1));
 
-$displayName = trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? ''));
-if ($displayName === '') {
-    $displayName = $_SESSION['admin_name'] ?? 'Admin';
-}
-$roleName = trim((string)($currentUser['role_name'] ?? 'Super Admin'));
-$roleCode = strtolower(trim((string)($currentUser['role_code'] ?? '')));
-$userInitial = strtoupper(substr($displayName, 0, 1));
+$documentsOwned = count_query($conn, "
+    SELECT COUNT(*) AS cnt
+    FROM documents
+    WHERE owner_user_id = ?
+", 'i', [$currentUserId]);
 
-$isSuperAdmin = ($roleCode === 'super_admin' || strtolower($roleName) === 'super admin');
+$pendingApprovals = count_query($conn, "
+    SELECT COUNT(*) AS cnt
+    FROM workflow_steps
+    WHERE approver_user_id = ?
+      AND status = 'pending'
+", 'i', [$currentUserId]);
 
-$documentsOwned   = 0;
-$pendingApprovals = 0;
-$overdueReviews   = 0;
-$unreadAlerts     = 0;
-$myDrafts         = 0;
-$effectiveRecords = 0;
+$overdueReviews = count_query($conn, "
+    SELECT COUNT(*) AS cnt
+    FROM documents d
+    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+    WHERE dv.review_date IS NOT NULL
+      AND dv.review_date < CURDATE()
+      AND d.current_status IN ('effective', 'approved', 'published')
+", '', []);
 
-if (tableExists($conn, 'documents')) {
-    if ($isSuperAdmin) {
-        $documentsOwned = safeCountQuery(
-            $conn,
-            "SELECT COUNT(*)
-             FROM documents
-             WHERE LOWER(TRIM(COALESCE(current_status,''))) <> 'deleted'"
-        );
-    } else {
-        $documentsOwned = safeCountQuery(
-            $conn,
-            "SELECT COUNT(*)
-             FROM documents
-             WHERE owner_user_id = ?
-               AND LOWER(TRIM(COALESCE(current_status,''))) <> 'deleted'",
-            "i",
-            [$userId]
-        );
-    }
+$unreadAlerts = count_query($conn, "
+    SELECT COUNT(*) AS cnt
+    FROM notifications
+    WHERE user_id = ?
+      AND is_read = 0
+", 'i', [$currentUserId]);
 
-    if ($isSuperAdmin) {
-        $myDrafts = safeCountQuery(
-            $conn,
-            "SELECT COUNT(*)
-             FROM documents
-             WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'draft'"
-        );
-    } else {
-        $myDrafts = safeCountQuery(
-            $conn,
-            "SELECT COUNT(*)
-             FROM documents
-             WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'draft'
-               AND (owner_user_id = ? OR created_by = ?)",
-            "ii",
-            [$userId, $userId]
-        );
-    }
+$pendingApprovalRows = fetch_all($conn, "
+    SELECT
+        d.document_number,
+        d.title,
+        dt.type_name,
+        dv.submitted_at,
+        submitter.first_name,
+        submitter.last_name,
+        ws.document_version_id
+    FROM workflow_steps ws
+    INNER JOIN document_versions dv ON dv.id = ws.document_version_id
+    INNER JOIN documents d ON d.id = dv.document_id
+    LEFT JOIN document_types dt ON dt.id = d.document_type_id
+    LEFT JOIN users submitter ON submitter.id = dv.submitted_by
+    WHERE ws.approver_user_id = ?
+      AND ws.status = 'pending'
+    ORDER BY dv.submitted_at ASC, ws.id ASC
+    LIMIT 5
+", 'i', [$currentUserId]);
 
-    $effectiveRecords = safeCountQuery(
-        $conn,
-        "SELECT COUNT(*)
-         FROM documents
-         WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'effective'"
-    );
+$workQueue = fetch_all($conn, "
+    SELECT
+        d.document_number,
+        d.title,
+        d.current_status,
+        dv.review_date,
+        ws.status AS workflow_status
+    FROM documents d
+    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+    LEFT JOIN workflow_steps ws
+        ON ws.document_version_id = d.current_version_id
+       AND ws.approver_user_id = ?
+       AND ws.status = 'pending'
+    WHERE d.owner_user_id = ?
+       OR ws.approver_user_id = ?
+    ORDER BY d.updated_at DESC, d.id DESC
+    LIMIT 6
+", 'iii', [$currentUserId, $currentUserId, $currentUserId]);
 
-    if ($isSuperAdmin) {
-        $pendingApprovals = safeCountQuery(
-            $conn,
-            "SELECT COUNT(*)
-             FROM documents
-             WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'pending_approval'"
-        );
-    } else {
-        $pendingApprovals = safeCountQuery(
-            $conn,
-            "SELECT COUNT(*)
-             FROM documents
-             WHERE LOWER(TRIM(COALESCE(current_status,''))) = 'pending_approval'
-               AND TRIM(COALESCE(approver,'')) = ?",
-            "s",
-            [(string)$userId]
-        );
-    }
-}
+$recentActivity = fetch_all($conn, "
+    SELECT
+        al.performed_at,
+        al.action,
+        al.remarks,
+        al.entity_type,
+        actor.first_name,
+        actor.last_name,
+        actor.email
+    FROM audit_logs al
+    LEFT JOIN users actor ON actor.id = al.performed_by
+    WHERE al.performed_by = ?
+       OR al.entity_type IN ('document', 'user')
+    ORDER BY al.performed_at DESC, al.id DESC
+    LIMIT 8
+", 'i', [$currentUserId]);
 
-if (tableExists($conn, 'document_retirement_requests')) {
-    if ($isSuperAdmin) {
-        $pendingApprovals += safeCountQuery(
-            $conn,
-            "SELECT COUNT(*)
-             FROM document_retirement_requests
-             WHERE LOWER(TRIM(COALESCE(status,''))) = 'pending_approval'"
-        );
-    } else {
-        $pendingApprovals += safeCountQuery(
-            $conn,
-            "SELECT COUNT(*)
-             FROM document_retirement_requests
-             WHERE approver_user_id = ?
-               AND LOWER(TRIM(COALESCE(status,''))) = 'pending_approval'",
-            "i",
-            [$userId]
-        );
-    }
-}
+$recentDocuments = fetch_all($conn, "
+    SELECT
+        d.document_number,
+        d.title,
+        d.current_status,
+        dt.type_name
+    FROM documents d
+    LEFT JOIN document_types dt ON dt.id = d.document_type_id
+    ORDER BY d.updated_at DESC, d.id DESC
+    LIMIT 6
+", '', []);
 
-if (tableExists($conn, 'document_versions') && columnExists($conn, 'document_versions', 'review_date')) {
-    $overdueReviews = safeCountQuery(
-        $conn,
-        "SELECT COUNT(*)
-         FROM document_versions dv
-         INNER JOIN documents d ON d.current_version_id = dv.id
-         WHERE dv.review_date IS NOT NULL
-           AND dv.review_date <> '0000-00-00'
-           AND dv.review_date < CURDATE()
-           AND LOWER(TRIM(COALESCE(d.current_status,''))) NOT IN ('retired','obsolete','deleted')"
-    );
-}
+$reviewQueueCount = count_query($conn, "
+    SELECT COUNT(*) AS cnt
+    FROM documents d
+    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+    WHERE dv.review_date IS NOT NULL
+      AND dv.review_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+", '', []);
 
-if (tableExists($conn, 'notifications')) {
-    if ($isSuperAdmin) {
-        $unreadAlerts = safeCountQuery(
-            $conn,
-            "SELECT COUNT(*)
-             FROM notifications
-             WHERE is_read = 0"
-        );
-    } else {
-        $unreadAlerts = safeCountQuery(
-            $conn,
-            "SELECT COUNT(*)
-             FROM notifications
-             WHERE user_id = ?
-               AND is_read = 0",
-            "i",
-            [$userId]
-        );
-    }
-}
-
-$workQueue = [];
-if (tableExists($conn, 'documents') && tableExists($conn, 'document_versions')) {
-    if ($isSuperAdmin) {
-        $workQueueSql = "
-            SELECT
-                d.id,
-                d.document_number,
-                d.title,
-                d.topic,
-                d.current_status,
-                dv.review_date,
-                CASE
-                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'pending_approval' THEN 'Approval Required'
-                    WHEN dv.review_date IS NOT NULL AND dv.review_date <> '0000-00-00' AND dv.review_date < CURDATE() THEN 'Periodic Review'
-                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'draft' THEN 'Draft Review'
-                    ELSE 'General Review'
-                END AS task_name
-            FROM documents d
-            LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-            WHERE LOWER(TRIM(COALESCE(d.current_status,''))) IN ('draft','pending_approval','effective')
-            ORDER BY
-                CASE
-                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'pending_approval' THEN 1
-                    WHEN dv.review_date IS NOT NULL AND dv.review_date <> '0000-00-00' AND dv.review_date < CURDATE() THEN 2
-                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'draft' THEN 3
-                    ELSE 4
-                END,
-                d.id DESC
-            LIMIT 4
-        ";
-        $workQueue = safeRowsQuery($conn, $workQueueSql);
-    } else {
-        $workQueueSql = "
-            SELECT
-                d.id,
-                d.document_number,
-                d.title,
-                d.topic,
-                d.current_status,
-                dv.review_date,
-                CASE
-                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'pending_approval' THEN 'Approval Required'
-                    WHEN dv.review_date IS NOT NULL AND dv.review_date <> '0000-00-00' AND dv.review_date < CURDATE() THEN 'Periodic Review'
-                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'draft' THEN 'Draft Review'
-                    ELSE 'General Review'
-                END AS task_name
-            FROM documents d
-            LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-            WHERE (
-                    d.owner_user_id = ?
-                    OR d.created_by = ?
-                    OR TRIM(COALESCE(d.approver,'')) = ?
-                  )
-              AND LOWER(TRIM(COALESCE(d.current_status,''))) IN ('draft','pending_approval','effective')
-            ORDER BY
-                CASE
-                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'pending_approval' THEN 1
-                    WHEN dv.review_date IS NOT NULL AND dv.review_date <> '0000-00-00' AND dv.review_date < CURDATE() THEN 2
-                    WHEN LOWER(TRIM(COALESCE(d.current_status,''))) = 'draft' THEN 3
-                    ELSE 4
-                END,
-                d.id DESC
-            LIMIT 4
-        ";
-        $workQueue = safeRowsQuery($conn, $workQueueSql, "iis", [$userId, $userId, (string)$userId]);
-    }
-}
-
-$recentActivity = [];
-if (tableExists($conn, 'audit_logs')) {
-    if ($isSuperAdmin) {
-        $recentActivity = safeRowsQuery(
-            $conn,
-            "SELECT action, remarks, performed_at AS created_at
-             FROM audit_logs
-             ORDER BY id DESC
-             LIMIT 4"
-        );
-    } else {
-        $recentActivity = safeRowsQuery(
-            $conn,
-            "SELECT action, remarks, performed_at AS created_at
-             FROM audit_logs
-             WHERE performed_by = ?
-             ORDER BY id DESC
-             LIMIT 4",
-            "i",
-            [$userId]
-        );
-    }
-}
-
-$recentDocuments = [];
-if (tableExists($conn, 'documents')) {
-    if ($isSuperAdmin) {
-        $recentDocuments = safeRowsQuery(
-            $conn,
-            "SELECT
-                d.id,
-                d.document_number,
-                d.title,
-                d.topic,
-                d.current_status,
-                dt.type_name,
-                dv.review_date
-             FROM documents d
-             LEFT JOIN document_types dt ON dt.id = d.document_type_id
-             LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-             WHERE LOWER(TRIM(COALESCE(d.current_status,''))) <> 'deleted'
-             ORDER BY d.id DESC
-             LIMIT 3"
-        );
-    } else {
-        $recentDocuments = safeRowsQuery(
-            $conn,
-            "SELECT
-                d.id,
-                d.document_number,
-                d.title,
-                d.topic,
-                d.current_status,
-                dt.type_name,
-                dv.review_date
-             FROM documents d
-             LEFT JOIN document_types dt ON dt.id = d.document_type_id
-             LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-             WHERE LOWER(TRIM(COALESCE(d.current_status,''))) <> 'deleted'
-               AND (d.owner_user_id = ? OR d.created_by = ? OR TRIM(COALESCE(d.approver,'')) = ?)
-             ORDER BY d.id DESC
-             LIMIT 3",
-            "iis",
-            [$userId, $userId, (string)$userId]
-        );
-    }
-}
+$ackPending = count_query($conn, "
+    SELECT COUNT(*) AS cnt
+    FROM acknowledgement_assignments
+    WHERE status IN ('pending', 'overdue')
+", '', []);
 ?>
 <!doctype html>
 <html lang="en">
@@ -483,33 +237,13 @@ if (tableExists($conn, 'documents')) {
   <link href="assets/styles.css" rel="stylesheet">
 </head>
 <body>
-<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
-  <div class="container-fluid px-4 px-xxl-5">
-    <a class="navbar-brand fw-bold" href="dashboard-admin.php">CorePlx Quality DMS</a>
-    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="topNav">
-      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
-        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.php">Dashboard</a></li>
 
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.php">Create Document</a></li><li><a class="dropdown-item" href="update-document.php">Update Document</a></li><li><a class="dropdown-item" href="retire-document.php">Retire Document</a></li><li><a class="dropdown-item" href="repository.php">Repository</a></li></ul></li>
-
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="document-types.php">Document Types</a></li><li><a class="dropdown-item" href="document-id.php">Document ID</a></li><li><a class="dropdown-item" href="content-editor.php">Content Editor</a></li><li><a class="dropdown-item" href="form-builder.php">Form Builder</a></li><li><a class="dropdown-item" href="form-type-name.php">Form Type &amp; Name</a></li><li><a class="dropdown-item" href="approver-selection.php">Approver Selection</a></li><li><a class="dropdown-item" href="submit-review.php">Submit for Review</a></li><li><a class="dropdown-item" href="electronic-signature.php">Electronic Signature</a></li><li><a class="dropdown-item" href="approver-comments.php">Approver Comments</a></li><li><a class="dropdown-item" href="notifications.php">Notifications</a></li></ul></li>
-
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="audit-creation.php">Audit - Creation</a></li><li><a class="dropdown-item" href="audit-approval.php">Audit - Approval</a></li><li><a class="dropdown-item" href="audit-comments.php">Audit - Comments</a></li><li><a class="dropdown-item" href="qa-admin.php">QA Admin</a></li><li><a class="dropdown-item" href="employee-role.php">Employee Role</a></li><li><a class="dropdown-item" href="super-admin.php">Super Admin</a></li><li><a class="dropdown-item" href="user-management.php">User Management</a></li><li><a class="dropdown-item" href="role-assignment.php">Role Assignment</a></li></ul></li>
-
-        <li class="nav-item"><a class="nav-link" href="portal-select.php">Switch to User</a></li>
-      </ul>
-      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small"><?php echo e($roleName); ?></span><a class="nav-link px-0" href="notifications.php">Notifications</a><span class="navbar-text small"><?php echo e($displayName); ?></span></div>
-    </div>
-  </div>
-</nav>
+<?php include __DIR__ . '/includes/navbar.php'; ?>
 
 <main class="app-shell">
   <div class="content-wrap px-4 px-xxl-5 mx-auto">
     <div class="mb-4 mt-3">
-      <h1 class="page-title mb-2">Welcome back, <?php echo e($displayName); ?></h1>
+      <h1 class="page-title mb-2">Welcome back, <?php echo e($welcomeName); ?></h1>
       <p class="page-subtitle mb-0">Manage document activity, pending actions, and repository access from your workspace.</p>
     </div>
 
@@ -518,38 +252,30 @@ if (tableExists($conn, 'documents')) {
         <div class="card cp-card dashboard-user-card h-100">
           <div class="card-body p-4 d-flex flex-column">
             <div class="d-flex align-items-center gap-3 mb-4">
-              <div class="user-avatar"><?php echo e($userInitial); ?></div>
+              <div class="user-avatar"><?php echo e($avatarLetter); ?></div>
               <div>
-                <div class="fw-bold fs-5"><?php echo e($displayName); ?></div>
-                <div class="text-secondary small"><?php echo e($roleName); ?></div>
+                <div class="fw-bold fs-5"><?php echo e($welcomeName); ?></div>
+                <div class="text-secondary small"><?php echo e($currentRoleName); ?></div>
               </div>
             </div>
 
             <div class="user-meta-grid mb-4">
-              <div class="user-meta-box">
+              <a href="repository.php?filter=owned" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View all your documents">
                 <div class="user-meta-value"><?php echo (int)$documentsOwned; ?></div>
                 <div class="user-meta-label">Documents Owned</div>
-              </div>
-              <div class="user-meta-box">
+              </a>
+              <a href="audit-trail.php?tab=approval" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View documents pending approval">
                 <div class="user-meta-value"><?php echo (int)$pendingApprovals; ?></div>
                 <div class="user-meta-label">Pending Approvals</div>
-              </div>
-              <div class="user-meta-box">
+              </a>
+              <a href="repository.php?filter=overdue" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View overdue documents">
                 <div class="user-meta-value"><?php echo (int)$overdueReviews; ?></div>
                 <div class="user-meta-label">Overdue Reviews</div>
-              </div>
-              <div class="user-meta-box">
+              </a>
+              <a href="notifications.php?filter=unread" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View unread alerts">
                 <div class="user-meta-value"><?php echo (int)$unreadAlerts; ?></div>
                 <div class="user-meta-label">Unread Alerts</div>
-              </div>
-            </div>
-
-            <div class="section-kicker mb-2">Quick Actions</div>
-            <div class="d-grid gap-2 mt-auto">
-              <a class="btn btn-primary" href="create-document.php">Create Document</a>
-              <a class="btn btn-outline-primary" href="update-document.php">Update Document</a>
-              <a class="btn btn-outline-primary" href="submit-review.php">Open Review Queue</a>
-              <a class="btn btn-outline-primary" href="notifications.php">View Notifications</a>
+              </a>
             </div>
           </div>
         </div>
@@ -563,9 +289,9 @@ if (tableExists($conn, 'documents')) {
               <form action="repository.php" method="get">
                 <div class="input-group input-group-lg search-group">
                   <span class="input-group-text bg-white border-end-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1.0 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
                   </span>
-                  <input type="text" name="search" class="form-control border-start-0 ps-0" placeholder="Search documents, IDs, owners, or keywords">
+                  <input type="text" name="q" class="form-control border-start-0 ps-0" placeholder="Search documents, IDs, owners, or keywords">
                 </div>
               </form>
             </div>
@@ -582,18 +308,18 @@ if (tableExists($conn, 'documents')) {
                 <div class="hero-banner hero-banner-review h-100">
                   <div>
                     <div class="hero-eyebrow">Attention Required</div>
-                    <h2 class="hero-title"><?php echo (int)$overdueReviews; ?> documents are overdue for periodic review</h2>
+                    <h2 class="hero-title"><?php echo (int)$reviewQueueCount; ?> documents are due for periodic review</h2>
                     <p class="hero-copy mb-0">Open the review queue and assign owners before compliance due dates are missed.</p>
                   </div>
-                  <a href="submit-review.php" class="btn btn-light hero-btn">Open Review Queue</a>
+                  <a href="repository.php?filter=review_due" class="btn btn-light hero-btn">Open Review Queue</a>
                 </div>
               </div>
               <div class="carousel-item h-100">
                 <div class="hero-banner hero-banner-policy h-100">
                   <div>
                     <div class="hero-eyebrow">Repository Update</div>
-                    <h2 class="hero-title"><?php echo (int)$unreadAlerts; ?> unread notifications are waiting for action</h2>
-                    <p class="hero-copy mb-0">Check alerts for approvals, comments, and new acknowledgement items.</p>
+                    <h2 class="hero-title"><?php echo (int)$ackPending; ?> acknowledgement assignments are still pending</h2>
+                    <p class="hero-copy mb-0">Share the latest effective documents and track read confirmation across assigned users.</p>
                   </div>
                   <a href="notifications.php" class="btn btn-light hero-btn">View Notifications</a>
                 </div>
@@ -605,7 +331,7 @@ if (tableExists($conn, 'documents')) {
                     <h2 class="hero-title">Find documents faster with ID, owner, or keyword search</h2>
                     <p class="hero-copy mb-0">Use the workspace search bar to jump directly to drafts, approvals, and effective records.</p>
                   </div>
-                  <a href="document-id.php" class="btn btn-light hero-btn">Open Document ID Rules</a>
+                  <a href="repository.php" class="btn btn-light hero-btn">Open Repository</a>
                 </div>
               </div>
             </div>
@@ -614,34 +340,64 @@ if (tableExists($conn, 'documents')) {
       </div>
     </div>
 
-    <div class="row g-3 g-xxl-4 mb-4">
-      <div class="col-sm-6 col-xl-3">
-        <div class="card cp-card stat-card h-100"><div class="card-body p-4">
-          <div class="section-kicker mb-2">My Drafts</div>
-          <div class="stat-value"><?php echo (int)$myDrafts; ?></div>
-          <div class="stat-note">Draft documents still editable before submission.</div>
-        </div></div>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <div class="card cp-card stat-card h-100"><div class="card-body p-4">
-          <div class="section-kicker mb-2">Pending Approval</div>
-          <div class="stat-value"><?php echo (int)$pendingApprovals; ?></div>
-          <div class="stat-note">Items waiting for your review or approval.</div>
-        </div></div>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <div class="card cp-card stat-card h-100"><div class="card-body p-4">
-          <div class="section-kicker mb-2">Reviews Due</div>
-          <div class="stat-value"><?php echo (int)$overdueReviews; ?></div>
-          <div class="stat-note">Documents approaching or past review date.</div>
-        </div></div>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <div class="card cp-card stat-card h-100"><div class="card-body p-4">
-          <div class="section-kicker mb-2">Effective Records</div>
-          <div class="stat-value"><?php echo (int)$effectiveRecords; ?></div>
-          <div class="stat-note">Approved records currently published in repository.</div>
-        </div></div>
+    <div class="card cp-card mb-4" id="actionRequiredPanel" style="border-left:4px solid #f59e0b;background:#fffbeb;">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <div class="d-flex align-items-center gap-2">
+            <span style="font-size:1.2rem;">⚠️</span>
+            <div>
+              <h2 class="card-title mb-0" style="color:#b45309;">Action Required — Pending Approvals</h2>
+              <p class="card-subtitle mb-0">These documents are waiting for your electronic signature. They cannot proceed until reviewed.</p>
+            </div>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <a href="audit-trail.php?tab=approval" class="btn btn-sm btn-warning" style="font-weight:600;">View All Pending</a>
+            <button class="btn btn-sm btn-outline-secondary" onclick="dismissActionPanel()" title="Dismiss for this session">✕</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0" style="font-size:13px;">
+            <thead>
+              <tr>
+                <th>Document ID</th>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Submitted By</th>
+                <th>Submitted On</th>
+                <th>Days Waiting</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (!empty($pendingApprovalRows)): ?>
+                <?php foreach ($pendingApprovalRows as $row): ?>
+                  <?php
+                    $submittedByName = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+                    if ($submittedByName === '') {
+                        $submittedByName = $row['email'] ?? '—';
+                    }
+                    $submittedOn = !empty($row['submitted_at']) ? strtotime($row['submitted_at']) : null;
+                    $daysWaiting = $submittedOn ? max(0, floor((time() - $submittedOn) / 86400)) : 0;
+                    $daysBadge = $daysWaiting >= 4 ? 'badge-soft-danger' : 'badge-soft-warning';
+                  ?>
+                  <tr>
+                    <td class="fw-semibold" style="color:#2563eb;"><?php echo e($row['document_number']); ?></td>
+                    <td><?php echo e($row['title']); ?></td>
+                    <td><span class="badge badge-soft-info"><?php echo e($row['type_name'] ?: 'Document'); ?></span></td>
+                    <td><?php echo e($submittedByName); ?></td>
+                    <td style="color:#6b7280;"><?php echo e($submittedOn ? date('d M Y', $submittedOn) : '—'); ?></td>
+                    <td><span class="badge <?php echo e($daysBadge); ?>"><?php echo (int)$daysWaiting; ?> day<?php echo $daysWaiting !== 1 ? 's' : ''; ?></span></td>
+                    <td><a href="audit-trail.php?tab=approval&doc_id=<?php echo urlencode((string)$row['document_number']); ?>" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <tr>
+                  <td colspan="7" class="text-center text-secondary py-4">No pending approvals for you.</td>
+                </tr>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -653,7 +409,7 @@ if (tableExists($conn, 'documents')) {
               <h2 class="card-title mb-1">My Work Queue</h2>
               <p class="card-subtitle mb-0">Items that require your action today.</p>
             </div>
-            <a href="submit-review.php" class="btn btn-sm btn-outline-primary">Open Queue</a>
+            <a href="repository.php" class="btn btn-sm btn-outline-primary">Open Queue</a>
           </div>
           <div class="table-responsive">
             <table class="table align-middle mb-0">
@@ -662,18 +418,25 @@ if (tableExists($conn, 'documents')) {
               </thead>
               <tbody>
                 <?php if (!empty($workQueue)): ?>
-                  <?php foreach ($workQueue as $item): ?>
+                  <?php foreach ($workQueue as $row): ?>
                     <?php
-                      $title = $item['title'] ?: ($item['topic'] ?: 'Untitled');
-                      $statusLabel = displayStatusLabel($item['current_status'] ?? '', $item['review_date'] ?? '');
-                      $statusClass = statusBadgeClass($item['current_status'] ?? '', $item['review_date'] ?? '');
+                      $task = 'Owner Task';
+                      if (($row['workflow_status'] ?? '') === 'pending') {
+                          $task = 'Approval Required';
+                      } elseif (($row['current_status'] ?? '') === 'draft') {
+                          $task = 'Draft Update';
+                      } elseif (($row['current_status'] ?? '') === 'pending_approval') {
+                          $task = 'Pending Workflow';
+                      } else {
+                          $task = 'Periodic Review';
+                      }
                     ?>
                     <tr>
-                      <td class="fw-semibold"><?php echo e($item['document_number'] ?: ('DOC-' . (int)$item['id'])); ?></td>
-                      <td><?php echo e($title); ?></td>
-                      <td><?php echo e($item['task_name'] ?? 'General Review'); ?></td>
-                      <td><span class="<?php echo e($statusClass); ?>"><?php echo e($statusLabel); ?></span></td>
-                      <td><?php echo e(formatDateDisplay($item['review_date'] ?? '')); ?></td>
+                      <td class="fw-semibold"><?php echo e($row['document_number']); ?></td>
+                      <td><?php echo e($row['title']); ?></td>
+                      <td><?php echo e($task); ?></td>
+                      <td><?php echo status_badge((string)($row['current_status'] ?? 'draft')); ?></td>
+                      <td><?php echo e(!empty($row['review_date']) ? date('d-M-Y', strtotime($row['review_date'])) : '—'); ?></td>
                     </tr>
                   <?php endforeach; ?>
                 <?php else: ?>
@@ -686,24 +449,32 @@ if (tableExists($conn, 'documents')) {
           </div>
         </div></div>
       </div>
-
       <div class="col-xl-4">
         <div class="card cp-card h-100"><div class="card-body p-4">
           <h2 class="card-title mb-1">Recent Activity</h2>
           <p class="card-subtitle mb-3">Latest recorded actions in your workspace.</p>
           <div class="activity-list small">
             <?php if (!empty($recentActivity)): ?>
-              <?php foreach ($recentActivity as $activity): ?>
+              <?php foreach ($recentActivity as $row): ?>
+                <?php
+                  $actor = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+                  if ($actor === '') {
+                      $actor = $row['email'] ?? 'System';
+                  }
+                  $timeLabel = !empty($row['performed_at']) ? date('H:i', strtotime($row['performed_at'])) : '--:--';
+                  $actionLabel = ucwords(str_replace('_', ' ', (string)($row['action'] ?? 'Activity')));
+                  $remark = $row['remarks'] ?: (($row['entity_type'] ?? 'item') . ' activity recorded.');
+                ?>
                 <div class="activity-item">
-                  <span class="activity-time"><?php echo e(formatTimeDisplay($activity['created_at'] ?? '')); ?></span>
+                  <span class="activity-time"><?php echo e($timeLabel); ?></span>
                   <div>
-                    <div class="fw-semibold"><?php echo e(ucwords(str_replace('_', ' ', (string)($activity['action'] ?? 'Activity')))); ?></div>
-                    <div class="text-secondary"><?php echo e($activity['remarks'] ?: 'Activity recorded in audit log.'); ?></div>
+                    <div class="fw-semibold"><?php echo e($actionLabel); ?></div>
+                    <div class="text-secondary"><?php echo e($remark . ' By ' . $actor . '.'); ?></div>
                   </div>
                 </div>
               <?php endforeach; ?>
             <?php else: ?>
-              <div class="text-secondary small">No recent activity found.</div>
+              <div class="text-secondary">No recent activity found.</div>
             <?php endif; ?>
           </div>
         </div></div>
@@ -711,7 +482,7 @@ if (tableExists($conn, 'documents')) {
     </div>
 
     <div class="row g-3 g-xxl-4">
-      <div class="col-xl-12">
+      <div class="col-xl-8">
         <div class="card cp-card"><div class="card-body p-4">
           <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
             <div>
@@ -722,27 +493,33 @@ if (tableExists($conn, 'documents')) {
           </div>
           <div class="row g-3">
             <?php if (!empty($recentDocuments)): ?>
-              <?php foreach ($recentDocuments as $doc): ?>
-                <?php
-                  $title = $doc['title'] ?: ($doc['topic'] ?: 'Untitled');
-                  $docType = $doc['type_name'] ?: 'Document';
-                  $statusLabel = displayStatusLabel($doc['current_status'] ?? '', $doc['review_date'] ?? '');
-                  $statusClass = statusBadgeClass($doc['current_status'] ?? '', $doc['review_date'] ?? '');
-                ?>
+              <?php foreach (array_slice($recentDocuments, 0, 6) as $row): ?>
                 <div class="col-md-4">
                   <div class="repo-box h-100">
-                    <div class="small text-secondary mb-2"><?php echo e($docType); ?></div>
-                    <div class="fw-semibold mb-2"><?php echo e($title); ?></div>
-                    <div class="small text-secondary mb-3"><?php echo e($doc['document_number'] ?: ('DOC-' . (int)$doc['id'])); ?></div>
-                    <span class="<?php echo e($statusClass); ?>"><?php echo e($statusLabel); ?></span>
+                    <div class="small text-secondary mb-2"><?php echo e($row['type_name'] ?: 'Document'); ?></div>
+                    <div class="fw-semibold mb-2"><?php echo e($row['title']); ?></div>
+                    <div class="small text-secondary mb-3"><?php echo e($row['document_number']); ?></div>
+                    <?php echo status_badge((string)($row['current_status'] ?? 'draft')); ?>
                   </div>
                 </div>
               <?php endforeach; ?>
             <?php else: ?>
               <div class="col-12">
-                <div class="text-secondary">No recent documents found.</div>
+                <div class="text-center text-secondary py-4">No recent documents found.</div>
               </div>
             <?php endif; ?>
+          </div>
+        </div></div>
+      </div>
+      <div class="col-xl-4">
+        <div class="card cp-card"><div class="card-body p-4">
+          <h2 class="card-title mb-1">Quick Actions</h2>
+          <p class="card-subtitle mb-3">Start the most common tasks from one place.</p>
+          <div class="d-grid gap-2">
+            <a class="btn btn-primary" href="create-document.php">Create Document</a>
+            <a class="btn btn-outline-primary" href="update-document.php">Update Document</a>
+            <a class="btn btn-outline-primary" href="repository.php">Open Repository</a>
+            <a class="btn btn-outline-primary" href="audit-trail.php">View Audit Trail</a>
           </div>
         </div></div>
       </div>
@@ -751,5 +528,15 @@ if (tableExists($conn, 'documents')) {
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function dismissActionPanel() {
+  document.getElementById('actionRequiredPanel').style.display = 'none';
+  sessionStorage.setItem('actionPanelDismissed', '1');
+}
+if (sessionStorage.getItem('actionPanelDismissed') === '1') {
+  var p = document.getElementById('actionRequiredPanel');
+  if (p) p.style.display = 'none';
+}
+</script>
 </body>
 </html>
