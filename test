@@ -1,0 +1,2694 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CorePlx Quality DMS - Portal Selection</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="assets/styles.css" rel="stylesheet">
+<style>body{display:flex;align-items:center;justify-content:center;min-height:100vh;}</style>
+</head>
+<body>
+<div class="container">
+  <div class="portal-card mx-auto p-4 p-md-5">
+    <div class="text-center mb-4">
+      <h2 class="mb-2" style="color:#0D2144;font-weight:700;">Select Portal</h2>
+      <p class="text-muted mb-0">Choose the login path for your role</p>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <a class="portal-option h-100" href="login-employee.html">
+          <div class="fw-bold fs-5 mb-2">Employee</div>
+          <small class="text-muted">View assigned documents and complete acknowledgements.</small>
+        </a>
+      </div>
+      <div class="col-md-6">
+        <a class="portal-option primary h-100" href="login-admin.html">
+          <div class="fw-bold fs-5 mb-2">Admin</div>
+          <small>Manage documents, workflow, approvals, and access.</small>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>
+
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CorePlx Quality DMS - Admin Login</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="assets/styles.css" rel="stylesheet">
+<style>body{display:flex;align-items:center;justify-content:center;min-height:100vh;}</style>
+</head>
+<body>
+<div class="login-card p-4 p-md-5">
+  <div class="mb-4">
+    <div class="text-uppercase small fw-semibold mb-2" style="color:#6B7280;">CorePlx Quality DMS</div>
+    <h3 class="mb-2" style="color:#0D2144;font-weight:700;">Admin Login</h3>
+    <p class="text-muted mb-0">Manage documents, workflow, and system access.</p>
+  </div>
+  <form>
+    <div class="mb-3"><label class="form-label">Email</label><input type="email" class="form-control" placeholder="Enter email"></div>
+    <div class="mb-3"><label class="form-label">Password</label><input type="password" class="form-control" placeholder="Enter password"></div>
+    <a href="dashboard-admin.html" class="btn btn-primary w-100 mb-3">Login</a>
+    <div class="text-center footer-help">
+      <a href="forgot-password.html" class="d-block mb-2">Forgot Password?</a>
+      <span>Need help? <a href="contact-support.html">Contact Support</a></span>
+    </div>
+  </form>
+</div>
+</body></html>
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - Admin Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.html">Dashboard</a></li>
+        
+        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.html">Create Document</a></li><li><a class="dropdown-item" href="update-document.html">Update Document</a></li><li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li><li><a class="dropdown-item" href="repository.html">Repository</a></li></ul></li>
+        
+
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
+        
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small">QA Admin</span><a class="nav-link px-0" href="notifications.html">Notifications</a><span class="navbar-text small">Profile</span></div>
+    </div>
+  </div>
+</nav>
+
+<main class="app-shell">
+  <div class="content-wrap px-4 px-xxl-5 mx-auto">
+    <div class="mb-4 mt-3">
+      <h1 class="page-title mb-2">Welcome back, Pradeep</h1>
+      <p class="page-subtitle mb-0">Manage document activity, pending actions, and repository access from your workspace.</p>
+    </div>
+
+    <div class="row g-3 g-xxl-4 mb-4 align-items-stretch">
+      <div class="col-xl-3">
+        <div class="card cp-card dashboard-user-card h-100">
+          <div class="card-body p-4 d-flex flex-column">
+            <div class="d-flex align-items-center gap-3 mb-4">
+              <div class="user-avatar">P</div>
+              <div>
+                <div class="fw-bold fs-5">Pradeep</div>
+                <div class="text-secondary small">QA Admin</div>
+              </div>
+            </div>
+
+            <div class="user-meta-grid mb-4">
+              <a href="my-documents-admin.html?filter=owned" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View all your documents">
+                <div class="user-meta-value">24</div>
+                <div class="user-meta-label">Documents Owned</div>
+              </a>
+              <a href="my-documents-admin.html?filter=pending-approval" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View documents pending approval">
+                <div class="user-meta-value">5</div>
+                <div class="user-meta-label">Pending Approvals</div>
+              </a>
+              <a href="my-documents-admin.html?filter=overdue" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View overdue documents">
+                <div class="user-meta-value">2</div>
+                <div class="user-meta-label">Overdue Reviews</div>
+              </a>
+              <a href="notifications.html?filter=unread" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View unread alerts">
+                <div class="user-meta-value">8</div>
+                <div class="user-meta-label">Unread Alerts</div>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-9">
+        <div class="dashboard-hero-stack h-100 d-flex flex-column gap-3">
+          <div class="card cp-card search-card">
+            <div class="card-body p-4">
+              <div class="search-label mb-2">Global Search</div>
+              <div class="input-group input-group-lg search-group">
+                <span class="input-group-text bg-white border-end-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
+                </span>
+                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search documents, IDs, owners, or keywords">
+              </div>
+            </div>
+          </div>
+
+          <div id="dashboardCarousel" class="carousel slide h-100" data-bs-ride="carousel">
+            <div class="carousel-indicators dashboard-indicators">
+              <button type="button" data-bs-target="#dashboardCarousel" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Slide 1"></button>
+              <button type="button" data-bs-target="#dashboardCarousel" data-bs-slide-to="1" aria-label="Slide 2"></button>
+              <button type="button" data-bs-target="#dashboardCarousel" data-bs-slide-to="2" aria-label="Slide 3"></button>
+            </div>
+            <div class="carousel-inner hero-carousel cp-card h-100">
+              <div class="carousel-item active h-100">
+                <div class="hero-banner hero-banner-review h-100">
+                  <div>
+                    <div class="hero-eyebrow">Attention Required</div>
+                    <h2 class="hero-title">7 documents are overdue for periodic review</h2>
+                    <p class="hero-copy mb-0">Open the review queue and assign owners before compliance due dates are missed.</p>
+                  </div>
+                  <a href="repository.html" class="btn btn-light hero-btn">Open Review Queue</a>
+                </div>
+              </div>
+              <div class="carousel-item h-100">
+                <div class="hero-banner hero-banner-policy h-100">
+                  <div>
+                    <div class="hero-eyebrow">Repository Update</div>
+                    <h2 class="hero-title">New information security policy is ready for acknowledgement</h2>
+                    <p class="hero-copy mb-0">Share the latest policy version and track read confirmation across assigned users.</p>
+                  </div>
+                  <a href="notifications.html" class="btn btn-light hero-btn">View Notifications</a>
+                </div>
+              </div>
+              <div class="carousel-item h-100">
+                <div class="hero-banner hero-banner-search h-100">
+                  <div>
+                    <div class="hero-eyebrow">Search Tip</div>
+                    <h2 class="hero-title">Find documents faster with ID, owner, or keyword search</h2>
+                    <p class="hero-copy mb-0">Use the workspace search bar to jump directly to drafts, approvals, and effective records.</p>
+                  </div>
+                  <a href="document-id.html" class="btn btn-light hero-btn">Open Document ID Rules</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Action Required — Pending Approvals ── -->
+    <div class="card cp-card mb-4" id="actionRequiredPanel" style="border-left:4px solid #f59e0b;background:#fffbeb;">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <div class="d-flex align-items-center gap-2">
+            <span style="font-size:1.2rem;">⚠️</span>
+            <div>
+              <h2 class="card-title mb-0" style="color:#b45309;">Action Required — Pending Approvals</h2>
+              <p class="card-subtitle mb-0">These documents are waiting for your electronic signature. They cannot proceed until reviewed.</p>
+            </div>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <a href="my-documents-admin.html?filter=pending-approval" class="btn btn-sm btn-warning" style="font-weight:600;">View All Pending</a>
+            <button class="btn btn-sm btn-outline-secondary" onclick="dismissActionPanel()" title="Dismiss for this session">✕</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0" style="font-size:13px;">
+            <thead>
+              <tr>
+                <th>Document ID</th>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Submitted By</th>
+                <th>Submitted On</th>
+                <th>Days Waiting</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fw-semibold" style="color:#2563eb;">SOP-021-Training-V1</td>
+                <td>Training Procedure</td>
+                <td><span class="badge badge-soft-info">SOP</span></td>
+                <td>Ariharan</td>
+                <td style="color:#6b7280;">09 Apr 2026</td>
+                <td><span class="badge badge-soft-warning">2 days</span></td>
+                <td><a href="electronic-signature.html" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+              </tr>
+              <tr>
+                <td class="fw-semibold" style="color:#2563eb;">GUI-003-CAPA-V1</td>
+                <td>CAPA Workflow Guidance</td>
+                <td><span class="badge badge-soft-info">Guidance</span></td>
+                <td>Kavin</td>
+                <td style="color:#6b7280;">08 Apr 2026</td>
+                <td><span class="badge badge-soft-warning">3 days</span></td>
+                <td><a href="electronic-signature.html" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+              </tr>
+              <tr>
+                <td class="fw-semibold" style="color:#2563eb;">POL-021-Security-V2</td>
+                <td>Information Security Policy</td>
+                <td><span class="badge badge-soft-info">Policy</span></td>
+                <td>Pradeep</td>
+                <td style="color:#6b7280;">07 Apr 2026</td>
+                <td><span class="badge badge-soft-danger">4 days</span></td>
+                <td><a href="electronic-signature.html" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+              </tr>
+              <tr>
+                <td class="fw-semibold" style="color:#2563eb;">FRM-015-Training-V1</td>
+                <td>Training Acknowledgement Form</td>
+                <td><span class="badge badge-soft-info">Form</span></td>
+                <td>Deepa</td>
+                <td style="color:#6b7280;">06 Apr 2026</td>
+                <td><span class="badge badge-soft-danger">5 days</span></td>
+                <td><a href="electronic-signature.html" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+              </tr>
+              <tr>
+                <td class="fw-semibold" style="color:#2563eb;">SOP-104-CAPA-V3</td>
+                <td>CAPA Management</td>
+                <td><span class="badge badge-soft-info">SOP</span></td>
+                <td>Ariharan</td>
+                <td style="color:#6b7280;">05 Apr 2026</td>
+                <td><span class="badge badge-soft-danger">6 days</span></td>
+                <td><a href="electronic-signature.html" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 g-xxl-4 mb-4">
+      <div class="col-xl-8">
+        <div class="card cp-card h-100"><div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+            <div>
+              <h2 class="card-title mb-1">My Work Queue</h2>
+              <p class="card-subtitle mb-0">Items that require your action today.</p>
+            </div>
+            <a href="submit-review.html" class="btn btn-sm btn-outline-primary">Open Queue</a>
+          </div>
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr><th>Document ID</th><th>Title</th><th>Task</th><th>Status</th><th>Due</th></tr>
+              </thead>
+              <tbody>
+                <tr><td class="fw-semibold">SOP-104-CAPA-03</td><td>CAPA Closure Workflow</td><td>Approval Required</td><td><span class="badge badge-soft-warning">Pending Approval</span></td><td>09-Apr-2026</td></tr>
+                <tr><td class="fw-semibold">POL-021-SEC-02</td><td>Information Security Policy</td><td>Periodic Review</td><td><span class="badge badge-soft-danger">Overdue</span></td><td>05-Apr-2026</td></tr>
+                <tr><td class="fw-semibold">FRM-301-TRN-01</td><td>Training Acknowledgement Form</td><td>Read Confirmation</td><td><span class="badge badge-soft-info">In Progress</span></td><td>10-Apr-2026</td></tr>
+                <tr><td class="fw-semibold">GUI-089-DMS-04</td><td>DMS Access Guidance</td><td>Comment Response</td><td><span class="badge badge-soft-secondary">Draft</span></td><td>11-Apr-2026</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div></div>
+      </div>
+      <div class="col-xl-4">
+        <div class="card cp-card h-100"><div class="card-body p-4">
+          <h2 class="card-title mb-1">Recent Activity</h2>
+          <p class="card-subtitle mb-3">Latest recorded actions in your workspace.</p>
+          <div class="activity-list small">
+            <div class="activity-item"><span class="activity-time">10:42</span><div><div class="fw-semibold">Draft saved</div><div class="text-secondary">SOP-118-QA-01 was updated and saved by Pradeep.</div></div></div>
+            <div class="activity-item"><span class="activity-time">10:58</span><div><div class="fw-semibold">Submitted for approval</div><div class="text-secondary">SOP-118-QA-01 moved to Pending Approval.</div></div></div>
+            <div class="activity-item"><span class="activity-time">11:15</span><div><div class="fw-semibold">Approval comment added</div><div class="text-secondary">Megha S added a comment to POL-021-SEC-02.</div></div></div>
+            <div class="activity-item"><span class="activity-time">11:28</span><div><div class="fw-semibold">Role updated</div><div class="text-secondary">User access permissions were updated by QA Admin.</div></div></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="row g-3 g-xxl-4">
+      <div class="col-xl-8">
+        <div class="card cp-card"><div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+            <div>
+              <h2 class="card-title mb-1">Recent Documents</h2>
+              <p class="card-subtitle mb-0">Recently updated and published records.</p>
+            </div>
+            <a href="repository.html" class="btn btn-sm btn-outline-primary">Open Repository</a>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <div class="repo-box h-100">
+                <div class="small text-secondary mb-2">Policy</div>
+                <div class="fw-semibold mb-2">Information Security Policy</div>
+                <div class="small text-secondary mb-3">POL-021-SEC-02</div>
+                <span class="badge badge-soft-success">Effective</span>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="repo-box h-100">
+                <div class="small text-secondary mb-2">SOP</div>
+                <div class="fw-semibold mb-2">CAPA Closure Workflow</div>
+                <div class="small text-secondary mb-3">SOP-104-CAPA-03</div>
+                <span class="badge badge-soft-warning">Pending Approval</span>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="repo-box h-100">
+                <div class="small text-secondary mb-2">Guidance</div>
+                <div class="fw-semibold mb-2">DMS Access Guidance</div>
+                <div class="small text-secondary mb-3">GUI-089-DMS-04</div>
+                <span class="badge badge-soft-secondary">Draft</span>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+      <div class="col-xl-4">
+        <div class="card cp-card"><div class="card-body p-4">
+          <h2 class="card-title mb-1">Quick Actions</h2>
+          <p class="card-subtitle mb-3">Start the most common tasks from one place.</p>
+          <div class="d-grid gap-2">
+            <a class="btn btn-primary" href="create-document.html">Create Document</a>
+            <a class="btn btn-outline-primary" href="update-document.html">Update Document</a>
+            <a class="btn btn-outline-primary" href="repository.html">Open Repository</a>
+            <a class="btn btn-outline-primary" href="audit-trail.html">View Audit Trail</a>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function dismissActionPanel() {
+  document.getElementById('actionRequiredPanel').style.display = 'none';
+  // Dismissed for this session only — reappears on next login
+  sessionStorage.setItem('actionPanelDismissed', '1');
+}
+// Auto-hide if dismissed earlier in same session
+if (sessionStorage.getItem('actionPanelDismissed') === '1') {
+  var p = document.getElementById('actionRequiredPanel');
+  if (p) p.style.display = 'none';
+}
+</script>
+</body>
+</html>
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - Submit for Review</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.html">Dashboard</a></li>
+        
+        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.html">Create Document</a></li><li><a class="dropdown-item" href="update-document.html">Update Document</a></li><li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li><li><a class="dropdown-item" href="repository.html">Repository</a></li></ul></li>
+        
+        
+        
+        
+        
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
+        
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small">QA Admin</span><a class="nav-link px-0" href="notifications.html">Notifications</a><span class="navbar-text small">Profile</span></div>
+    </div>
+  </div>
+</nav>
+<main class="app-shell">
+<div class="content-wrap px-4 py-4 mx-auto">
+<div class="mb-4">
+<h1 class="page-title mb-2">Submit for Review</h1>
+<p class="page-subtitle mb-0">Send the document into workflow for formal review and approval.</p>
+</div>
+<div class="row g-3">
+<div class="col-lg-8">
+<div class="card cp-card"><div class="card-body">
+<h2 class="card-title mb-1">Submission Summary</h2>
+<p class="card-subtitle mb-3">Review all key data before status changes to Pending Approval.</p>
+<div class="table-responsive">
+<table class="table">
+<tbody>
+<tr><th class="w-25">Document ID</th><td>SOP-104-CAPA-01</td></tr>
+<tr><th>Type</th><td>SOP</td></tr>
+<tr><th>Owner</th><td>Pradeep</td></tr>
+<tr><th>Approver</th><td>QA Head</td></tr>
+<tr><th>Effective Date</th><td>15-Apr-2026</td></tr>
+<tr><th>Review Date</th><td>15-Apr-2027</td></tr>
+</tbody>
+</table>
+</div>
+<div class="d-flex gap-2">
+<button class="btn btn-outline-secondary">Back</button>
+<button class="btn btn-success">Confirm Submit</button>
+</div>
+</div></div>
+</div>
+<div class="col-lg-4">
+<div class="card cp-card"><div class="card-body">
+<h2 class="card-title mb-1">System Actions After Submit</h2>
+<ul class="small text-secondary note-list mb-0">
+<li>Status changes to Pending Approval.</li>
+<li>Email notification sent to approver.</li>
+<li>Submission event written to audit trail.</li>
+<li>Editable content locks based on workflow rules.</li>
+</ul>
+</div></div>
+</div>
+</div>
+</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - Create Document</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
+                <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="app-shell">
+<div class="content-wrap px-4 py-4 mx-auto">
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Create Controlled Document</h1>
+    <p class="page-subtitle mb-0">Create a new controlled document with required metadata, ownership, and approval workflow.</p>
+  </div>
+
+  <!-- ── Action bar ── -->
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <span class="badge badge-soft-secondary">Draft</span>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary" href="#">Cancel</a>
+      <a class="btn btn-outline-primary" href="#">Save Draft</a>
+      <a class="btn btn-success" href="submit-review.html">Submit for Review</a>
+    </div>
+  </div>
+
+  <!-- ── Return banner (shown after coming back from form-builder) ── -->
+  <div id="formReturnBanner" class="alert alert-success d-flex align-items-center gap-2 mb-3 d-none" role="alert">
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>
+    <span id="formReturnMsg">Form attached successfully.</span>
+  </div>
+
+  <div class="row g-3">
+
+    <!-- ── Left column ── -->
+    <div class="col-lg-8">
+
+      <!-- Document Information -->
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Document Information</h2>
+          <p class="card-subtitle mb-3">Enter the required document metadata and ownership details.</p>
+
+          <div class="row g-3">
+
+            <!-- Document Type -->
+            <div class="col-md-6">
+              <label class="form-label">Document Type</label>
+              <select class="form-select" id="docTypeSelect" onchange="handleDocTypeChange(this.value)">
+                <option value="SOP">SOP</option>
+                <option value="Policy">Policy</option>
+                <option value="Guidance">Guidance</option>
+                <option value="Form">Form</option>
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Document Topic</label>
+              <input class="form-control" id="docTopic" value="CAPA"/>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Document Number</label>
+              <input class="form-control" id="docNumber" value="104" oninput="updateDocIdPreview()"/>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Version</label>
+              <input class="form-control readonly" readonly value="01"/>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Owner</label>
+              <select class="form-select">
+                <option>Pradeep</option>
+                <option>QA Manager</option>
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Approver</label>
+              <select class="form-select">
+                <option value="">-- Select Approver --</option>
+                <option value="ramesh_qa_head">Ramesh — QA Head</option>
+                <option value="priya_compliance">Priya — Compliance Manager</option>
+                <option value="deepa_qa_admin">Deepa — QA Admin</option>
+                <option value="ariharan_qa_mgr">Ariharan — QA Manager</option>
+              </select>
+              <div class="form-text">Creator cannot select themselves as approver.</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Effective Date</label>
+              <input class="form-control" type="date"/>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Review Date</label>
+              <input class="form-control" type="date"/>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Document Purpose &amp; Scope <span class="text-danger">*</span></label>
+              <textarea class="form-control" placeholder="Describe the purpose, scope and intended audience of this document" rows="3"></textarea>
+              <div class="form-text">Mandatory — this will be used as the document summary in the approval workflow and audit trail.</div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Document ID Preview</label>
+              <div class="kv p-3 fw-semibold text-primary" id="docIdPreview">SOP-104-CAPA-01</div>
+              <div class="form-text">Format: [Type]-[Number]-[Topic]-[Version]</div>
+            </div>
+
+          </div><!-- /row -->
+        </div>
+      </div><!-- /Document Information card -->
+
+      <!-- Document Content card -->
+      <div class="card cp-card" id="contentCard">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Document Content</h2>
+          <p class="card-subtitle mb-3">Add document content using rich text or controlled file upload.</p>
+
+          <ul class="nav nav-pills gap-2 mb-3">
+            <li class="nav-item"><a class="nav-link active tab-pill" href="#">Rich Text Editor</a></li>
+            <li class="nav-item"><a class="nav-link tab-pill" href="#">File Upload</a></li>
+          </ul>
+
+          <div class="mb-3">
+            <label class="form-label">Document Body</label>
+            <textarea class="form-control" placeholder="Enter document content here" rows="9"></textarea>
+          </div>
+
+          <div class="upload-box p-4 text-center small text-secondary">
+            Drag and drop file here or click to browse.<br/>
+            Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FORM TYPE PANEL  –  shown only when Document Type = Form
+           ════════════════════════════════════════════════════════════ -->
+      <div class="card cp-card d-none" id="formTypePanel">
+        <div class="card-body">
+
+          <h2 class="card-title mb-1">Form / Checklist</h2>
+          <p class="card-subtitle mb-3">Build a custom form or checklist, or upload an existing one.</p>
+
+          <!-- ── Sub-tabs: Build vs Upload ── -->
+          <ul class="nav nav-pills gap-2 mb-4" id="formModeTabs">
+            <li class="nav-item">
+              <a class="nav-link active tab-pill" href="#" id="tabBuild" onclick="switchFormMode('build'); return false;">Build in System</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link tab-pill" href="#" id="tabUpload" onclick="switchFormMode('upload'); return false;">Upload Existing</a>
+            </li>
+          </ul>
+
+          <!-- BUILD mode -->
+          <div id="formBuildMode">
+            <!-- Attached form summary (shown after returning from builder) -->
+            <div id="attachedFormSummary" class="d-none mb-3">
+              <div class="d-flex align-items-start justify-content-between gap-3 p-3 rounded-3"
+                   style="background:var(--cp-surface,#f8f9fb);border:1px solid var(--cp-border,#dde3ec);">
+                <div>
+                  <div class="fw-semibold text-primary mb-1" id="attachedFormName">—</div>
+                  <div class="small text-secondary" id="attachedFormMeta">—</div>
+                </div>
+                <div class="d-flex gap-2 flex-shrink-0">
+                  <a id="editFormLink" href="form-builder.html" class="btn btn-sm btn-outline-secondary">Edit Form</a>
+                  <button class="btn btn-sm btn-outline-danger" onclick="detachForm()">Remove</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- CTA to open builder -->
+            <div id="noFormAttached">
+              <div class="upload-box p-4 text-center mb-3" style="cursor:default;">
+                <div class="mb-2" style="font-size:2rem;">📋</div>
+                <div class="fw-semibold mb-1">No form built yet</div>
+                <p class="small text-secondary mb-3">
+                  Use the Form Builder to add fields, checkboxes, dropdowns and signature blocks.<br>
+                  Once confirmed, it will be attached to this document automatically.
+                </p>
+                <a href="form-builder.html" class="btn btn-primary" id="openBuilderBtn">
+                  + Create Form / Checklist
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- UPLOAD mode -->
+          <div id="formUploadMode" class="d-none">
+            <div class="upload-box p-4 text-center mb-3">
+              Drag and drop your form file here or click to browse.<br/>
+              <span class="small text-secondary">Supported: PDF, DOCX, XLSX | Maximum size: 25 MB</span>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Form / Checklist Name <span class="text-danger">*</span></label>
+              <input class="form-control" type="text" placeholder="Enter a unique name for this form">
+              <div class="form-text">Form name must be unique across the system.</div>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /formTypePanel -->
+
+    </div><!-- /col-lg-8 -->
+
+    <!-- ── Right column ── -->
+    <div class="col-lg-4">
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Submission Readiness</h2>
+          <p class="card-subtitle mb-3">Verify required information before sending for approval.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Metadata completed.</li>
+            <li>Unique document ID validated.</li>
+            <li>Content entered or file attached.</li>
+            <li>Approver selected and validated.</li>
+            <li>Email notification will be generated on submit.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card cp-card">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Audit Controls</h2>
+          <p class="card-subtitle mb-3">Key controls expected for an audit-grade process.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Created by / created on / IP address captured automatically.</li>
+            <li>Draft saves logged with timestamp.</li>
+            <li>Critical field changes stored with old and new values.</li>
+            <li>Immutable audit record for every workflow action.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
+</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── Document type dropdown handler ────────────────────────────────────────
+function handleDocTypeChange(val) {
+  var isForm   = val === 'Form';
+  var contentCard  = document.getElementById('contentCard');
+  var formPanel    = document.getElementById('formTypePanel');
+
+  if (isForm) {
+    // Hide the generic content card, show the form panel
+    contentCard.classList.add('d-none');
+    formPanel.classList.remove('d-none');
+  } else {
+    // Show generic content card, hide form panel
+    contentCard.classList.remove('d-none');
+    formPanel.classList.add('d-none');
+  }
+  updateDocIdPreview();
+}
+
+// ── Form mode tabs (Build / Upload) ───────────────────────────────────────
+function switchFormMode(mode) {
+  var buildEl  = document.getElementById('formBuildMode');
+  var uploadEl = document.getElementById('formUploadMode');
+  var tabB     = document.getElementById('tabBuild');
+  var tabU     = document.getElementById('tabUpload');
+
+  if (mode === 'build') {
+    buildEl.classList.remove('d-none');
+    uploadEl.classList.add('d-none');
+    tabB.classList.add('active');
+    tabU.classList.remove('active');
+  } else {
+    uploadEl.classList.remove('d-none');
+    buildEl.classList.add('d-none');
+    tabU.classList.add('active');
+    tabB.classList.remove('active');
+  }
+}
+
+// ── Pass document context to form-builder ─────────────────────────────────
+document.getElementById('openBuilderBtn').addEventListener('click', function(e) {
+  // Store current doc context so form-builder can return here
+  var ctx = {
+    docType:   document.getElementById('docTypeSelect').value,
+    docNumber: document.getElementById('docNumber').value,
+    docTopic:  document.getElementById('docTopic').value,
+  };
+  sessionStorage.setItem('cpFormBuilderContext', JSON.stringify(ctx));
+  // Link href already points to form-builder.html — allow navigation
+});
+
+// ── Remove attached form ───────────────────────────────────────────────────
+function detachForm() {
+  sessionStorage.removeItem('cpBuiltForm');
+  document.getElementById('attachedFormSummary').classList.add('d-none');
+  document.getElementById('noFormAttached').classList.remove('d-none');
+  document.getElementById('formReturnBanner').classList.add('d-none');
+}
+
+// ── Document ID live preview ───────────────────────────────────────────────
+function updateDocIdPreview() {
+  var type    = document.getElementById('docTypeSelect').value || 'SOP';
+  var number  = document.getElementById('docNumber').value     || '000';
+  var topic   = document.getElementById('docTopic').value      || 'Topic';
+  var version = '01';
+  document.getElementById('docIdPreview').textContent =
+    type + '-' + number + '-' + topic + '-' + version;
+}
+
+document.getElementById('docTopic').addEventListener('input', updateDocIdPreview);
+document.getElementById('docNumber').addEventListener('input', updateDocIdPreview);
+
+// ── Read form data passed back from form-builder ───────────────────────────
+(function restoreBuiltForm() {
+  var raw = sessionStorage.getItem('cpBuiltForm');
+  if (!raw) return;
+
+  try {
+    var data = JSON.parse(raw);
+
+    // Switch doc type selector to Form (if not already)
+    var sel = document.getElementById('docTypeSelect');
+    sel.value = 'Form';
+    handleDocTypeChange('Form');
+
+    // Show the attached summary
+    var fieldCount  = data.fields ? data.fields.length : 0;
+    var sectionCount = data.sections ? data.sections.length : 0;
+
+    document.getElementById('attachedFormName').textContent = data.formName || 'Untitled Form';
+    document.getElementById('attachedFormMeta').textContent =
+      fieldCount + ' field' + (fieldCount !== 1 ? 's' : '') +
+      (sectionCount > 1 ? ', ' + sectionCount + ' sections' : '') +
+      ' · Built ' + new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+
+    document.getElementById('attachedFormSummary').classList.remove('d-none');
+    document.getElementById('noFormAttached').classList.add('d-none');
+
+    // Edit link — go back to builder with existing data
+    document.getElementById('editFormLink').href = 'form-builder.html?edit=1';
+
+    // Show return banner
+    var banner = document.getElementById('formReturnBanner');
+    var msg    = document.getElementById('formReturnMsg');
+    msg.textContent = '"' + (data.formName || 'Untitled Form') + '" attached — ' +
+                      fieldCount + ' field' + (fieldCount !== 1 ? 's' : '') + ' ready.';
+    banner.classList.remove('d-none');
+
+  } catch(e) {
+    console.warn('Could not restore built form:', e);
+  }
+})();
+</script>
+</body>
+</html>
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - Form Builder</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    /* ── Form Builder extras ────────────────────────────────────────── */
+    .fb-palette-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 9px 14px;
+      border: 1px solid var(--cp-border, #dde3ec);
+      border-radius: 8px;
+      background: var(--cp-surface, #f8f9fb);
+      color: var(--cp-text, #1e2a3a);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      text-align: left;
+    }
+    .fb-palette-btn:hover {
+      background: #e8edf5;
+      border-color: #b0bcce;
+      transform: translateX(2px);
+    }
+    .fb-palette-btn .fb-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+      background: #dde3ec;
+    }
+
+    /* Field canvas rows */
+    .fb-field-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--cp-border, #dde3ec);
+      border-radius: 8px;
+      background: #fff;
+      margin-bottom: 8px;
+      transition: box-shadow 0.15s;
+    }
+    .fb-field-row:hover {
+      box-shadow: 0 2px 8px rgba(30,42,58,0.08);
+    }
+    .fb-drag-handle {
+      color: #b0bcce;
+      cursor: grab;
+      font-size: 16px;
+      padding-top: 2px;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    .fb-field-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .fb-field-label-input {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid #dde3ec;
+      padding: 2px 0 4px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--cp-text, #1e2a3a);
+      background: transparent;
+      outline: none;
+    }
+    .fb-field-label-input:focus {
+      border-bottom-color: #2563eb;
+    }
+    .fb-field-type-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-top: 4px;
+      background: #e8edf5;
+      color: #4a6080;
+    }
+    .fb-field-preview {
+      margin-top: 8px;
+    }
+    .fb-field-preview input[type=text],
+    .fb-field-preview input[type=date],
+    .fb-field-preview textarea,
+    .fb-field-preview select {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid #dde3ec;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #aaa;
+      background: #fafbfc;
+      pointer-events: none;
+    }
+    .fb-field-preview .fb-sig-placeholder {
+      border: 1px dashed #b0bcce;
+      border-radius: 6px;
+      padding: 14px 10px;
+      text-align: center;
+      font-size: 12px;
+      color: #b0bcce;
+      background: #fafbfc;
+    }
+    .fb-field-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .fb-field-actions button {
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #b0bcce;
+      padding: 3px 5px;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .fb-field-actions button:hover { color: #dc2626; background: #fee2e2; }
+    .fb-field-actions button.up-btn:hover  { color: #2563eb; background: #dbeafe; }
+    .fb-field-actions button.down-btn:hover{ color: #2563eb; background: #dbeafe; }
+
+    .fb-required-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+    .fb-required-toggle input[type=checkbox] { cursor: pointer; }
+
+    /* Empty state */
+    .fb-empty-state {
+      border: 2px dashed #dde3ec;
+      border-radius: 10px;
+      padding: 40px 20px;
+      text-align: center;
+      color: #a0aab8;
+    }
+
+    /* Section divider field */
+    .fb-section-row {
+      border-left: 4px solid #2563eb;
+      background: #f0f4ff;
+    }
+
+    /* Preview modal field styles */
+    .preview-field-wrap { margin-bottom: 16px; }
+    .preview-field-wrap label { font-size: 13px; font-weight: 600; margin-bottom: 4px; display: block; }
+    .preview-field-wrap input,
+    .preview-field-wrap select,
+    .preview-field-wrap textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #dde3ec;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .preview-field-wrap .sig-box {
+      border: 1px dashed #b0bcce;
+      border-radius: 6px;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: #b0bcce;
+      background: #fafbfc;
+    }
+    .preview-section-head {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1a3a6e;
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 4px;
+      margin: 20px 0 12px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Navbar ── -->
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
+        
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="app-shell">
+<div class="content-wrap px-4 py-4 mx-auto">
+
+  <!-- ── Breadcrumb ── -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small mb-0">
+      <li class="breadcrumb-item"><a href="create-document.html" class="text-decoration-none">Create Document</a></li>
+      <li class="breadcrumb-item active">Form Builder</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
+    <div>
+      <h1 class="page-title mb-1">Form / Checklist Builder</h1>
+      <p class="page-subtitle mb-0">Build your form by adding fields from the left panel. Name it, then preview and confirm.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <button class="btn btn-outline-secondary" onclick="window.location.href='create-document.html'">
+        ← Back to Document
+      </button>
+      <button class="btn btn-outline-primary" onclick="openPreview()">
+        Preview Form
+      </button>
+      <button class="btn btn-success" onclick="confirmAndReturn()">
+        ✓ Confirm &amp; Attach to Document
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Form Name row ── -->
+  <div class="card cp-card mb-3">
+    <div class="card-body py-3">
+      <div class="row g-3 align-items-start">
+        <div class="col-md-5">
+          <label class="form-label mb-1">Form / Checklist Name <span class="text-danger">*</span></label>
+          <input class="form-control" id="fbFormName" type="text" placeholder="e.g. CAPA Verification Checklist">
+          <div class="form-text" id="fbNameValidation">&nbsp;</div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label mb-1">Form Type</label>
+          <input class="form-control" id="fbFormType" type="text" placeholder="e.g. Checklist, Inspection Form">
+          <div class="form-text">&nbsp;</div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label mb-1">Description <span class="text-secondary fw-normal">(optional)</span></label>
+          <input class="form-control" id="fbFormDesc" type="text" placeholder="Brief purpose">
+          <div class="form-text">&nbsp;</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Builder layout ── -->
+  <div class="row g-3">
+
+    <!-- Left: field palette -->
+    <div class="col-lg-3">
+      <div class="card cp-card h-100">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Add Field</h2>
+          <p class="card-subtitle mb-3">Click to add to your form</p>
+          <div class="d-flex flex-column gap-2">
+            <button class="fb-palette-btn" onclick="addField('text')">
+              <span class="fb-icon">T</span> Text Input
+            </button>
+            <button class="fb-palette-btn" onclick="addField('textarea')">
+              <span class="fb-icon">¶</span> Text Area
+            </button>
+            <button class="fb-palette-btn" onclick="addField('number')">
+              <span class="fb-icon">#</span> Number
+            </button>
+            <button class="fb-palette-btn" onclick="addField('date')">
+              <span class="fb-icon">📅</span> Date
+            </button>
+            <button class="fb-palette-btn" onclick="addField('dropdown')">
+              <span class="fb-icon">▾</span> Dropdown
+            </button>
+            <button class="fb-palette-btn" onclick="addField('checkbox')">
+              <span class="fb-icon">☑</span> Checkbox
+            </button>
+            <button class="fb-palette-btn" onclick="addField('yesno')">
+              <span class="fb-icon">?</span> Yes / No
+            </button>
+            <button class="fb-palette-btn" onclick="addField('signature')">
+              <span class="fb-icon">✍</span> Signature
+            </button>
+            <hr class="my-1">
+            <button class="fb-palette-btn" onclick="addField('section')" style="border-color:#2563eb;color:#2563eb;">
+              <span class="fb-icon" style="background:#dbeafe;color:#2563eb;">§</span> Section Heading
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: canvas -->
+    <div class="col-lg-9">
+      <div class="card cp-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h2 class="card-title mb-0">Form Canvas</h2>
+              <p class="card-subtitle mb-0" id="fieldCountLabel">0 fields added</p>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="clearAll()" id="clearBtn" style="display:none;">
+              Clear All
+            </button>
+          </div>
+
+          <!-- Empty state -->
+          <div class="fb-empty-state" id="emptyState">
+            <div style="font-size:2.5rem;margin-bottom:8px;">📋</div>
+            <div class="fw-semibold mb-1">No fields added yet</div>
+            <div class="small">Click a field type on the left to add it here</div>
+          </div>
+
+          <!-- Field list -->
+          <div id="fieldCanvas"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
+
+  <!-- ── Bottom action bar ── -->
+  <div class="d-flex justify-content-end gap-2 mt-3 flex-wrap">
+    <button class="btn btn-outline-secondary" onclick="window.location.href='create-document.html'">
+      ← Back without saving
+    </button>
+    <button class="btn btn-outline-primary" onclick="openPreview()">Preview Form</button>
+    <button class="btn btn-success" onclick="confirmAndReturn()">
+      ✓ Confirm &amp; Attach to Document
+    </button>
+  </div>
+
+</div>
+</main>
+
+<!-- ════════════════════════════════════════════════════════════
+     PREVIEW MODAL
+     ════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title fw-bold" id="previewModalLabel">Form Preview</h5>
+          <div class="small text-secondary" id="previewSubtitle">Review how your form will appear to users</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body px-4 py-4" id="previewModalBody">
+        <!-- Rendered dynamically -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close Preview</button>
+        <button type="button" class="btn btn-success" data-bs-dismiss="modal" onclick="confirmAndReturn()">
+          ✓ Confirm &amp; Attach to Document
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     DROPDOWN OPTIONS MODAL
+     ════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="dropdownOptionsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Dropdown Options</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-secondary mb-2">Enter each option on a new line</p>
+        <textarea class="form-control" id="dropdownOptionsInput" rows="6" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" onclick="saveDropdownOptions()">Save Options</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+var fields       = [];   // [{id, type, label, required, options}]
+var fieldIdSeq   = 0;
+var editingDropdownFieldId = null;
+
+// ── Restore existing form if coming back to edit ──────────────────────────
+(function() {
+  var raw = sessionStorage.getItem('cpBuiltForm');
+  if (!raw) return;
+  try {
+    var data = JSON.parse(raw);
+    if (data.fields && data.fields.length) {
+      fields = data.fields;
+      fieldIdSeq = fields.reduce(function(m, f) { return Math.max(m, f.id || 0); }, 0) + 1;
+    }
+    if (data.formName)  document.getElementById('fbFormName').value  = data.formName;
+    if (data.formType)  document.getElementById('fbFormType').value  = data.formType;
+    if (data.formDesc)  document.getElementById('fbFormDesc').value  = data.formDesc;
+    renderCanvas();
+  } catch(e) {}
+})();
+
+// ── Field type metadata ───────────────────────────────────────────────────
+var TYPE_META = {
+  text:      { label: 'Text Input',       badge: 'Text'      },
+  textarea:  { label: 'Text Area',        badge: 'Text Area' },
+  number:    { label: 'Number',           badge: 'Number'    },
+  date:      { label: 'Date',             badge: 'Date'      },
+  dropdown:  { label: 'Dropdown',         badge: 'Dropdown'  },
+  checkbox:  { label: 'Checkbox',         badge: 'Checkbox'  },
+  yesno:     { label: 'Yes / No',         badge: 'Yes / No'  },
+  signature: { label: 'Signature',        badge: 'Signature' },
+  section:   { label: 'Section Heading',  badge: 'Section'   },
+};
+
+// ── Add field ─────────────────────────────────────────────────────────────
+function addField(type) {
+  var meta = TYPE_META[type];
+  var field = {
+    id:       ++fieldIdSeq,
+    type:     type,
+    label:    meta.label,
+    required: (type !== 'section'),
+    options:  type === 'dropdown' ? ['Option 1', 'Option 2', 'Option 3'] : [],
+  };
+  fields.push(field);
+  renderCanvas();
+
+  // Auto-open dropdown options editor
+  if (type === 'dropdown') {
+    editingDropdownFieldId = field.id;
+    document.getElementById('dropdownOptionsInput').value = field.options.join('\n');
+    new bootstrap.Modal(document.getElementById('dropdownOptionsModal')).show();
+  }
+}
+
+// ── Remove field ──────────────────────────────────────────────────────────
+function removeField(id) {
+  fields = fields.filter(function(f) { return f.id !== id; });
+  renderCanvas();
+}
+
+// ── Move field up/down ────────────────────────────────────────────────────
+function moveField(id, dir) {
+  var idx = fields.findIndex(function(f) { return f.id === id; });
+  if (idx < 0) return;
+  var swapIdx = idx + dir;
+  if (swapIdx < 0 || swapIdx >= fields.length) return;
+  var tmp = fields[idx];
+  fields[idx] = fields[swapIdx];
+  fields[swapIdx] = tmp;
+  renderCanvas();
+}
+
+// ── Toggle required ───────────────────────────────────────────────────────
+function toggleRequired(id, checked) {
+  var f = fields.find(function(f) { return f.id === id; });
+  if (f) f.required = checked;
+}
+
+// ── Edit label ────────────────────────────────────────────────────────────
+function updateLabel(id, val) {
+  var f = fields.find(function(f) { return f.id === id; });
+  if (f) f.label = val;
+  updateFieldCount();
+}
+
+// ── Edit dropdown options ─────────────────────────────────────────────────
+function openDropdownOptions(id) {
+  var f = fields.find(function(f) { return f.id === id; });
+  if (!f) return;
+  editingDropdownFieldId = id;
+  document.getElementById('dropdownOptionsInput').value = (f.options || []).join('\n');
+  new bootstrap.Modal(document.getElementById('dropdownOptionsModal')).show();
+}
+
+function saveDropdownOptions() {
+  var f = fields.find(function(f) { return f.id === editingDropdownFieldId; });
+  if (!f) return;
+  var raw = document.getElementById('dropdownOptionsInput').value;
+  f.options = raw.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+  bootstrap.Modal.getInstance(document.getElementById('dropdownOptionsModal')).hide();
+  renderCanvas();
+}
+
+// ── Clear all ─────────────────────────────────────────────────────────────
+function clearAll() {
+  if (!confirm('Remove all fields?')) return;
+  fields = [];
+  renderCanvas();
+}
+
+// ── Render canvas ─────────────────────────────────────────────────────────
+function renderCanvas() {
+  var canvas    = document.getElementById('fieldCanvas');
+  var empty     = document.getElementById('emptyState');
+  var clearBtn  = document.getElementById('clearBtn');
+
+  if (!fields.length) {
+    canvas.innerHTML = '';
+    empty.style.display = '';
+    clearBtn.style.display = 'none';
+    updateFieldCount();
+    return;
+  }
+
+  empty.style.display = 'none';
+  clearBtn.style.display = '';
+
+  var html = '';
+  fields.forEach(function(f, idx) {
+    var isSection = f.type === 'section';
+    html += '<div class="fb-field-row' + (isSection ? ' fb-section-row' : '') + '" id="frow-' + f.id + '">';
+
+    // Drag handle
+    html += '<div class="fb-drag-handle" title="Drag to reorder">⠿</div>';
+
+    // Body
+    html += '<div class="fb-field-body">';
+
+    if (isSection) {
+      // Section heading — just an editable label
+      html += '<input class="fb-field-label-input" style="font-size:15px;color:#1a3a6e;" '
+           +  'value="' + escHtml(f.label) + '" placeholder="Section heading..." '
+           +  'oninput="updateLabel(' + f.id + ', this.value)">';
+      html += '<span class="fb-field-type-badge" style="background:#dbeafe;color:#1e40af;">Section</span>';
+    } else {
+      // Label input
+      html += '<input class="fb-field-label-input" value="' + escHtml(f.label) + '" '
+           +  'placeholder="Field label..." oninput="updateLabel(' + f.id + ', this.value)">';
+      html += '<span class="fb-field-type-badge">' + (TYPE_META[f.type] ? TYPE_META[f.type].badge : f.type) + '</span>';
+
+      // Field preview
+      html += '<div class="fb-field-preview">';
+      if (f.type === 'text' || f.type === 'number') {
+        html += '<input type="text" placeholder="' + (f.type === 'number' ? '0' : 'Field preview') + '" disabled>';
+      } else if (f.type === 'textarea') {
+        html += '<textarea rows="2" placeholder="Field preview" disabled></textarea>';
+      } else if (f.type === 'date') {
+        html += '<input type="text" placeholder="DD / MM / YYYY" disabled>';
+      } else if (f.type === 'dropdown') {
+        html += '<select disabled>';
+        (f.options || ['Option 1']).forEach(function(o) { html += '<option>' + escHtml(o) + '</option>'; });
+        html += '</select>';
+        html += '<div class="mt-1"><a href="#" class="small text-primary" style="font-size:11px;" '
+             +  'onclick="openDropdownOptions(' + f.id + ');return false;">Edit options (' + (f.options||[]).length + ')</a></div>';
+      } else if (f.type === 'checkbox') {
+        html += '<div class="d-flex gap-2 align-items-center" style="font-size:13px;">'
+             +  '<input type="checkbox" disabled class="form-check-input mt-0"> <span class="text-secondary">Checkbox field</span></div>';
+      } else if (f.type === 'yesno') {
+        html += '<div class="d-flex gap-3" style="font-size:13px;">'
+             +  '<label><input type="radio" disabled name="yn_' + f.id + '" class="form-check-input me-1"> Yes</label>'
+             +  '<label><input type="radio" disabled name="yn_' + f.id + '" class="form-check-input me-1"> No</label></div>';
+      } else if (f.type === 'signature') {
+        html += '<div class="fb-sig-placeholder">✍ Signature block — user signs here</div>';
+      }
+      html += '</div>'; // /preview
+
+      // Required toggle
+      html += '<div class="fb-required-toggle">'
+           +  '<input type="checkbox" class="form-check-input" id="req_' + f.id + '" '
+           +  (f.required ? 'checked' : '') + ' onchange="toggleRequired(' + f.id + ', this.checked)">'
+           +  '<label for="req_' + f.id + '">Required field</label>'
+           +  (f.required ? '<span class="text-danger ms-1" style="font-size:11px;">*</span>' : '')
+           +  '</div>';
+    }
+
+    html += '</div>'; // /body
+
+    // Actions
+    html += '<div class="fb-field-actions">';
+    if (idx > 0) {
+      html += '<button class="up-btn" title="Move up" onclick="moveField(' + f.id + ',-1)">↑</button>';
+    }
+    if (idx < fields.length - 1) {
+      html += '<button class="down-btn" title="Move down" onclick="moveField(' + f.id + ',1)">↓</button>';
+    }
+    html += '<button title="Remove field" onclick="removeField(' + f.id + ')">✕</button>';
+    html += '</div>'; // /actions
+
+    html += '</div>'; // /fb-field-row
+  });
+
+  canvas.innerHTML = html;
+  updateFieldCount();
+}
+
+function updateFieldCount() {
+  var nonSection = fields.filter(function(f) { return f.type !== 'section'; }).length;
+  var sections   = fields.filter(function(f) { return f.type === 'section'; }).length;
+  var label = document.getElementById('fieldCountLabel');
+  var parts = [];
+  if (nonSection) parts.push(nonSection + ' field' + (nonSection !== 1 ? 's' : ''));
+  if (sections)   parts.push(sections + ' section' + (sections !== 1 ? 's' : ''));
+  label.textContent = parts.length ? parts.join(', ') + ' added' : '0 fields added';
+}
+
+// ── Preview modal ─────────────────────────────────────────────────────────
+function openPreview() {
+  var formName = document.getElementById('fbFormName').value.trim() || 'Untitled Form';
+  document.getElementById('previewModalLabel').textContent = formName;
+  document.getElementById('previewSubtitle').textContent =
+    'Preview — ' + fields.filter(function(f){return f.type!=='section';}).length + ' fields';
+
+  var html = '';
+  if (!fields.length) {
+    html = '<div class="text-center text-secondary py-4">No fields added yet.</div>';
+  } else {
+    fields.forEach(function(f) {
+      if (f.type === 'section') {
+        html += '<div class="preview-section-head">' + escHtml(f.label) + '</div>';
+        return;
+      }
+      html += '<div class="preview-field-wrap">';
+      html += '<label>' + escHtml(f.label) + (f.required ? ' <span class="text-danger">*</span>' : '') + '</label>';
+      if (f.type === 'text' || f.type === 'number') {
+        html += '<input type="' + f.type + '" placeholder="Enter ' + escHtml(f.label.toLowerCase()) + '">';
+      } else if (f.type === 'textarea') {
+        html += '<textarea rows="3" placeholder="Enter ' + escHtml(f.label.toLowerCase()) + '"></textarea>';
+      } else if (f.type === 'date') {
+        html += '<input type="date">';
+      } else if (f.type === 'dropdown') {
+        html += '<select><option value="">-- Select --</option>';
+        (f.options || []).forEach(function(o) { html += '<option>' + escHtml(o) + '</option>'; });
+        html += '</select>';
+      } else if (f.type === 'checkbox') {
+        html += '<div class="form-check"><input class="form-check-input" type="checkbox" id="pv_' + f.id + '">'
+             +  '<label class="form-check-label" for="pv_' + f.id + '">' + escHtml(f.label) + '</label></div>';
+      } else if (f.type === 'yesno') {
+        html += '<div class="d-flex gap-4">'
+             +  '<div class="form-check"><input class="form-check-input" type="radio" name="pvyn_' + f.id + '">'
+             +  '<label class="form-check-label">Yes</label></div>'
+             +  '<div class="form-check"><input class="form-check-input" type="radio" name="pvyn_' + f.id + '">'
+             +  '<label class="form-check-label">No</label></div></div>';
+      } else if (f.type === 'signature') {
+        html += '<div class="sig-box">✍ Sign here</div>';
+      }
+      html += '</div>';
+    });
+  }
+
+  document.getElementById('previewModalBody').innerHTML = html;
+  new bootstrap.Modal(document.getElementById('previewModal')).show();
+}
+
+// ── Validate form name (basic uniqueness placeholder) ─────────────────────
+document.getElementById('fbFormName').addEventListener('input', function() {
+  var val = this.value.trim();
+  var hint = document.getElementById('fbNameValidation');
+  if (!val) {
+    hint.textContent = 'Form name is required.';
+    hint.className = 'form-text text-danger';
+  } else {
+    // In real PHP: async AJAX check for uniqueness
+    hint.textContent = '✓ Name looks good — uniqueness confirmed on save.';
+    hint.className = 'form-text text-success';
+  }
+});
+
+// ── Confirm & return to create-document ──────────────────────────────────
+function confirmAndReturn() {
+  var formName = document.getElementById('fbFormName').value.trim();
+  if (!formName) {
+    alert('Please enter a Form / Checklist Name before confirming.');
+    document.getElementById('fbFormName').focus();
+    return;
+  }
+  if (!fields.length) {
+    alert('Please add at least one field to your form before confirming.');
+    return;
+  }
+
+  var sections = 0;
+  fields.forEach(function(f) { if (f.type === 'section') sections++; });
+
+  var data = {
+    formName:  formName,
+    formType:  document.getElementById('fbFormType').value.trim(),
+    formDesc:  document.getElementById('fbFormDesc').value.trim(),
+    fields:    fields,
+    sections:  sections,
+    savedAt:   new Date().toISOString(),
+  };
+
+  sessionStorage.setItem('cpBuiltForm', JSON.stringify(data));
+  window.location.href = 'create-document.html';
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Initial render
+renderCanvas();
+</script>
+</body>
+</html>
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - Submit for Review</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.html">Dashboard</a></li>
+        
+        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.html">Create Document</a></li><li><a class="dropdown-item" href="update-document.html">Update Document</a></li><li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li><li><a class="dropdown-item" href="repository.html">Repository</a></li></ul></li>
+        
+        
+        
+        
+        
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
+        
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small">QA Admin</span><a class="nav-link px-0" href="notifications.html">Notifications</a><span class="navbar-text small">Profile</span></div>
+    </div>
+  </div>
+</nav>
+<main class="app-shell">
+<div class="content-wrap px-4 py-4 mx-auto">
+<div class="mb-4">
+<h1 class="page-title mb-2">Submit for Review</h1>
+<p class="page-subtitle mb-0">Send the document into workflow for formal review and approval.</p>
+</div>
+<div class="row g-3">
+<div class="col-lg-8">
+<div class="card cp-card"><div class="card-body">
+<h2 class="card-title mb-1">Submission Summary</h2>
+<p class="card-subtitle mb-3">Review all key data before status changes to Pending Approval.</p>
+<div class="table-responsive">
+<table class="table">
+<tbody>
+<tr><th class="w-25">Document ID</th><td>SOP-104-CAPA-01</td></tr>
+<tr><th>Type</th><td>SOP</td></tr>
+<tr><th>Owner</th><td>Pradeep</td></tr>
+<tr><th>Approver</th><td>QA Head</td></tr>
+<tr><th>Effective Date</th><td>15-Apr-2026</td></tr>
+<tr><th>Review Date</th><td>15-Apr-2027</td></tr>
+</tbody>
+</table>
+</div>
+<div class="d-flex gap-2">
+<button class="btn btn-outline-secondary">Back</button>
+<button class="btn btn-success">Confirm Submit</button>
+</div>
+</div></div>
+</div>
+<div class="col-lg-4">
+<div class="card cp-card"><div class="card-body">
+<h2 class="card-title mb-1">System Actions After Submit</h2>
+<ul class="small text-secondary note-list mb-0">
+<li>Status changes to Pending Approval.</li>
+<li>Email notification sent to approver.</li>
+<li>Submission event written to audit trail.</li>
+<li>Editable content locks based on workflow rules.</li>
+</ul>
+</div></div>
+</div>
+</div>
+</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - Update Document</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    /* Locked / read-only field visual */
+    .field-locked {
+      background: #f5f7fa !important;
+      color: #6b7280 !important;
+      cursor: not-allowed;
+    }
+    /* Version badge strip */
+    .version-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: #f0f4ff;
+      border: 1px solid #c7d7f8;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .version-strip .vs-label { color: #6b7280; }
+    .version-strip .vs-val   { font-weight: 700; color: #1a3a6e; }
+    .version-strip .vs-arrow { color: #9ca3af; font-size: 16px; }
+    .version-strip .vs-new   { font-weight: 700; color: #16a34a; font-size: 15px; }
+    /* Selected document info panel */
+    #docInfoPanel {
+      background: #f8fafc;
+      border: 1px solid #dde3ec;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+    }
+    #docInfoPanel .di-id   { font-weight: 700; color: #2563eb; font-size: 14px; }
+    #docInfoPanel .di-meta { color: #6b7280; margin-top: 2px; }
+    /* Placeholder state for second dropdown */
+    select:disabled { background: #f5f7fa; color: #aaa; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
+        
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="app-shell">
+<div class="content-wrap px-4 py-4 mx-auto">
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Update Controlled Document</h1>
+    <p class="page-subtitle mb-0">Select the document you want to update. All existing details will load automatically — only the fields you need to change should be edited.</p>
+  </div>
+
+  <!-- Action bar -->
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <span class="badge badge-soft-info">Under Review</span>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary" href="#">Cancel</a>
+      <a class="btn btn-outline-primary" href="#">Save Draft</a>
+      <a class="btn btn-success" href="submit-review.html">Submit for Review</a>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- ── Left column ── -->
+    <div class="col-lg-8">
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Document Selection</h2>
+          <p class="card-subtitle mb-3">Select the document type first, then choose the specific document to update.</p>
+
+          <div class="row g-3 mb-3">
+
+            <!-- Step 1: Type -->
+            <div class="col-md-6">
+              <label class="form-label">
+                Step 1 — Document Type <span class="text-danger">*</span>
+              </label>
+              <select class="form-select" id="docTypeSelect" onchange="onTypeChange(this.value)">
+                <option value="">-- Select Type --</option>
+                <option value="SOP">SOP</option>
+                <option value="Policy">Policy</option>
+                <option value="Guidance">Guidance</option>
+                <option value="Form">Form</option>
+              </select>
+              <div class="form-text">Only Effective documents will appear in the next dropdown.</div>
+            </div>
+
+            <!-- Step 2: Document -->
+            <div class="col-md-6">
+              <label class="form-label">
+                Step 2 — Select Document <span class="text-danger">*</span>
+              </label>
+              <select class="form-select" id="docSelect" disabled onchange="onDocSelect(this.value)">
+                <option value="">-- Select Type first --</option>
+              </select>
+              <div class="form-text" id="docSelectHint">Choose a document type above to populate this list.</div>
+            </div>
+
+          </div>
+
+          <!-- Selected document info strip (hidden until doc selected) -->
+          <div id="docInfoPanel" class="d-none mb-1">
+            <div class="di-id" id="diId">—</div>
+            <div class="di-meta" id="diMeta">—</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── Document Information (hidden until a doc is selected) ── -->
+      <div class="card cp-card mb-3 d-none" id="docDetailsCard">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Document Information</h2>
+          <p class="card-subtitle mb-3">Existing values are pre-filled. Edit only what needs to change in this version.</p>
+
+          <div class="row g-3">
+
+            <!-- Document ID — fully locked -->
+            <div class="col-md-6">
+              <label class="form-label">Document ID</label>
+              <input class="form-control field-locked" id="fDocId" readonly>
+              <div class="form-text">Auto-generated — cannot be changed.</div>
+            </div>
+
+            <!-- Document Title / Topic — editable -->
+            <div class="col-md-6">
+              <label class="form-label">Document Title / Topic</label>
+              <input class="form-control" id="fDocTopic">
+            </div>
+
+            <!-- Current version — locked -->
+            <div class="col-md-6">
+              <label class="form-label">Current Version</label>
+              <input class="form-control field-locked" id="fCurrentVersion" readonly>
+              <div class="form-text">The version currently in effect.</div>
+            </div>
+
+            <!-- New version — locked, auto-calculated -->
+            <div class="col-md-6">
+              <label class="form-label">New Version <span class="text-success">(auto)</span></label>
+              <input class="form-control field-locked" id="fNewVersion" readonly>
+              <div class="form-text">System generated — incremented automatically.</div>
+            </div>
+
+            <!-- Version visual strip -->
+            <div class="col-12">
+              <div class="version-strip" id="versionStrip">
+                <span class="vs-label">Current:</span>
+                <span class="vs-val" id="vsCurrentBadge">—</span>
+                <span class="vs-arrow">→</span>
+                <span class="vs-label">New version after update:</span>
+                <span class="vs-new" id="vsNewBadge">—</span>
+              </div>
+            </div>
+
+            <!-- Owner — editable -->
+            <div class="col-md-6">
+              <label class="form-label">Owner</label>
+              <select class="form-select" id="fOwner">
+                <option>Pradeep</option>
+                <option>QA Manager</option>
+                <option>Ariharan</option>
+                <option>Kavin</option>
+              </select>
+            </div>
+
+            <!-- Approver — name + designation -->
+            <div class="col-md-6">
+              <label class="form-label">Approver <span class="text-danger">*</span></label>
+              <select class="form-select" id="fApprover">
+                <option value="">-- Select Approver --</option>
+                <option value="ramesh_qa_head">Ramesh — QA Head</option>
+                <option value="priya_compliance">Priya — Compliance Manager</option>
+                <option value="deepa_qa_admin">Deepa — QA Admin</option>
+                <option value="ariharan_qa_mgr">Ariharan — QA Manager</option>
+              </select>
+              <div class="form-text">Creator cannot select themselves as approver.</div>
+            </div>
+
+            <!-- Effective Date -->
+            <div class="col-md-6">
+              <label class="form-label">Effective Date <span class="text-danger">*</span></label>
+              <input class="form-control" id="fEffectiveDate" type="date">
+            </div>
+
+            <!-- Review Date -->
+            <div class="col-md-6">
+              <label class="form-label">Review Date <span class="text-danger">*</span></label>
+              <input class="form-control" id="fReviewDate" type="date">
+            </div>
+
+            <!-- Change Summary — correct label for update context -->
+            <div class="col-12">
+              <label class="form-label">Change Summary <span class="text-danger">*</span></label>
+              <textarea class="form-control" id="fChangeSummary" placeholder="Describe what changed in this version and why — e.g. updated escalation path in Section 3, revised approval thresholds" rows="3"></textarea>
+              <div class="form-text">Mandatory — used in the approval notification, audit trail, and version history.</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Document Content (hidden until a doc is selected) ── -->
+      <div class="card cp-card d-none" id="contentCard">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Updated Document Content</h2>
+          <p class="card-subtitle mb-3">Replace or revise the document content for the new version.</p>
+          <ul class="nav nav-pills gap-2 mb-3">
+            <li class="nav-item"><a class="nav-link active tab-pill" href="#">Rich Text Editor</a></li>
+            <li class="nav-item"><a class="nav-link tab-pill" href="#">File Upload</a></li>
+          </ul>
+          <div class="mb-3">
+            <label class="form-label">Document Body</label>
+            <textarea class="form-control" placeholder="Enter updated document content here" rows="9"></textarea>
+          </div>
+          <div class="upload-box p-4 text-center small text-secondary">
+            Drag and drop file here or click to browse.<br/>
+            Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /col-lg-8 -->
+
+    <!-- ── Right column ── -->
+    <div class="col-lg-4">
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Submission Readiness</h2>
+          <p class="card-subtitle mb-3">Verify required information before sending for approval.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Document selected from effective repository.</li>
+            <li>Version auto-incremented by system.</li>
+            <li>Change Summary entered.</li>
+            <li>Approver selected and validated.</li>
+            <li>Email notification will be generated on submit.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card cp-card">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Audit Controls</h2>
+          <p class="card-subtitle mb-3">Key controls expected for an audit-grade process.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Previous version archived automatically on submit.</li>
+            <li>Created by / updated on / IP address captured.</li>
+            <li>Draft saves logged with timestamp.</li>
+            <li>Old and new field values stored for every change.</li>
+            <li>Immutable audit record for every workflow action.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
+</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── Sample data — replace with PHP echo of JSON from DB ───────────────────
+// Structure: { TYPE: [ {id, topic, number, version, owner, effectiveDate, reviewDate} ] }
+var EFFECTIVE_DOCS = {
+  SOP: [
+    { id: 'SOP-021-Training-V1',      topic: 'Training Procedure',          number: '021', version: 'V1', owner: 'Ariharan',  effectiveDate: '2026-03-01', reviewDate: '2028-03-01' },
+    { id: 'SOP-104-CAPA-V3',          topic: 'CAPA Management',             number: '104', version: 'V3', owner: 'Pradeep',   effectiveDate: '2026-01-15', reviewDate: '2028-01-15' },
+    { id: 'SOP-007-DevControl-V2',    topic: 'Deviation Control',           number: '007', version: 'V2', owner: 'Kavin',     effectiveDate: '2025-11-10', reviewDate: '2027-11-10' },
+  ],
+  Policy: [
+    { id: 'POL-004-Quality-V2',       topic: 'Quality Policy',              number: '004', version: 'V2', owner: 'Kavin',     effectiveDate: '2026-01-15', reviewDate: '2028-01-15' },
+    { id: 'POL-011-DataIntegrity-V1', topic: 'Data Integrity Policy',       number: '011', version: 'V1', owner: 'Pradeep',   effectiveDate: '2025-09-01', reviewDate: '2027-09-01' },
+  ],
+  Guidance: [
+    { id: 'GUI-003-CAPA-V1',          topic: 'CAPA Workflow Guidance',      number: '003', version: 'V1', owner: 'Ariharan',  effectiveDate: '2026-02-01', reviewDate: '2028-02-01' },
+    { id: 'GUI-008-Audit-V2',         topic: 'Internal Audit Guidance',     number: '008', version: 'V2', owner: 'Deepa',     effectiveDate: '2025-10-20', reviewDate: '2027-10-20' },
+  ],
+  Form: [
+    { id: 'FRM-010-Inspection-V3',    topic: 'Inspection Form',             number: '010', version: 'V3', owner: 'Priya',     effectiveDate: '2025-11-20', reviewDate: '2027-11-20' },
+    { id: 'FRM-015-Training-V1',      topic: 'Training Acknowledgement',    number: '015', version: 'V1', owner: 'Ariharan',  effectiveDate: '2026-03-10', reviewDate: '2028-03-10' },
+  ]
+};
+
+// ── Step 1: Type selected → populate document dropdown ────────────────────
+function onTypeChange(type) {
+  var docSel  = document.getElementById('docSelect');
+  var hint    = document.getElementById('docSelectHint');
+
+  // Reset downstream
+  resetDocDetails();
+
+  if (!type) {
+    docSel.disabled = true;
+    docSel.innerHTML = '<option value="">-- Select Type first --</option>';
+    hint.textContent = 'Choose a document type above to populate this list.';
+    return;
+  }
+
+  var docs = EFFECTIVE_DOCS[type] || [];
+  docSel.innerHTML = '<option value="">-- Select a ' + type + ' document --</option>';
+  docs.forEach(function(doc) {
+    var opt = document.createElement('option');
+    opt.value = doc.id;
+    opt.textContent = doc.id + '  —  ' + doc.topic;
+    docSel.appendChild(opt);
+  });
+
+  docSel.disabled = false;
+  hint.textContent = docs.length + ' effective ' + type + ' document' + (docs.length !== 1 ? 's' : '') + ' available.';
+}
+
+// ── Step 2: Document selected → auto-fill all fields ─────────────────────
+function onDocSelect(docId) {
+  resetDocDetails();
+  if (!docId) return;
+
+  var type = document.getElementById('docTypeSelect').value;
+  var docs = EFFECTIVE_DOCS[type] || [];
+  var doc  = docs.find(function(d) { return d.id === docId; });
+  if (!doc) return;
+
+  // Calculate next version
+  var newVersion = incrementVersion(doc.version);
+
+  // Show info strip
+  var panel = document.getElementById('docInfoPanel');
+  document.getElementById('diId').textContent   = doc.id;
+  document.getElementById('diMeta').textContent =
+    'Topic: ' + doc.topic +
+    '  ·  Owner: ' + doc.owner +
+    '  ·  Effective: ' + formatDate(doc.effectiveDate);
+  panel.classList.remove('d-none');
+
+  // Fill fields
+  document.getElementById('fDocId').value        = doc.id;
+  document.getElementById('fDocTopic').value      = doc.topic;
+  document.getElementById('fCurrentVersion').value = doc.version;
+  document.getElementById('fNewVersion').value    = newVersion;
+
+  // Version visual strip
+  document.getElementById('vsCurrentBadge').textContent = doc.version;
+  document.getElementById('vsNewBadge').textContent      = newVersion;
+
+  // Owner
+  setSelectValue('fOwner', doc.owner);
+
+  // Dates — pre-fill effective with today, review with +2 years
+  var today = new Date();
+  document.getElementById('fEffectiveDate').value = toInputDate(today);
+  var reviewDate = new Date(today);
+  reviewDate.setFullYear(reviewDate.getFullYear() + 2);
+  document.getElementById('fReviewDate').value = toInputDate(reviewDate);
+
+  // Show detail cards
+  document.getElementById('docDetailsCard').classList.remove('d-none');
+  document.getElementById('contentCard').classList.remove('d-none');
+}
+
+// ── Reset when type or doc changes ────────────────────────────────────────
+function resetDocDetails() {
+  document.getElementById('docInfoPanel').classList.add('d-none');
+  document.getElementById('docDetailsCard').classList.add('d-none');
+  document.getElementById('contentCard').classList.add('d-none');
+  ['fDocId','fDocTopic','fCurrentVersion','fNewVersion',
+   'fEffectiveDate','fReviewDate','fChangeSummary'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('vsCurrentBadge').textContent = '—';
+  document.getElementById('vsNewBadge').textContent      = '—';
+}
+
+// ── Version increment logic ────────────────────────────────────────────────
+// Handles V1→V2, V3→V4, V09→V10, etc.
+function incrementVersion(ver) {
+  var match = ver.match(/^([A-Za-z]*)(\d+)$/);
+  if (!match) return ver + '-Rev2';
+  var prefix = match[1];
+  var num    = parseInt(match[2], 10);
+  var newNum = num + 1;
+  // Preserve zero-padding if original had it (e.g. V01→V02)
+  var padded = match[2].length > 1
+    ? String(newNum).padStart(match[2].length, '0')
+    : String(newNum);
+  return prefix + padded;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function setSelectValue(id, value) {
+  var sel = document.getElementById(id);
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].text === value || sel.options[i].value === value) {
+      sel.selectedIndex = i;
+      return;
+    }
+  }
+}
+
+function toInputDate(d) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function formatDate(str) {
+  if (!str) return '—';
+  var d = new Date(str);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+</script>
+</body>
+</html>
+
+ <!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - Repository</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item active" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="app-shell">
+<div class="content-wrap px-4 py-4 mx-auto">
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Effective Documents Repository</h1>
+    <p class="page-subtitle mb-0">Organisation-wide library of all approved and effective controlled documents. Read-only.</p>
+  </div>
+
+  <!-- Summary KPI strip -->
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6 col-xl-3">
+      <div class="card cp-card"><div class="card-body py-3 px-4 d-flex justify-content-between align-items-center">
+        <div><div class="section-kicker mb-1">Total Effective</div><div class="stat-value" style="font-size:1.6rem;">211</div></div>
+        <span style="font-size:1.8rem;">📋</span>
+      </div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card cp-card"><div class="card-body py-3 px-4 d-flex justify-content-between align-items-center">
+        <div><div class="section-kicker mb-1">Overdue Review</div><div class="stat-value" style="font-size:1.6rem;color:#dc2626;">7</div></div>
+        <span style="font-size:1.8rem;">⚠️</span>
+      </div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card cp-card"><div class="card-body py-3 px-4 d-flex justify-content-between align-items-center">
+        <div><div class="section-kicker mb-1">Added This Month</div><div class="stat-value" style="font-size:1.6rem;">12</div></div>
+        <span style="font-size:1.8rem;">✅</span>
+      </div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card cp-card"><div class="card-body py-3 px-4 d-flex justify-content-between align-items-center">
+        <div><div class="section-kicker mb-1">Pending Retirement</div><div class="stat-value" style="font-size:1.6rem;">3</div></div>
+        <span style="font-size:1.8rem;">🗄️</span>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="card cp-card mb-3">
+    <div class="card-body py-3">
+      <div class="d-flex gap-2 flex-wrap align-items-end">
+        <div>
+          <label class="form-label mb-1">Search</label>
+          <input type="text" class="form-control form-control-sm" id="repoSearch" placeholder="Search ID or title..." style="max-width:220px;" oninput="applyFilters()">
+        </div>
+        <div>
+          <label class="form-label mb-1">Type</label>
+          <select class="form-select form-select-sm" id="repoType" style="max-width:140px;" onchange="applyFilters()">
+            <option value="">All Types</option>
+            <option>SOP</option>
+            <option>Policy</option>
+            <option>Guidance</option>
+            <option>Form</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label mb-1">Department</label>
+          <select class="form-select form-select-sm" id="repoDept" style="max-width:180px;" onchange="applyFilters()">
+            <option value="">All Departments</option>
+            <option>Quality Assurance</option>
+            <option>Operations</option>
+            <option>Human Resources</option>
+            <option>Information Technology</option>
+            <option>Finance</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label mb-1">Review Status</label>
+          <select class="form-select form-select-sm" id="repoReview" style="max-width:160px;" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="overdue">Overdue</option>
+            <option value="current">Current</option>
+          </select>
+        </div>
+        <div class="d-flex gap-2 ms-auto">
+          <button class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">Reset</button>
+          <button class="btn btn-sm btn-outline-primary">&#11015; Export PDF</button>
+          <button class="btn btn-sm btn-outline-primary">&#11015; Export Excel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card cp-card" style="padding:0;">
+    <table class="table mb-0" id="repoTable">
+      <thead>
+        <tr>
+          <th>Document ID</th>
+          <th>Title</th>
+          <th>Type</th>
+          <th>Version</th>
+          <th>Department</th>
+          <th>Owner</th>
+          <th>Effective Date</th>
+          <th>Next Review</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="repoBody"></tbody>
+    </table>
+    <div class="text-center text-secondary py-4 small d-none" id="repoEmpty">No documents found.</div>
+    <div class="px-4 py-2 border-top d-flex justify-content-between align-items-center">
+      <span class="small text-secondary" id="repoCount"></span>
+      <span class="small" style="color:#dc2626;font-weight:600;">&#128274; Read-only — no documents can be edited or deleted from this view.</span>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+var DOCS = [
+  { id:'SOP-104-CAPA-V3',       title:'CAPA Management',              type:'SOP',     ver:'V3', dept:'Quality Assurance',      owner:'Pradeep',   effective:'2026-01-15', review:'2028-01-15', overdue:false },
+  { id:'SOP-021-Training-V1',   title:'Training Procedure',           type:'SOP',     ver:'V1', dept:'Human Resources',        owner:'Ariharan',  effective:'2026-03-01', review:'2028-03-01', overdue:false },
+  { id:'SOP-007-DevControl-V2', title:'Deviation Control',            type:'SOP',     ver:'V2', dept:'Operations',             owner:'Kavin',     effective:'2025-11-10', review:'2025-10-10', overdue:true  },
+  { id:'POL-004-Quality-V2',    title:'Quality Policy',               type:'Policy',  ver:'V2', dept:'Quality Assurance',      owner:'Kavin',     effective:'2026-01-15', review:'2028-01-15', overdue:false },
+  { id:'POL-011-DataInt-V1',    title:'Data Integrity Policy',        type:'Policy',  ver:'V1', dept:'Information Technology', owner:'Pradeep',   effective:'2025-09-01', review:'2025-09-01', overdue:true  },
+  { id:'POL-021-Security-V2',   title:'Information Security Policy',  type:'Policy',  ver:'V2', dept:'Information Technology', owner:'Anita Rao', effective:'2025-08-15', review:'2025-08-15', overdue:true  },
+  { id:'GUI-003-CAPA-V1',       title:'CAPA Workflow Guidance',       type:'Guidance',ver:'V1', dept:'Quality Assurance',      owner:'Ariharan',  effective:'2026-02-01', review:'2028-02-01', overdue:false },
+  { id:'GUI-008-Audit-V2',      title:'Internal Audit Guidance',      type:'Guidance',ver:'V2', dept:'Quality Assurance',      owner:'Deepa',     effective:'2025-10-20', review:'2025-10-20', overdue:true  },
+  { id:'GUI-089-DMS-V4',        title:'DMS Access Guidance',          type:'Guidance',ver:'V4', dept:'Information Technology', owner:'Pradeep',   effective:'2026-02-09', review:'2027-02-09', overdue:false },
+  { id:'FRM-010-Inspection-V3', title:'Inspection Form',              type:'Form',    ver:'V3', dept:'Operations',             owner:'Priya',     effective:'2025-11-20', review:'2025-11-20', overdue:true  },
+  { id:'FRM-015-Training-V1',   title:'Training Acknowledgement',     type:'Form',    ver:'V1', dept:'Human Resources',        owner:'Ariharan',  effective:'2026-03-10', review:'2028-03-10', overdue:false },
+];
+
+function applyFilters() {
+  var q      = document.getElementById('repoSearch').value.toLowerCase();
+  var type   = document.getElementById('repoType').value;
+  var dept   = document.getElementById('repoDept').value;
+  var review = document.getElementById('repoReview').value;
+
+  var filtered = DOCS.filter(function(d) {
+    return (!q      || d.id.toLowerCase().includes(q) || d.title.toLowerCase().includes(q)) &&
+           (!type   || d.type === type) &&
+           (!dept   || d.dept === dept) &&
+           (!review || (review === 'overdue' ? d.overdue : !d.overdue));
+  });
+  renderTable(filtered);
+}
+
+function resetFilters() {
+  document.getElementById('repoSearch').value = '';
+  document.getElementById('repoType').value   = '';
+  document.getElementById('repoDept').value   = '';
+  document.getElementById('repoReview').value = '';
+  renderTable(DOCS);
+}
+
+function renderTable(data) {
+  var body  = document.getElementById('repoBody');
+  var empty = document.getElementById('repoEmpty');
+  var count = document.getElementById('repoCount');
+
+  count.textContent = 'Showing ' + data.length + ' of ' + DOCS.length + ' documents';
+
+  if (!data.length) { body.innerHTML = ''; empty.classList.remove('d-none'); return; }
+  empty.classList.add('d-none');
+
+  body.innerHTML = data.map(function(d) {
+    var reviewColor = d.overdue ? 'color:#dc2626;font-weight:600;' : 'color:#6b7280;';
+    var statusBadge = d.overdue
+      ? '<span class="badge badge-soft-danger">Overdue Review</span>'
+      : '<span class="badge badge-soft-success">Effective</span>';
+    return '<tr>' +
+      '<td class="fw-semibold" style="color:#2563eb;font-size:13px;">' + d.id + '</td>' +
+      '<td style="font-size:13px;">' + d.title + '</td>' +
+      '<td><span class="badge badge-soft-info">' + d.type + '</span></td>' +
+      '<td style="font-size:13px;">' + d.ver + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + d.dept + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + d.owner + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + fmt(d.effective) + '</td>' +
+      '<td style="font-size:12px;' + reviewColor + '">' + fmt(d.review) + '</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '<td style="white-space:nowrap;">' +
+        '<button class="btn btn-sm btn-outline-primary"   style="height:28px;padding:0 10px;font-size:12px;">View</button>&nbsp;' +
+        '<button class="btn btn-sm btn-outline-secondary" style="height:28px;padding:0 10px;font-size:12px;">&#11015; PDF</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function fmt(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+}
+
+renderTable(DOCS);
+</script>
+</body>
+</html>
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - Audit Trail</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    .audit-tab-strip {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid #e0e7ef;
+      margin-bottom: 20px;
+    }
+    .audit-tab {
+      padding: 10px 22px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b7280;
+      border: none;
+      background: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+    .audit-tab:hover  { color: #1a3a6e; }
+    .audit-tab.active { color: #1a3a6e; border-bottom-color: #2563eb; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item active" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="app-shell">
+<div class="content-wrap px-4 py-4 mx-auto">
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Audit Trail</h1>
+    <p class="page-subtitle mb-0">Immutable records of all document creation, approval, denial and comment activity. Read-only — cannot be edited or deleted by any role.</p>
+  </div>
+
+  <!-- ── Tab strip ── -->
+  <div class="audit-tab-strip">
+    <button class="audit-tab active" id="tabCreation" onclick="switchTab('creation')">Document Creation</button>
+    <button class="audit-tab"        id="tabApproval" onclick="switchTab('approval')">Approval &amp; Denial</button>
+    <button class="audit-tab"        id="tabComments" onclick="switchTab('comments')">Approver Comments</button>
+  </div>
+
+  <!-- ── Shared filter bar ── -->
+  <div class="card cp-card mb-3">
+    <div class="card-body py-3">
+      <div class="d-flex gap-2 flex-wrap align-items-end">
+        <div>
+          <label class="form-label mb-1">From</label>
+          <input class="form-control form-control-sm" type="date" id="filterFrom" style="max-width:150px;">
+        </div>
+        <div>
+          <label class="form-label mb-1">To</label>
+          <input class="form-control form-control-sm" type="date" id="filterTo" style="max-width:150px;">
+        </div>
+        <div>
+          <label class="form-label mb-1">User</label>
+          <select class="form-select form-select-sm" id="filterUser" style="max-width:180px;">
+            <option value="">All Users</option>
+            <option>Pradeep</option>
+            <option>QA Head</option>
+            <option>Compliance Mgr</option>
+            <option>Megha S</option>
+            <option>Ariharan</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label mb-1">Document ID</label>
+          <input class="form-control form-control-sm" type="text" id="filterDocId" placeholder="e.g. SOP-104" style="max-width:160px;">
+        </div>
+        <div class="d-flex gap-2 ms-auto">
+          <button class="btn btn-primary btn-sm" onclick="applyFilters()">Apply</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="resetFilters()">Reset</button>
+          <button class="btn btn-outline-primary btn-sm" onclick="exportPDF()">&#11015; Export PDF</button>
+          <button class="btn btn-outline-primary btn-sm" onclick="exportExcel()">&#11015; Export Excel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       TAB 1 — DOCUMENT CREATION
+       ══════════════════════════════════════ -->
+  <div id="panelCreation">
+    <div class="card cp-card" style="padding:0;">
+      <div class="px-4 py-3 border-bottom">
+        <div class="fw-bold" style="color:#1a3a6e;font-size:14px;">Document Creation Events</div>
+        <div class="text-secondary" style="font-size:12px;">Captures: who created, when, which document, IP address.</div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Document ID</th>
+              <th>Version</th>
+              <th>IP Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td style="font-size:12px;color:#6b7280;">07 Apr 2026 10:42</td><td>Pradeep</td><td><span class="badge badge-soft-info">Created</span></td><td class="fw-semibold text-primary">SOP-118-QA-01</td><td>V1</td><td style="font-size:12px;color:#6b7280;">10.10.1.21</td></tr>
+            <tr><td style="font-size:12px;color:#6b7280;">07 Apr 2026 10:46</td><td>Pradeep</td><td><span class="badge badge-soft-secondary">Draft Saved</span></td><td class="fw-semibold text-primary">SOP-118-QA-01</td><td>V1</td><td style="font-size:12px;color:#6b7280;">10.10.1.21</td></tr>
+            <tr><td style="font-size:12px;color:#6b7280;">06 Apr 2026 09:15</td><td>Ariharan</td><td><span class="badge badge-soft-info">Created</span></td><td class="fw-semibold text-primary">POL-011-DI-01</td><td>V1</td><td style="font-size:12px;color:#6b7280;">10.10.1.33</td></tr>
+            <tr><td style="font-size:12px;color:#6b7280;">06 Apr 2026 09:22</td><td>Ariharan</td><td><span class="badge badge-soft-secondary">Draft Saved</span></td><td class="fw-semibold text-primary">POL-011-DI-01</td><td>V1</td><td style="font-size:12px;color:#6b7280;">10.10.1.33</td></tr>
+            <tr><td style="font-size:12px;color:#6b7280;">05 Apr 2026 14:05</td><td>Kavin</td><td><span class="badge badge-soft-info">Created</span></td><td class="fw-semibold text-primary">GUI-003-CAPA-V1</td><td>V1</td><td style="font-size:12px;color:#6b7280;">10.10.1.44</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="px-4 py-2 border-top" style="font-size:12px;color:#dc2626;font-weight:600;">
+        &#128274; Read-only — records cannot be edited or deleted by any role including Super Admin.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       TAB 2 — APPROVAL & DENIAL
+       ══════════════════════════════════════ -->
+  <div id="panelApproval" class="d-none">
+    <div class="card cp-card" style="padding:0;">
+      <div class="px-4 py-3 border-bottom">
+        <div class="fw-bold" style="color:#1a3a6e;font-size:14px;">Approval &amp; Denial Events</div>
+        <div class="text-secondary" style="font-size:12px;">Captures: approver, meaning, full reason, electronic signature evidence, IP address.</div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Meaning</th>
+              <th>Document ID</th>
+              <th>Version</th>
+              <th>Reason</th>
+              <th>IP Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">07 Apr 2026 15:44</td>
+              <td>QA Head</td>
+              <td><span class="badge badge-soft-success">Approved</span></td>
+              <td class="fw-semibold text-primary">SOP-104-CAPA-03</td>
+              <td>V3</td>
+              <td style="font-size:12px;color:#555;">Meets all quality requirements. Section 4 updated correctly.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.10</td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">06 Apr 2026 11:18</td>
+              <td>Compliance Mgr</td>
+              <td><span class="badge badge-soft-danger">Denied</span></td>
+              <td class="fw-semibold text-primary">POL-021-SEC-02</td>
+              <td>V2</td>
+              <td style="font-size:12px;color:#555;">References in section 3 need updating before approval.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.15</td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">05 Apr 2026 09:30</td>
+              <td>QA Head</td>
+              <td><span class="badge badge-soft-success">Approved</span></td>
+              <td class="fw-semibold text-primary">GUI-003-CAPA-V1</td>
+              <td>V1</td>
+              <td style="font-size:12px;color:#555;">Guidance document is complete and accurate.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.10</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="px-4 py-2 border-top" style="font-size:12px;color:#dc2626;font-weight:600;">
+        &#128274; Read-only — records cannot be edited or deleted by any role including Super Admin.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       TAB 3 — APPROVER COMMENTS
+       ══════════════════════════════════════ -->
+  <div id="panelComments" class="d-none">
+    <div class="card cp-card" style="padding:0;">
+      <div class="px-4 py-3 border-bottom">
+        <div class="fw-bold" style="color:#1a3a6e;font-size:14px;">Approver Comment Events</div>
+        <div class="text-secondary" style="font-size:12px;">Captures: who commented, when, full comment text, linked document ID and version.</div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Document ID</th>
+              <th>Version</th>
+              <th>Comment</th>
+              <th>IP Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">07 Apr 2026 11:15</td>
+              <td>Megha S</td>
+              <td class="fw-semibold text-primary">POL-021-SEC-02</td>
+              <td>V2</td>
+              <td style="font-size:12px;color:#555;">Please clarify owner responsibilities in section 2.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.22</td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">07 Apr 2026 12:02</td>
+              <td>QA Head</td>
+              <td class="fw-semibold text-primary">SOP-104-CAPA-03</td>
+              <td>V3</td>
+              <td style="font-size:12px;color:#555;">Add training impact note to section 5.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.10</td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">06 Apr 2026 14:30</td>
+              <td>Compliance Mgr</td>
+              <td class="fw-semibold text-primary">GUI-003-CAPA-V1</td>
+              <td>V1</td>
+              <td style="font-size:12px;color:#555;">Confirm reference to ISO 9001:2015 clause 7.5 is correct.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.15</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="px-4 py-2 border-top" style="font-size:12px;color:#dc2626;font-weight:600;">
+        &#128274; Read-only — records cannot be edited or deleted by any role including Super Admin.
+      </div>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function switchTab(tab) {
+  ['creation','approval','comments'].forEach(function(t) {
+    document.getElementById('panel' + cap(t)).classList.toggle('d-none', t !== tab);
+    document.getElementById('tab'   + cap(t)).classList.toggle('active',  t === tab);
+  });
+}
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function applyFilters() {
+  // In PHP: pass filter values as GET params and re-query the audit_trail table
+  alert('Filter applied — wire to PHP GET params: ?from=&to=&user=&doc_id=');
+}
+function resetFilters() {
+  document.getElementById('filterFrom').value   = '';
+  document.getElementById('filterTo').value     = '';
+  document.getElementById('filterUser').value   = '';
+  document.getElementById('filterDocId').value  = '';
+}
+function exportPDF()   { alert('Export PDF — wire to PHP: generate PDF from current filtered audit records.'); }
+function exportExcel() { alert('Export Excel — wire to PHP: generate XLSX from current filtered audit records.'); }
+</script>
+</body>
+</html>
