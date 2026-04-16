@@ -5,56 +5,666 @@
   <title>CorePlx Quality DMS - User Management</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    .field-locked { background:#f5f7fa !important; color:#6b7280 !important; cursor:not-allowed; }
+
+    /* ── Tab strip ── */
+    .mgmt-tab-strip {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid #e0e7ef;
+      margin-bottom: 20px;
+    }
+    .mgmt-tab {
+      padding: 10px 22px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b7280;
+      border: none;
+      background: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+    .mgmt-tab:hover { color: #1a3a6e; }
+    .mgmt-tab.active { color: #1a3a6e; border-bottom-color: #2563eb; }
+
+    /* ── Limit meter ── */
+    .limit-bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; }
+    .limit-bar .fill { height: 100%; border-radius: 4px; transition: width .3s; }
+    .fill-ok     { background: #16a34a; }
+    .fill-warn   { background: #f59e0b; }
+    .fill-danger { background: #dc2626; }
+
+    .limit-card {
+      border: 1px solid #e0e7ef;
+      border-radius: 10px;
+      padding: 18px 20px;
+      background: #fff;
+    }
+    .limit-val {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #1a3a6e;
+      line-height: 1;
+    }
+    .limit-of { font-size: 13px; color: #6b7280; margin-top: 2px; }
+
+    /* ── Dept badge ── */
+    .dept-row { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid #f0f2f5; font-size:13px; }
+    .dept-row:last-child { border-bottom:none; }
+    .dept-color-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  </style>
 </head>
 <body>
+
 <nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
   <div class="container-fluid px-4 px-xxl-5">
     <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
-    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="topNav">
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
-        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.html">Dashboard</a></li>
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.html">Create Document</a></li><li><a class="dropdown-item" href="update-document.html">Update Document</a></li><li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li><li><a class="dropdown-item" href="repository.html">Repository</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="document-types.html">Document Types</a></li><li><a class="dropdown-item" href="document-id.html">Document ID</a></li><li><a class="dropdown-item" href="content-editor.html">Content Editor</a></li><li><a class="dropdown-item" href="form-builder.html">Form Builder</a></li><li><a class="dropdown-item" href="form-type-name.html">Form Type &amp; Name</a></li><li><a class="dropdown-item" href="approver-selection.html">Approver Selection</a></li><li><a class="dropdown-item" href="submit-review.html">Submit for Review</a></li><li><a class="dropdown-item" href="electronic-signature.html">Electronic Signature</a></li><li><a class="dropdown-item" href="approver-comments.html">Approver Comments</a></li><li><a class="dropdown-item" href="notifications.html">Notifications</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="audit-creation.html">Audit - Creation</a></li><li><a class="dropdown-item" href="audit-approval.html">Audit - Approval</a></li><li><a class="dropdown-item" href="audit-comments.html">Audit - Comments</a></li><li><a class="dropdown-item" href="qa-admin.html">QA Admin</a></li><li><a class="dropdown-item" href="employee-role.html">Employee Role</a></li><li><a class="dropdown-item" href="super-admin.html">Super Admin</a></li><li><a class="dropdown-item" href="user-management.html">User Management</a></li><li><a class="dropdown-item" href="role-assignment.html">Role Assignment</a></li></ul></li>
-        
+        <li class="nav-item"><a class="nav-link" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
         <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
       </ul>
-      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small">QA Admin</span><a class="nav-link px-0" href="notifications.html">Notifications</a><span class="navbar-text small">Profile</span></div>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
     </div>
   </div>
 </nav>
+
 <main class="app-shell">
 <div class="content-wrap px-4 py-4 mx-auto">
-<div class="mb-4">
-<h1 class="page-title mb-2">User Management</h1>
-<p class="page-subtitle mb-0">Create, update, deactivate, and control user access based on assigned roles.</p>
-</div>
-<div class="card cp-card"><div class="card-body">
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-<div><h2 class="card-title mb-1">Users</h2><p class="card-subtitle mb-0">Create, update, deactivate, and control user access based on assigned roles.</p></div>
-<div class="d-flex gap-2"><button class="btn btn-primary">Add User</button><button class="btn btn-outline-primary">Export</button></div>
-</div>
-<div class="table-responsive">
-<table class="table align-middle">
-<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead>
-<tbody>
-<tr><td>Pradeep</td><td>pradeep@coreplx.com</td><td>QA Admin</td><td><span class="badge badge-soft-success">Active</span></td><td>07-Apr-2026</td><td><button class="btn btn-sm btn-outline-primary">Edit</button></td></tr>
-<tr><td>Anita Rao</td><td>anita@coreplx.com</td><td>Employee</td><td><span class="badge badge-soft-success">Active</span></td><td>06-Apr-2026</td><td><button class="btn btn-sm btn-outline-primary">Edit</button></td></tr>
-<tr><td>QA Head</td><td>qahead@coreplx.com</td><td>Super Admin</td><td><span class="badge badge-soft-warning">Locked</span></td><td>05-Apr-2026</td><td><button class="btn btn-sm btn-outline-primary">Review</button></td></tr>
-</tbody>
-</table>
-</div>
-</div></div>
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">User Management</h1>
+    <p class="page-subtitle mb-0">Manage users, departments and system limits from one place.</p>
+  </div>
+
+  <!-- ── Tab strip ── -->
+  <div class="mgmt-tab-strip">
+    <button class="mgmt-tab active" id="tabUsers"   onclick="switchTab('users')">Users</button>
+    <button class="mgmt-tab"        id="tabDepts"   onclick="switchTab('depts')">Departments</button>
+    <button class="mgmt-tab"        id="tabLimits"  onclick="switchTab('limits')">System Limits</button>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       TAB 1 — USERS
+       ════════════════════════════════════════ -->
+  <div id="panelUsers">
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <div class="d-flex gap-2 flex-wrap">
+        <input type="text" class="form-control form-control-sm" id="userSearch"
+               placeholder="Search name or email..." oninput="filterUsers()"
+               style="max-width:240px;">
+        <select class="form-select form-select-sm" id="filterDept" onchange="filterUsers()" style="max-width:180px;">
+          <option value="">All Departments</option>
+        </select>
+        <select class="form-select form-select-sm" id="filterRole" onchange="filterUsers()" style="max-width:160px;">
+          <option value="">All Roles</option>
+          <option value="Super Admin">Super Admin</option>
+          <option value="QA Admin">QA Admin</option>
+          <option value="Employee">Employee</option>
+        </select>
+        <select class="form-select form-select-sm" id="filterUserStatus" onchange="filterUsers()" style="max-width:140px;">
+          <option value="">All Statuses</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openAddUserModal()">+ Add User</button>
+    </div>
+
+    <div class="card cp-card" style="padding:0;">
+      <table class="table mb-0" id="usersTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Department</th>
+            <th>Role</th>
+            <th>Assigned By</th>
+            <th>Joined</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="usersBody"></tbody>
+      </table>
+      <div class="text-center text-secondary py-4 small d-none" id="usersEmpty">No users found.</div>
+      <div class="px-3 py-2 border-top" style="font-size:12px;color:#6b7280;" id="userCountLine"></div>
+    </div>
+
+  </div>
+
+  <!-- ════════════════════════════════════════
+       TAB 2 — DEPARTMENTS
+       ════════════════════════════════════════ -->
+  <div id="panelDepts" class="d-none">
+
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="card cp-card" style="padding:0;">
+          <div class="d-flex align-items-center justify-content-between px-4 py-3 border-bottom">
+            <div>
+              <div class="fw-bold" style="color:#1a3a6e;font-size:14px;">Departments</div>
+              <div class="text-secondary" style="font-size:12px;" id="deptCountLine">Loading...</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openAddDeptModal()">+ Add Department</button>
+          </div>
+          <div id="deptList"></div>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="card cp-card mb-3">
+          <div class="card-body">
+            <h2 class="card-title mb-1">About Departments</h2>
+            <p class="card-subtitle mb-3">How departments are used across the system.</p>
+            <ul class="small text-secondary note-list mb-0">
+              <li>Departments appear in the <strong>Create Document</strong> form.</li>
+              <li>Departments appear in <strong>Document Assignment</strong> for bulk assign.</li>
+              <li>Users are linked to a department on creation.</li>
+              <li>Deactivating a department does not delete users — it hides it from new selections.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ════════════════════════════════════════
+       TAB 3 — SYSTEM LIMITS
+       ════════════════════════════════════════ -->
+  <div id="panelLimits" class="d-none">
+
+    <div class="row g-3 mb-4">
+      <!-- Usage cards -->
+      <div class="col-md-4">
+        <div class="limit-card">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <div class="text-secondary" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Total Active Users</div>
+              <div class="limit-val mt-1" id="lcTotalVal">—</div>
+              <div class="limit-of" id="lcTotalOf">of — limit</div>
+            </div>
+            <span style="font-size:1.6rem;">👥</span>
+          </div>
+          <div class="limit-bar"><div class="fill" id="lcTotalBar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="limit-card">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <div class="text-secondary" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">QA Admins</div>
+              <div class="limit-val mt-1" id="lcAdminVal">—</div>
+              <div class="limit-of" id="lcAdminOf">of — limit</div>
+            </div>
+            <span style="font-size:1.6rem;">🔑</span>
+          </div>
+          <div class="limit-bar"><div class="fill" id="lcAdminBar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="limit-card">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <div class="text-secondary" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Employees</div>
+              <div class="limit-val mt-1" id="lcEmpVal">—</div>
+              <div class="limit-of" id="lcEmpOf">of — limit</div>
+            </div>
+            <span style="font-size:1.6rem;">👤</span>
+          </div>
+          <div class="limit-bar"><div class="fill" id="lcEmpBar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Limit settings -->
+    <div class="card cp-card">
+      <div class="card-body">
+        <h2 class="card-title mb-1">Configure Limits</h2>
+        <p class="card-subtitle mb-4">Set the maximum number of users allowed per role. Changes take effect immediately.</p>
+
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Max Total Active Users <span class="text-danger">*</span></label>
+            <input class="form-control" type="number" id="limTotal" min="1" max="500">
+            <div class="form-text">Includes all roles. Prevents new users being added when reached.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Max QA Admins <span class="text-danger">*</span></label>
+            <input class="form-control" type="number" id="limAdmin" min="1" max="50">
+            <div class="form-text">Controls how many QA Admin roles can be active at once.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Max Employees <span class="text-danger">*</span></label>
+            <input class="form-control" type="number" id="limEmp" min="1" max="500">
+            <div class="form-text">Controls how many Employee roles can be active at once.</div>
+          </div>
+          <div class="col-12">
+            <button class="btn btn-primary" onclick="saveLimits()">Save Limits</button>
+            <span class="ms-3 small text-secondary" id="limitSaveMsg"></span>
+          </div>
+        </div>
+
+        <hr class="my-4">
+        <h2 class="card-title mb-1" style="font-size:.95rem;">Per-Department User Cap <span class="text-secondary fw-normal">(optional)</span></h2>
+        <p class="card-subtitle mb-3">Set a maximum number of users per department. Leave blank for no limit.</p>
+        <div id="deptLimitRows" class="row g-3"></div>
+        <div class="mt-3">
+          <button class="btn btn-outline-primary btn-sm" onclick="saveDeptLimits()">Save Department Caps</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
 </div>
 </main>
+
+<!-- ── Add / Edit User Modal ── -->
+<div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold" id="userModalTitle">Add User</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">First Name <span class="text-danger">*</span></label>
+            <input class="form-control" id="uFirstName" type="text">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Last Name <span class="text-danger">*</span></label>
+            <input class="form-control" id="uLastName" type="text">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Email Address <span class="text-danger">*</span></label>
+            <input class="form-control" id="uEmail" type="email" placeholder="name@company.com">
+            <div class="form-text">This will be used as their login ID.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Department <span class="text-danger">*</span></label>
+            <select class="form-select" id="uDept"></select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Designation</label>
+            <input class="form-control" id="uDesignation" type="text" placeholder="e.g. QA Engineer">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Role <span class="text-danger">*</span></label>
+            <select class="form-select" id="uRole">
+              <option value="Employee">Employee</option>
+              <option value="QA Admin">QA Admin</option>
+            </select>
+            <div class="form-text">Super Admin role can only be assigned by another Super Admin.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="saveUser()">Save User</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add / Edit Department Modal ── -->
+<div class="modal fade" id="deptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold" id="deptModalTitle">Add Department</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Department Name <span class="text-danger">*</span></label>
+          <input class="form-control" id="deptName" type="text" placeholder="e.g. Quality Assurance">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Short Code</label>
+          <input class="form-control" id="deptCode" type="text" placeholder="e.g. QA" maxlength="6"
+                 style="text-transform:uppercase;">
+          <div class="form-text">Used in document ID prefix if applicable.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="saveDept()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── Sample data — replace with PHP json_encode from DB ───────────────────
+
+var DEPARTMENTS = [
+  { id:1, name:'Quality Assurance',      code:'QA',      active:true  },
+  { id:2, name:'Operations',             code:'OPS',     active:true  },
+  { id:3, name:'Human Resources',        code:'HR',      active:true  },
+  { id:4, name:'Information Technology', code:'IT',      active:true  },
+  { id:5, name:'Finance',                code:'FIN',     active:true  },
+  { id:6, name:'Regulatory Affairs',     code:'REG',     active:false },
+];
+
+var USERS = [
+  { id:1,  first:'Pradeep',  last:'Kumar',   email:'pradeep@co.com',   dept:'Quality Assurance',      designation:'QA Admin',       role:'QA Admin',    assignedBy:'Super Admin', joined:'2026-01-01', status:'Active'   },
+  { id:2,  first:'Ariharan', last:'S',        email:'ariharan@co.com',  dept:'Quality Assurance',      designation:'QA Engineer',    role:'QA Admin',    assignedBy:'Super Admin', joined:'2026-01-10', status:'Active'   },
+  { id:3,  first:'Kavin',    last:'M',        email:'kavin@co.com',     dept:'Operations',             designation:'Ops Lead',       role:'Employee',    assignedBy:'Pradeep',     joined:'2026-02-01', status:'Active'   },
+  { id:4,  first:'Deepa',    last:'R',        email:'deepa@co.com',     dept:'Quality Assurance',      designation:'QA Analyst',     role:'QA Admin',    assignedBy:'Super Admin', joined:'2026-01-15', status:'Active'   },
+  { id:5,  first:'Ravi',     last:'Kumar',    email:'ravi@co.com',      dept:'Operations',             designation:'Technician',     role:'Employee',    assignedBy:'Pradeep',     joined:'2026-03-01', status:'Inactive' },
+  { id:6,  first:'Sneha',    last:'Patel',    email:'sneha@co.com',     dept:'Quality Assurance',      designation:'QA Specialist',  role:'Employee',    assignedBy:'Ariharan',    joined:'2026-03-05', status:'Active'   },
+  { id:7,  first:'Vikram',   last:'Singh',    email:'vikram@co.com',    dept:'Human Resources',        designation:'HR Manager',     role:'Employee',    assignedBy:'Pradeep',     joined:'2026-02-15', status:'Active'   },
+  { id:8,  first:'Divya',    last:'Nair',     email:'divya@co.com',     dept:'Information Technology', designation:'IT Support',     role:'Employee',    assignedBy:'Pradeep',     joined:'2026-02-20', status:'Active'   },
+  { id:9,  first:'Anita',    last:'Rao',      email:'anita@co.com',     dept:'Operations',             designation:'Ops Manager',    role:'Employee',    assignedBy:'Pradeep',     joined:'2026-01-20', status:'Active'   },
+  { id:10, first:'Suresh',   last:'Menon',    email:'suresh@co.com',    dept:'Finance',                designation:'Finance Lead',   role:'Employee',    assignedBy:'Pradeep',     joined:'2026-03-10', status:'Active'   },
+];
+
+var LIMITS = { total:25, admins:5, employees:20 };
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+function switchTab(tab) {
+  ['users','depts','limits'].forEach(function(t) {
+    document.getElementById('panel' + cap(t)).classList.toggle('d-none', t !== tab);
+    document.getElementById('tab'   + cap(t)).classList.toggle('active',  t === tab);
+  });
+  if (tab === 'depts')  renderDepts();
+  if (tab === 'limits') renderLimits();
+}
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// ── USERS tab ─────────────────────────────────────────────────────────────
+function renderUsers(data) {
+  var body  = document.getElementById('usersBody');
+  var empty = document.getElementById('usersEmpty');
+  var countLine = document.getElementById('userCountLine');
+  var active = data.filter(function(u){return u.status==='Active';}).length;
+  countLine.textContent = 'Showing ' + data.length + ' user' + (data.length!==1?'s':'') +
+    '  ·  ' + active + ' active  ·  ' + (data.length - active) + ' inactive';
+
+  if (!data.length) { body.innerHTML=''; empty.classList.remove('d-none'); return; }
+  empty.classList.add('d-none');
+
+  body.innerHTML = data.map(function(u) {
+    var initials = (u.first[0]||'') + (u.last[0]||'');
+    var roleBadge = u.role === 'QA Admin'    ? '<span class="badge badge-soft-info">'    + u.role + '</span>'
+                  : u.role === 'Super Admin' ? '<span class="badge badge-dark-soft">'    + u.role + '</span>'
+                  :                            '<span class="badge badge-soft-secondary">'+ u.role + '</span>';
+    var statusBadge = u.status === 'Active'
+      ? '<span class="badge badge-soft-success">Active</span>'
+      : '<span class="badge badge-soft-danger">Inactive</span>';
+    return '<tr>' +
+      '<td><div class="d-flex align-items-center gap-2">' +
+        '<div style="width:30px;height:30px;border-radius:50%;background:#dbeafe;color:#1d4ed8;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">' + initials + '</div>' +
+        '<div><div class="fw-semibold" style="font-size:13px;">' + u.first + ' ' + u.last + '</div>' +
+        '<div class="text-secondary" style="font-size:11px;">' + u.designation + '</div></div>' +
+      '</div></td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + u.email + '</td>' +
+      '<td style="font-size:13px;">' + u.dept + '</td>' +
+      '<td>' + roleBadge + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + u.assignedBy + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + formatDate(u.joined) + '</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '<td style="white-space:nowrap;">' +
+        '<button class="btn btn-sm btn-outline-secondary" style="height:28px;padding:0 10px;font-size:12px;" onclick="editUser(' + u.id + ')">Edit</button>&nbsp;' +
+        (u.status === 'Active'
+          ? '<button class="btn btn-sm" style="height:28px;padding:0 10px;font-size:12px;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;" onclick="toggleUserStatus(' + u.id + ')">Deactivate</button>'
+          : '<button class="btn btn-sm btn-outline-success" style="height:28px;padding:0 10px;font-size:12px;" onclick="toggleUserStatus(' + u.id + ')">Activate</button>') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function filterUsers() {
+  var q    = document.getElementById('userSearch').value.toLowerCase();
+  var dept = document.getElementById('filterDept').value;
+  var role = document.getElementById('filterRole').value;
+  var stat = document.getElementById('filterUserStatus').value;
+  var filtered = USERS.filter(function(u) {
+    var name = (u.first + ' ' + u.last + ' ' + u.email).toLowerCase();
+    return (!q    || name.includes(q)) &&
+           (!dept || u.dept   === dept) &&
+           (!role || u.role   === role) &&
+           (!stat || u.status === stat);
+  });
+  renderUsers(filtered);
+}
+
+function toggleUserStatus(id) {
+  var u = USERS.find(function(x){return x.id===id;});
+  if (!u) return;
+  var action = u.status === 'Active' ? 'deactivate' : 'activate';
+  if (!confirm('Are you sure you want to ' + action + ' ' + u.first + ' ' + u.last + '?\n\n' +
+               (action === 'deactivate' ? 'They will lose access immediately. Audit trail is preserved.' : 'They will regain access with their existing role.'))) return;
+  u.status = u.status === 'Active' ? 'Inactive' : 'Active';
+  filterUsers();
+  renderLimitsCards();
+}
+
+function openAddUserModal() {
+  document.getElementById('userModalTitle').textContent = 'Add User';
+  ['uFirstName','uLastName','uEmail','uDesignation'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('uRole').value = 'Employee';
+  populateUserDeptDropdown();
+  new bootstrap.Modal(document.getElementById('userModal')).show();
+}
+
+function editUser(id) {
+  var u = USERS.find(function(x){return x.id===id;});
+  if (!u) return;
+  document.getElementById('userModalTitle').textContent = 'Edit User — ' + u.first + ' ' + u.last;
+  document.getElementById('uFirstName').value    = u.first;
+  document.getElementById('uLastName').value     = u.last;
+  document.getElementById('uEmail').value        = u.email;
+  document.getElementById('uDesignation').value  = u.designation;
+  document.getElementById('uRole').value         = u.role;
+  populateUserDeptDropdown(u.dept);
+  new bootstrap.Modal(document.getElementById('userModal')).show();
+}
+
+function populateUserDeptDropdown(selected) {
+  var sel = document.getElementById('uDept');
+  sel.innerHTML = DEPARTMENTS.filter(function(d){return d.active;}).map(function(d) {
+    return '<option value="' + d.name + '"' + (d.name===selected?' selected':'') + '>' + d.name + '</option>';
+  }).join('');
+}
+
+function saveUser() {
+  var first = document.getElementById('uFirstName').value.trim();
+  var last  = document.getElementById('uLastName').value.trim();
+  var email = document.getElementById('uEmail').value.trim();
+  if (!first || !last || !email) { alert('First name, last name and email are required.'); return; }
+
+  // Check limits
+  var active = USERS.filter(function(u){return u.status==='Active';}).length;
+  if (active >= LIMITS.total) { alert('Maximum user limit (' + LIMITS.total + ') reached. Deactivate a user or increase the limit.'); return; }
+
+  // In PHP: INSERT or UPDATE users table
+  USERS.push({
+    id: USERS.length + 1,
+    first: first, last: last, email: email,
+    dept: document.getElementById('uDept').value,
+    designation: document.getElementById('uDesignation').value.trim(),
+    role: document.getElementById('uRole').value,
+    assignedBy: 'Pradeep', joined: toInputDate(new Date()), status: 'Active'
+  });
+  bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
+  filterUsers();
+  renderLimitsCards();
+}
+
+// ── DEPARTMENTS tab ───────────────────────────────────────────────────────
+var DEPT_COLORS = ['#2563eb','#16a34a','#d97706','#9333ea','#0891b2','#dc2626','#ea580c'];
+
+function renderDepts() {
+  var list      = document.getElementById('deptList');
+  var countLine = document.getElementById('deptCountLine');
+  var active    = DEPARTMENTS.filter(function(d){return d.active;}).length;
+  countLine.textContent = active + ' active  ·  ' + (DEPARTMENTS.length - active) + ' inactive';
+
+  // Populate dept filter in users tab
+  var sel = document.getElementById('filterDept');
+  sel.innerHTML = '<option value="">All Departments</option>' +
+    DEPARTMENTS.filter(function(d){return d.active;}).map(function(d){
+      return '<option value="' + d.name + '">' + d.name + '</option>';
+    }).join('');
+
+  list.innerHTML = DEPARTMENTS.map(function(d, i) {
+    var userCount = USERS.filter(function(u){return u.dept===d.name && u.status==='Active';}).length;
+    return '<div class="dept-row">' +
+      '<div class="d-flex align-items-center gap-3">' +
+        '<div class="dept-color-dot" style="background:' + DEPT_COLORS[i % DEPT_COLORS.length] + ';"></div>' +
+        '<div>' +
+          '<div class="fw-semibold" style="font-size:13px;' + (!d.active?'color:#9ca3af;':'') + '">' + d.name +
+            (d.code ? ' <span style="font-size:11px;color:#6b7280;font-weight:400;">(' + d.code + ')</span>' : '') +
+            (!d.active ? ' <span class="badge badge-soft-secondary ms-1" style="font-size:10px;">Inactive</span>' : '') +
+          '</div>' +
+          '<div style="font-size:11px;color:#9ca3af;">' + userCount + ' active user' + (userCount!==1?'s':'') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="d-flex gap-2">' +
+        '<button class="btn btn-sm btn-outline-secondary" style="height:28px;padding:0 10px;font-size:12px;" onclick="editDept(' + d.id + ')">Edit</button>' +
+        (d.active
+          ? '<button class="btn btn-sm" style="height:28px;padding:0 10px;font-size:12px;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;" onclick="toggleDept(' + d.id + ')">Deactivate</button>'
+          : '<button class="btn btn-sm btn-outline-success" style="height:28px;padding:0 10px;font-size:12px;" onclick="toggleDept(' + d.id + ')">Activate</button>') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function openAddDeptModal() {
+  document.getElementById('deptModalTitle').textContent = 'Add Department';
+  document.getElementById('deptName').value = '';
+  document.getElementById('deptCode').value = '';
+  new bootstrap.Modal(document.getElementById('deptModal')).show();
+}
+
+function editDept(id) {
+  var d = DEPARTMENTS.find(function(x){return x.id===id;});
+  if (!d) return;
+  document.getElementById('deptModalTitle').textContent = 'Edit Department';
+  document.getElementById('deptName').value = d.name;
+  document.getElementById('deptCode').value = d.code;
+  new bootstrap.Modal(document.getElementById('deptModal')).show();
+}
+
+function saveDept() {
+  var name = document.getElementById('deptName').value.trim();
+  var code = document.getElementById('deptCode').value.trim().toUpperCase();
+  if (!name) { alert('Department name is required.'); return; }
+  DEPARTMENTS.push({ id: DEPARTMENTS.length + 1, name: name, code: code, active: true });
+  bootstrap.Modal.getInstance(document.getElementById('deptModal')).hide();
+  renderDepts();
+}
+
+function toggleDept(id) {
+  var d = DEPARTMENTS.find(function(x){return x.id===id;});
+  if (!d) return;
+  var action = d.active ? 'deactivate' : 'activate';
+  if (!confirm('Are you sure you want to ' + action + ' the "' + d.name + '" department?')) return;
+  d.active = !d.active;
+  renderDepts();
+}
+
+// ── LIMITS tab ────────────────────────────────────────────────────────────
+function renderLimits() {
+  document.getElementById('limTotal').value = LIMITS.total;
+  document.getElementById('limAdmin').value = LIMITS.admins;
+  document.getElementById('limEmp').value   = LIMITS.employees;
+  renderLimitsCards();
+  renderDeptLimitRows();
+}
+
+function renderLimitsCards() {
+  var totalActive  = USERS.filter(function(u){return u.status==='Active';}).length;
+  var adminActive  = USERS.filter(function(u){return u.status==='Active' && u.role==='QA Admin';}).length;
+  var empActive    = USERS.filter(function(u){return u.status==='Active' && u.role==='Employee';}).length;
+
+  setLimitCard('lcTotal', totalActive, LIMITS.total);
+  setLimitCard('lcAdmin', adminActive, LIMITS.admins);
+  setLimitCard('lcEmp',   empActive,   LIMITS.employees);
+}
+
+function setLimitCard(prefix, current, limit) {
+  var pct = limit ? Math.round(current / limit * 100) : 0;
+  document.getElementById(prefix + 'Val').textContent = current;
+  document.getElementById(prefix + 'Of').textContent  = 'of ' + limit + ' limit';
+  var bar = document.getElementById(prefix + 'Bar');
+  bar.style.width = pct + '%';
+  bar.className = 'fill ' + (pct >= 100 ? 'fill-danger' : pct >= 80 ? 'fill-warn' : 'fill-ok');
+}
+
+function renderDeptLimitRows() {
+  var wrap = document.getElementById('deptLimitRows');
+  wrap.innerHTML = DEPARTMENTS.filter(function(d){return d.active;}).map(function(d) {
+    var count = USERS.filter(function(u){return u.dept===d.name && u.status==='Active';}).length;
+    return '<div class="col-md-4">' +
+      '<label class="form-label">' + d.name + ' <span style="font-size:11px;color:#9ca3af;">(' + count + ' current)</span></label>' +
+      '<input class="form-control" type="number" placeholder="No limit" min="1" max="200" id="dlim_' + d.id + '">' +
+    '</div>';
+  }).join('');
+}
+
+function saveLimits() {
+  var t = parseInt(document.getElementById('limTotal').value);
+  var a = parseInt(document.getElementById('limAdmin').value);
+  var e = parseInt(document.getElementById('limEmp').value);
+  if (!t || !a || !e) { alert('All limit fields are required.'); return; }
+  LIMITS.total = t; LIMITS.admins = a; LIMITS.employees = e;
+  renderLimitsCards();
+  var msg = document.getElementById('limitSaveMsg');
+  msg.textContent = '✓ Saved — ' + new Date().toLocaleTimeString();
+  msg.className = 'ms-3 small text-success';
+}
+
+function saveDeptLimits() {
+  alert('Department caps saved.');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function toInputDate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function formatDate(str) {
+  if (!str) return '—';
+  return new Date(str).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'});
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+renderUsers(USERS);
+renderDepts(); // also populates dept filter dropdown
+</script>
 </body>
 </html>

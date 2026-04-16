@@ -20,11 +20,15 @@
         
         <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.html">Create Document</a></li><li><a class="dropdown-item" href="update-document.html">Update Document</a></li><li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li><li><a class="dropdown-item" href="repository.html">Repository</a></li></ul></li>
         
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="document-types.html">Document Types</a></li><li><a class="dropdown-item" href="document-id.html">Document ID</a></li><li><a class="dropdown-item" href="content-editor.html">Content Editor</a></li><li><a class="dropdown-item" href="form-builder.html">Form Builder</a></li><li><a class="dropdown-item" href="form-type-name.html">Form Type &amp; Name</a></li><li><a class="dropdown-item" href="approver-selection.html">Approver Selection</a></li><li><a class="dropdown-item" href="submit-review.html">Submit for Review</a></li><li><a class="dropdown-item" href="electronic-signature.html">Electronic Signature</a></li><li><a class="dropdown-item" href="approver-comments.html">Approver Comments</a></li><li><a class="dropdown-item" href="notifications.html">Notifications</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="audit-creation.html">Audit - Creation</a></li><li><a class="dropdown-item" href="audit-approval.html">Audit - Approval</a></li><li><a class="dropdown-item" href="audit-comments.html">Audit - Comments</a></li><li><a class="dropdown-item" href="qa-admin.html">QA Admin</a></li><li><a class="dropdown-item" href="employee-role.html">Employee Role</a></li><li><a class="dropdown-item" href="super-admin.html">Super Admin</a></li><li><a class="dropdown-item" href="user-management.html">User Management</a></li><li><a class="dropdown-item" href="role-assignment.html">Role Assignment</a></li></ul></li>
+
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
         
         <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
       </ul>
@@ -53,30 +57,23 @@
             </div>
 
             <div class="user-meta-grid mb-4">
-              <div class="user-meta-box">
+              <a href="my-documents-admin.html?filter=owned" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View all your documents">
                 <div class="user-meta-value">24</div>
                 <div class="user-meta-label">Documents Owned</div>
-              </div>
-              <div class="user-meta-box">
+              </a>
+              <a href="my-documents-admin.html?filter=pending-approval" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View documents pending approval">
                 <div class="user-meta-value">5</div>
                 <div class="user-meta-label">Pending Approvals</div>
-              </div>
-              <div class="user-meta-box">
+              </a>
+              <a href="my-documents-admin.html?filter=overdue" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View overdue documents">
                 <div class="user-meta-value">2</div>
                 <div class="user-meta-label">Overdue Reviews</div>
-              </div>
-              <div class="user-meta-box">
+              </a>
+              <a href="notifications.html?filter=unread" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View unread alerts">
                 <div class="user-meta-value">8</div>
                 <div class="user-meta-label">Unread Alerts</div>
-              </div>
+              </a>
             </div>
-
-            <div class="section-kicker mb-2">Workspace</div>
-<ul class="dashboard-link-list list-unstyled mb-0 mt-auto" style="font-size:0.78rem;">
-  <li style="margin-bottom:4px;"><a href="create-document.html" style="text-decoration:none;">New Document</a></li>
-  <li style="margin-bottom:4px;"><a href="submit-review.html" style="text-decoration:none;">Review Queue</a></li>
-  <li><a href="notifications.html" style="text-decoration:none;">Notifications</a></li>
-</ul>
           </div>
         </div>
       </div>
@@ -138,34 +135,84 @@
       </div>
     </div>
 
-    <div class="row g-3 g-xxl-4 mb-4">
-      <div class="col-sm-6 col-xl-3">
-        <div class="card cp-card stat-card h-100"><div class="card-body p-4">
-          <div class="section-kicker mb-2">My Drafts</div>
-          <div class="stat-value">12</div>
-          <div class="stat-note">Draft documents still editable before submission.</div>
-        </div></div>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <div class="card cp-card stat-card h-100"><div class="card-body p-4">
-          <div class="section-kicker mb-2">Pending Approval</div>
-          <div class="stat-value">5</div>
-          <div class="stat-note">Items waiting for your review or approval.</div>
-        </div></div>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <div class="card cp-card stat-card h-100"><div class="card-body p-4">
-          <div class="section-kicker mb-2">Reviews Due</div>
-          <div class="stat-value">2</div>
-          <div class="stat-note">Documents approaching or past review date.</div>
-        </div></div>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <div class="card cp-card stat-card h-100"><div class="card-body p-4">
-          <div class="section-kicker mb-2">Effective Records</div>
-          <div class="stat-value">211</div>
-          <div class="stat-note">Approved records currently published in repository.</div>
-        </div></div>
+    <!-- ── Action Required — Pending Approvals ── -->
+    <div class="card cp-card mb-4" id="actionRequiredPanel" style="border-left:4px solid #f59e0b;background:#fffbeb;">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <div class="d-flex align-items-center gap-2">
+            <span style="font-size:1.2rem;">⚠️</span>
+            <div>
+              <h2 class="card-title mb-0" style="color:#b45309;">Action Required — Pending Approvals</h2>
+              <p class="card-subtitle mb-0">These documents are waiting for your electronic signature. They cannot proceed until reviewed.</p>
+            </div>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <a href="my-documents-admin.html?filter=pending-approval" class="btn btn-sm btn-warning" style="font-weight:600;">View All Pending</a>
+            <button class="btn btn-sm btn-outline-secondary" onclick="dismissActionPanel()" title="Dismiss for this session">✕</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0" style="font-size:13px;">
+            <thead>
+              <tr>
+                <th>Document ID</th>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Submitted By</th>
+                <th>Submitted On</th>
+                <th>Days Waiting</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fw-semibold" style="color:#2563eb;">SOP-021-Training-V1</td>
+                <td>Training Procedure</td>
+                <td><span class="badge badge-soft-info">SOP</span></td>
+                <td>Ariharan</td>
+                <td style="color:#6b7280;">09 Apr 2026</td>
+                <td><span class="badge badge-soft-warning">2 days</span></td>
+                <td><a href="electronic-signature.html" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+              </tr>
+              <tr>
+                <td class="fw-semibold" style="color:#2563eb;">GUI-003-CAPA-V1</td>
+                <td>CAPA Workflow Guidance</td>
+                <td><span class="badge badge-soft-info">Guidance</span></td>
+                <td>Kavin</td>
+                <td style="color:#6b7280;">08 Apr 2026</td>
+                <td><span class="badge badge-soft-warning">3 days</span></td>
+                <td><a href="electronic-signature.html" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+              </tr>
+              <tr>
+                <td class="fw-semibold" style="color:#2563eb;">POL-021-Security-V2</td>
+                <td>Information Security Policy</td>
+                <td><span class="badge badge-soft-info">Policy</span></td>
+                <td>Pradeep</td>
+                <td style="color:#6b7280;">07 Apr 2026</td>
+                <td><span class="badge badge-soft-danger">4 days</span></td>
+                <td><a href="electronic-signature.html" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+              </tr>
+              <tr>
+                <td class="fw-semibold" style="color:#2563eb;">FRM-015-Training-V1</td>
+                <td>Training Acknowledgement Form</td>
+                <td><span class="badge badge-soft-info">Form</span></td>
+                <td>Deepa</td>
+                <td style="color:#6b7280;">06 Apr 2026</td>
+                <td><span class="badge badge-soft-danger">5 days</span></td>
+                <td><a href="electronic-signature.html" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+              </tr>
+              <tr>
+                <td class="fw-semibold" style="color:#2563eb;">SOP-104-CAPA-V3</td>
+                <td>CAPA Management</td>
+                <td><span class="badge badge-soft-info">SOP</span></td>
+                <td>Ariharan</td>
+                <td style="color:#6b7280;">05 Apr 2026</td>
+                <td><span class="badge badge-soft-danger">6 days</span></td>
+                <td><a href="electronic-signature.html" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -254,7 +301,7 @@
             <a class="btn btn-primary" href="create-document.html">Create Document</a>
             <a class="btn btn-outline-primary" href="update-document.html">Update Document</a>
             <a class="btn btn-outline-primary" href="repository.html">Open Repository</a>
-            <a class="btn btn-outline-primary" href="audit-creation.html">View Audit Trail</a>
+            <a class="btn btn-outline-primary" href="audit-trail.html">View Audit Trail</a>
           </div>
         </div></div>
       </div>
@@ -263,5 +310,17 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function dismissActionPanel() {
+  document.getElementById('actionRequiredPanel').style.display = 'none';
+  // Dismissed for this session only — reappears on next login
+  sessionStorage.setItem('actionPanelDismissed', '1');
+}
+// Auto-hide if dismissed earlier in same session
+if (sessionStorage.getItem('actionPanelDismissed') === '1') {
+  var p = document.getElementById('actionRequiredPanel');
+  if (p) p.style.display = 'none';
+}
+</script>
 </body>
 </html>

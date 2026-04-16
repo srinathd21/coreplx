@@ -316,7 +316,7 @@ body{
   font-size:1.35rem;
   line-height:1.18;
   font-weight:800;
-  margin:.5rem 0 .6rem;
+  margin:.5rem 0 6rem;
 }
 .hero-copy{
   font-size:1.05rem;
@@ -429,90 +429,3 @@ body{
   .page-title{font-size:2.2rem;}
   .hero-title{font-size:1.6rem;}
 }
-
-/* ── Auth pages (forgot-password, reset-link-sent, reset-password, contact-support) ── */
-.auth-shell{
-  width:100%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-.auth-card{
-  width:100%;
-  max-width:460px;
-  background:#fff;
-  border:1px solid var(--cp-line);
-  border-radius:1.2rem;
-  box-shadow:0 .5rem 1.5rem rgba(13,33,68,.08);
-}
-.brand-kicker{
-  font-size:.72rem;
-  font-weight:700;
-  text-transform:uppercase;
-  letter-spacing:.08em;
-  color:var(--cp-muted);
-}
-.auth-title{
-  font-size:1.5rem;
-  font-weight:700;
-  color:var(--cp-navy);
-  line-height:1.2;
-}
-.auth-subtitle{
-  font-size:.9rem;
-  color:var(--cp-muted);
-  line-height:1.5;
-}
-.btn-coreplx{
-  background:var(--cp-navy);
-  color:#fff;
-  border:none;
-  border-radius:.7rem;
-  font-weight:600;
-  font-size:.9rem;
-  min-height:44px;
-  transition:background .15s;
-}
-.btn-coreplx:hover{ background:var(--cp-blue); color:#fff; }
-.btn-outline-coreplx{
-  background:transparent;
-  color:var(--cp-navy);
-  border:1px solid var(--cp-line);
-  border-radius:.7rem;
-  font-weight:600;
-  font-size:.9rem;
-  min-height:44px;
-  transition:background .15s, border-color .15s;
-}
-.btn-outline-coreplx:hover{ background:#f0f4ff; border-color:#c7d7f8; color:var(--cp-blue); }
-.helper-box{
-  background:#F7FAFF;
-  border:1px solid #D7E5FA;
-  border-radius:.75rem;
-}
-.helper-title{
-  font-size:.78rem;
-  font-weight:700;
-  color:var(--cp-blue);
-  text-transform:uppercase;
-  letter-spacing:.05em;
-}
-.success-box{
-  background:var(--cp-success-bg);
-  border:1px solid #bbf7d0;
-  border-radius:.75rem;
-}
-.success-box .helper-title{ color:var(--cp-success-tx); }
-.small-note{
-  font-size:.82rem;
-  color:var(--cp-muted);
-  line-height:1.55;
-}
-.strength-list{
-  list-style:disc;
-  color:var(--cp-muted);
-  font-size:.82rem;
-  line-height:1.8;
-}
-.auth-card a{ color:var(--cp-blue); text-decoration:none; }
-.auth-card a:hover{ text-decoration:underline; }

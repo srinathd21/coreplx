@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - Audit Trail</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    .audit-tab-strip {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid #e0e7ef;
+      margin-bottom: 20px;
+    }
+    .audit-tab {
+      padding: 10px 22px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b7280;
+      border: none;
+      background: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+    .audit-tab:hover  { color: #1a3a6e; }
+    .audit-tab.active { color: #1a3a6e; border-bottom-color: #2563eb; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item active" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="app-shell">
+<div class="content-wrap px-4 py-4 mx-auto">
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Audit Trail</h1>
+    <p class="page-subtitle mb-0">Immutable records of all document creation, approval, denial and comment activity. Read-only — cannot be edited or deleted by any role.</p>
+  </div>
+
+  <!-- ── Tab strip ── -->
+  <div class="audit-tab-strip">
+    <button class="audit-tab active" id="tabCreation" onclick="switchTab('creation')">Document Creation</button>
+    <button class="audit-tab"        id="tabApproval" onclick="switchTab('approval')">Approval &amp; Denial</button>
+    <button class="audit-tab"        id="tabComments" onclick="switchTab('comments')">Approver Comments</button>
+  </div>
+
+  <!-- ── Shared filter bar ── -->
+  <div class="card cp-card mb-3">
+    <div class="card-body py-3">
+      <div class="d-flex gap-2 flex-wrap align-items-end">
+        <div>
+          <label class="form-label mb-1">From</label>
+          <input class="form-control form-control-sm" type="date" id="filterFrom" style="max-width:150px;">
+        </div>
+        <div>
+          <label class="form-label mb-1">To</label>
+          <input class="form-control form-control-sm" type="date" id="filterTo" style="max-width:150px;">
+        </div>
+        <div>
+          <label class="form-label mb-1">User</label>
+          <select class="form-select form-select-sm" id="filterUser" style="max-width:180px;">
+            <option value="">All Users</option>
+            <option>Pradeep</option>
+            <option>QA Head</option>
+            <option>Compliance Mgr</option>
+            <option>Megha S</option>
+            <option>Ariharan</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label mb-1">Document ID</label>
+          <input class="form-control form-control-sm" type="text" id="filterDocId" placeholder="e.g. SOP-104" style="max-width:160px;">
+        </div>
+        <div class="d-flex gap-2 ms-auto">
+          <button class="btn btn-primary btn-sm" onclick="applyFilters()">Apply</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="resetFilters()">Reset</button>
+          <button class="btn btn-outline-primary btn-sm" onclick="exportPDF()">&#11015; Export PDF</button>
+          <button class="btn btn-outline-primary btn-sm" onclick="exportExcel()">&#11015; Export Excel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       TAB 1 — DOCUMENT CREATION
+       ══════════════════════════════════════ -->
+  <div id="panelCreation">
+    <div class="card cp-card" style="padding:0;">
+      <div class="px-4 py-3 border-bottom">
+        <div class="fw-bold" style="color:#1a3a6e;font-size:14px;">Document Creation Events</div>
+        <div class="text-secondary" style="font-size:12px;">Captures: who created, when, which document, IP address.</div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Document ID</th>
+              <th>Version</th>
+              <th>IP Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td style="font-size:12px;color:#6b7280;">07 Apr 2026 10:42</td><td>Pradeep</td><td><span class="badge badge-soft-info">Created</span></td><td class="fw-semibold text-primary">SOP-118-QA-01</td><td>V1</td><td style="font-size:12px;color:#6b7280;">10.10.1.21</td></tr>
+            <tr><td style="font-size:12px;color:#6b7280;">07 Apr 2026 10:46</td><td>Pradeep</td><td><span class="badge badge-soft-secondary">Draft Saved</span></td><td class="fw-semibold text-primary">SOP-118-QA-01</td><td>V1</td><td style="font-size:12px;color:#6b7280;">10.10.1.21</td></tr>
+            <tr><td style="font-size:12px;color:#6b7280;">06 Apr 2026 09:15</td><td>Ariharan</td><td><span class="badge badge-soft-info">Created</span></td><td class="fw-semibold text-primary">POL-011-DI-01</td><td>V1</td><td style="font-size:12px;color:#6b7280;">10.10.1.33</td></tr>
+            <tr><td style="font-size:12px;color:#6b7280;">06 Apr 2026 09:22</td><td>Ariharan</td><td><span class="badge badge-soft-secondary">Draft Saved</span></td><td class="fw-semibold text-primary">POL-011-DI-01</td><td>V1</td><td style="font-size:12px;color:#6b7280;">10.10.1.33</td></tr>
+            <tr><td style="font-size:12px;color:#6b7280;">05 Apr 2026 14:05</td><td>Kavin</td><td><span class="badge badge-soft-info">Created</span></td><td class="fw-semibold text-primary">GUI-003-CAPA-V1</td><td>V1</td><td style="font-size:12px;color:#6b7280;">10.10.1.44</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="px-4 py-2 border-top" style="font-size:12px;color:#dc2626;font-weight:600;">
+        &#128274; Read-only — records cannot be edited or deleted by any role including Super Admin.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       TAB 2 — APPROVAL & DENIAL
+       ══════════════════════════════════════ -->
+  <div id="panelApproval" class="d-none">
+    <div class="card cp-card" style="padding:0;">
+      <div class="px-4 py-3 border-bottom">
+        <div class="fw-bold" style="color:#1a3a6e;font-size:14px;">Approval &amp; Denial Events</div>
+        <div class="text-secondary" style="font-size:12px;">Captures: approver, meaning, full reason, electronic signature evidence, IP address.</div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Meaning</th>
+              <th>Document ID</th>
+              <th>Version</th>
+              <th>Reason</th>
+              <th>IP Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">07 Apr 2026 15:44</td>
+              <td>QA Head</td>
+              <td><span class="badge badge-soft-success">Approved</span></td>
+              <td class="fw-semibold text-primary">SOP-104-CAPA-03</td>
+              <td>V3</td>
+              <td style="font-size:12px;color:#555;">Meets all quality requirements. Section 4 updated correctly.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.10</td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">06 Apr 2026 11:18</td>
+              <td>Compliance Mgr</td>
+              <td><span class="badge badge-soft-danger">Denied</span></td>
+              <td class="fw-semibold text-primary">POL-021-SEC-02</td>
+              <td>V2</td>
+              <td style="font-size:12px;color:#555;">References in section 3 need updating before approval.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.15</td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">05 Apr 2026 09:30</td>
+              <td>QA Head</td>
+              <td><span class="badge badge-soft-success">Approved</span></td>
+              <td class="fw-semibold text-primary">GUI-003-CAPA-V1</td>
+              <td>V1</td>
+              <td style="font-size:12px;color:#555;">Guidance document is complete and accurate.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.10</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="px-4 py-2 border-top" style="font-size:12px;color:#dc2626;font-weight:600;">
+        &#128274; Read-only — records cannot be edited or deleted by any role including Super Admin.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       TAB 3 — APPROVER COMMENTS
+       ══════════════════════════════════════ -->
+  <div id="panelComments" class="d-none">
+    <div class="card cp-card" style="padding:0;">
+      <div class="px-4 py-3 border-bottom">
+        <div class="fw-bold" style="color:#1a3a6e;font-size:14px;">Approver Comment Events</div>
+        <div class="text-secondary" style="font-size:12px;">Captures: who commented, when, full comment text, linked document ID and version.</div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Document ID</th>
+              <th>Version</th>
+              <th>Comment</th>
+              <th>IP Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">07 Apr 2026 11:15</td>
+              <td>Megha S</td>
+              <td class="fw-semibold text-primary">POL-021-SEC-02</td>
+              <td>V2</td>
+              <td style="font-size:12px;color:#555;">Please clarify owner responsibilities in section 2.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.22</td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">07 Apr 2026 12:02</td>
+              <td>QA Head</td>
+              <td class="fw-semibold text-primary">SOP-104-CAPA-03</td>
+              <td>V3</td>
+              <td style="font-size:12px;color:#555;">Add training impact note to section 5.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.10</td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;color:#6b7280;">06 Apr 2026 14:30</td>
+              <td>Compliance Mgr</td>
+              <td class="fw-semibold text-primary">GUI-003-CAPA-V1</td>
+              <td>V1</td>
+              <td style="font-size:12px;color:#555;">Confirm reference to ISO 9001:2015 clause 7.5 is correct.</td>
+              <td style="font-size:12px;color:#6b7280;">10.10.1.15</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="px-4 py-2 border-top" style="font-size:12px;color:#dc2626;font-weight:600;">
+        &#128274; Read-only — records cannot be edited or deleted by any role including Super Admin.
+      </div>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function switchTab(tab) {
+  ['creation','approval','comments'].forEach(function(t) {
+    document.getElementById('panel' + cap(t)).classList.toggle('d-none', t !== tab);
+    document.getElementById('tab'   + cap(t)).classList.toggle('active',  t === tab);
+  });
+}
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function applyFilters() {
+  // In PHP: pass filter values as GET params and re-query the audit_trail table
+  alert('Filter applied — wire to PHP GET params: ?from=&to=&user=&doc_id=');
+}
+function resetFilters() {
+  document.getElementById('filterFrom').value   = '';
+  document.getElementById('filterTo').value     = '';
+  document.getElementById('filterUser').value   = '';
+  document.getElementById('filterDocId').value  = '';
+}
+function exportPDF()   { alert('Export PDF — wire to PHP: generate PDF from current filtered audit records.'); }
+function exportExcel() { alert('Export Excel — wire to PHP: generate XLSX from current filtered audit records.'); }
+</script>
+</body>
+</html>

@@ -5,74 +5,742 @@
   <title>CorePlx Quality DMS - Form Builder</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    /* ── Form Builder extras ────────────────────────────────────────── */
+    .fb-palette-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 9px 14px;
+      border: 1px solid var(--cp-border, #dde3ec);
+      border-radius: 8px;
+      background: var(--cp-surface, #f8f9fb);
+      color: var(--cp-text, #1e2a3a);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      text-align: left;
+    }
+    .fb-palette-btn:hover {
+      background: #e8edf5;
+      border-color: #b0bcce;
+      transform: translateX(2px);
+    }
+    .fb-palette-btn .fb-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+      background: #dde3ec;
+    }
+
+    /* Field canvas rows */
+    .fb-field-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--cp-border, #dde3ec);
+      border-radius: 8px;
+      background: #fff;
+      margin-bottom: 8px;
+      transition: box-shadow 0.15s;
+    }
+    .fb-field-row:hover {
+      box-shadow: 0 2px 8px rgba(30,42,58,0.08);
+    }
+    .fb-drag-handle {
+      color: #b0bcce;
+      cursor: grab;
+      font-size: 16px;
+      padding-top: 2px;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    .fb-field-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .fb-field-label-input {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid #dde3ec;
+      padding: 2px 0 4px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--cp-text, #1e2a3a);
+      background: transparent;
+      outline: none;
+    }
+    .fb-field-label-input:focus {
+      border-bottom-color: #2563eb;
+    }
+    .fb-field-type-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-top: 4px;
+      background: #e8edf5;
+      color: #4a6080;
+    }
+    .fb-field-preview {
+      margin-top: 8px;
+    }
+    .fb-field-preview input[type=text],
+    .fb-field-preview input[type=date],
+    .fb-field-preview textarea,
+    .fb-field-preview select {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid #dde3ec;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #aaa;
+      background: #fafbfc;
+      pointer-events: none;
+    }
+    .fb-field-preview .fb-sig-placeholder {
+      border: 1px dashed #b0bcce;
+      border-radius: 6px;
+      padding: 14px 10px;
+      text-align: center;
+      font-size: 12px;
+      color: #b0bcce;
+      background: #fafbfc;
+    }
+    .fb-field-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .fb-field-actions button {
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #b0bcce;
+      padding: 3px 5px;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .fb-field-actions button:hover { color: #dc2626; background: #fee2e2; }
+    .fb-field-actions button.up-btn:hover  { color: #2563eb; background: #dbeafe; }
+    .fb-field-actions button.down-btn:hover{ color: #2563eb; background: #dbeafe; }
+
+    .fb-required-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+    .fb-required-toggle input[type=checkbox] { cursor: pointer; }
+
+    /* Empty state */
+    .fb-empty-state {
+      border: 2px dashed #dde3ec;
+      border-radius: 10px;
+      padding: 40px 20px;
+      text-align: center;
+      color: #a0aab8;
+    }
+
+    /* Section divider field */
+    .fb-section-row {
+      border-left: 4px solid #2563eb;
+      background: #f0f4ff;
+    }
+
+    /* Preview modal field styles */
+    .preview-field-wrap { margin-bottom: 16px; }
+    .preview-field-wrap label { font-size: 13px; font-weight: 600; margin-bottom: 4px; display: block; }
+    .preview-field-wrap input,
+    .preview-field-wrap select,
+    .preview-field-wrap textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #dde3ec;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .preview-field-wrap .sig-box {
+      border: 1px dashed #b0bcce;
+      border-radius: 6px;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: #b0bcce;
+      background: #fafbfc;
+    }
+    .preview-section-head {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1a3a6e;
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 4px;
+      margin: 20px 0 12px;
+    }
+  </style>
 </head>
 <body>
+
+<!-- ── Navbar ── -->
 <nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
   <div class="container-fluid px-4 px-xxl-5">
     <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
-    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="topNav">
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
-        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
         
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.html">Create Document</a></li><li><a class="dropdown-item" href="update-document.html">Update Document</a></li><li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li><li><a class="dropdown-item" href="repository.html">Repository</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="document-types.html">Document Types</a></li><li><a class="dropdown-item" href="document-id.html">Document ID</a></li><li><a class="dropdown-item" href="content-editor.html">Content Editor</a></li><li><a class="dropdown-item" href="form-builder.html">Form Builder</a></li><li><a class="dropdown-item" href="form-type-name.html">Form Type &amp; Name</a></li><li><a class="dropdown-item" href="approver-selection.html">Approver Selection</a></li><li><a class="dropdown-item" href="submit-review.html">Submit for Review</a></li><li><a class="dropdown-item" href="electronic-signature.html">Electronic Signature</a></li><li><a class="dropdown-item" href="approver-comments.html">Approver Comments</a></li><li><a class="dropdown-item" href="notifications.html">Notifications</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="audit-creation.html">Audit - Creation</a></li><li><a class="dropdown-item" href="audit-approval.html">Audit - Approval</a></li><li><a class="dropdown-item" href="audit-comments.html">Audit - Comments</a></li><li><a class="dropdown-item" href="qa-admin.html">QA Admin</a></li><li><a class="dropdown-item" href="employee-role.html">Employee Role</a></li><li><a class="dropdown-item" href="super-admin.html">Super Admin</a></li><li><a class="dropdown-item" href="user-management.html">User Management</a></li><li><a class="dropdown-item" href="role-assignment.html">Role Assignment</a></li></ul></li>
-        
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
         <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
       </ul>
-      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small">QA Admin</span><a class="nav-link px-0" href="notifications.html">Notifications</a><span class="navbar-text small">Profile</span></div>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
     </div>
   </div>
 </nav>
+
 <main class="app-shell">
 <div class="content-wrap px-4 py-4 mx-auto">
-<div class="mb-4">
-<h1 class="page-title mb-2">Form Builder</h1>
-<p class="page-subtitle mb-0">Design controlled quality forms with configurable fields and validation rules.</p>
-</div>
-<div class="row g-3">
-<div class="col-lg-8">
-<div class="card cp-card"><div class="card-body">
-<h2 class="card-title mb-1">Form Builder Canvas</h2>
-<p class="card-subtitle mb-3">Create forms like Google Forms with controlled field definitions.</p>
-<div class="table-responsive">
-<table class="table align-middle">
-<thead><tr><th>Field Label</th><th>Type</th><th>Required</th><th>Options</th><th>Actions</th></tr></thead>
-<tbody>
-<tr><td>Employee Name</td><td>Text</td><td><span class="badge badge-soft-success">Required</span></td><td>-</td><td><button class="btn btn-sm btn-outline-primary">Edit</button></td></tr>
-<tr><td>Review Date</td><td>Date</td><td><span class="badge badge-soft-secondary">Optional</span></td><td>-</td><td><button class="btn btn-sm btn-outline-primary">Edit</button></td></tr>
-<tr><td>Department</td><td>Dropdown</td><td><span class="badge badge-soft-success">Required</span></td><td>QA, Ops, IT</td><td><button class="btn btn-sm btn-outline-primary">Edit</button></td></tr>
-<tr><td>Read &amp; Understood</td><td>Checkbox</td><td><span class="badge badge-soft-success">Required</span></td><td>Yes</td><td><button class="btn btn-sm btn-outline-primary">Edit</button></td></tr>
-<tr><td>Manager Signature</td><td>Signature</td><td><span class="badge badge-soft_success badge-soft-success">Required</span></td><td>-</td><td><button class="btn btn-sm btn-outline-primary">Edit</button></td></tr>
-</tbody>
-</table>
-</div>
-<div class="d-flex gap-2 flex-wrap mt-2">
-<button class="btn btn-primary">Add Field</button>
-<button class="btn btn-outline-primary">Preview Form</button>
-<button class="btn btn-outline-secondary">Save Form Draft</button>
-</div>
-</div></div>
-</div>
-<div class="col-lg-4">
-<div class="card cp-card"><div class="card-body">
-<h2 class="card-title mb-1">Supported Field Types</h2>
-<p class="card-subtitle mb-3">Field configuration should remain fully traceable.</p>
-<ul class="small text-secondary note-list mb-0">
-<li>Text</li><li>Date</li><li>Dropdown</li><li>Checkbox</li><li>Signature</li>
-</ul>
-</div></div>
-</div>
-</div>
+
+  <!-- ── Breadcrumb ── -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small mb-0">
+      <li class="breadcrumb-item"><a href="create-document.html" class="text-decoration-none">Create Document</a></li>
+      <li class="breadcrumb-item active">Form Builder</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
+    <div>
+      <h1 class="page-title mb-1">Form / Checklist Builder</h1>
+      <p class="page-subtitle mb-0">Build your form by adding fields from the left panel. Name it, then preview and confirm.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <button class="btn btn-outline-secondary" onclick="window.location.href='create-document.html'">
+        ← Back to Document
+      </button>
+      <button class="btn btn-outline-primary" onclick="openPreview()">
+        Preview Form
+      </button>
+      <button class="btn btn-success" onclick="confirmAndReturn()">
+        ✓ Confirm &amp; Attach to Document
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Form Name row ── -->
+  <div class="card cp-card mb-3">
+    <div class="card-body py-3">
+      <div class="row g-3 align-items-start">
+        <div class="col-md-5">
+          <label class="form-label mb-1">Form / Checklist Name <span class="text-danger">*</span></label>
+          <input class="form-control" id="fbFormName" type="text" placeholder="e.g. CAPA Verification Checklist">
+          <div class="form-text" id="fbNameValidation">&nbsp;</div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label mb-1">Form Type</label>
+          <input class="form-control" id="fbFormType" type="text" placeholder="e.g. Checklist, Inspection Form">
+          <div class="form-text">&nbsp;</div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label mb-1">Description <span class="text-secondary fw-normal">(optional)</span></label>
+          <input class="form-control" id="fbFormDesc" type="text" placeholder="Brief purpose">
+          <div class="form-text">&nbsp;</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Builder layout ── -->
+  <div class="row g-3">
+
+    <!-- Left: field palette -->
+    <div class="col-lg-3">
+      <div class="card cp-card h-100">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Add Field</h2>
+          <p class="card-subtitle mb-3">Click to add to your form</p>
+          <div class="d-flex flex-column gap-2">
+            <button class="fb-palette-btn" onclick="addField('text')">
+              <span class="fb-icon">T</span> Text Input
+            </button>
+            <button class="fb-palette-btn" onclick="addField('textarea')">
+              <span class="fb-icon">¶</span> Text Area
+            </button>
+            <button class="fb-palette-btn" onclick="addField('number')">
+              <span class="fb-icon">#</span> Number
+            </button>
+            <button class="fb-palette-btn" onclick="addField('date')">
+              <span class="fb-icon">📅</span> Date
+            </button>
+            <button class="fb-palette-btn" onclick="addField('dropdown')">
+              <span class="fb-icon">▾</span> Dropdown
+            </button>
+            <button class="fb-palette-btn" onclick="addField('checkbox')">
+              <span class="fb-icon">☑</span> Checkbox
+            </button>
+            <button class="fb-palette-btn" onclick="addField('yesno')">
+              <span class="fb-icon">?</span> Yes / No
+            </button>
+            <button class="fb-palette-btn" onclick="addField('signature')">
+              <span class="fb-icon">✍</span> Signature
+            </button>
+            <hr class="my-1">
+            <button class="fb-palette-btn" onclick="addField('section')" style="border-color:#2563eb;color:#2563eb;">
+              <span class="fb-icon" style="background:#dbeafe;color:#2563eb;">§</span> Section Heading
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: canvas -->
+    <div class="col-lg-9">
+      <div class="card cp-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h2 class="card-title mb-0">Form Canvas</h2>
+              <p class="card-subtitle mb-0" id="fieldCountLabel">0 fields added</p>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="clearAll()" id="clearBtn" style="display:none;">
+              Clear All
+            </button>
+          </div>
+
+          <!-- Empty state -->
+          <div class="fb-empty-state" id="emptyState">
+            <div style="font-size:2.5rem;margin-bottom:8px;">📋</div>
+            <div class="fw-semibold mb-1">No fields added yet</div>
+            <div class="small">Click a field type on the left to add it here</div>
+          </div>
+
+          <!-- Field list -->
+          <div id="fieldCanvas"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
+
+  <!-- ── Bottom action bar ── -->
+  <div class="d-flex justify-content-end gap-2 mt-3 flex-wrap">
+    <button class="btn btn-outline-secondary" onclick="window.location.href='create-document.html'">
+      ← Back without saving
+    </button>
+    <button class="btn btn-outline-primary" onclick="openPreview()">Preview Form</button>
+    <button class="btn btn-success" onclick="confirmAndReturn()">
+      ✓ Confirm &amp; Attach to Document
+    </button>
+  </div>
+
 </div>
 </main>
+
+<!-- ════════════════════════════════════════════════════════════
+     PREVIEW MODAL
+     ════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title fw-bold" id="previewModalLabel">Form Preview</h5>
+          <div class="small text-secondary" id="previewSubtitle">Review how your form will appear to users</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body px-4 py-4" id="previewModalBody">
+        <!-- Rendered dynamically -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close Preview</button>
+        <button type="button" class="btn btn-success" data-bs-dismiss="modal" onclick="confirmAndReturn()">
+          ✓ Confirm &amp; Attach to Document
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     DROPDOWN OPTIONS MODAL
+     ════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="dropdownOptionsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Dropdown Options</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-secondary mb-2">Enter each option on a new line</p>
+        <textarea class="form-control" id="dropdownOptionsInput" rows="6" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" onclick="saveDropdownOptions()">Save Options</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+var fields       = [];   // [{id, type, label, required, options}]
+var fieldIdSeq   = 0;
+var editingDropdownFieldId = null;
+
+// ── Restore existing form if coming back to edit ──────────────────────────
+(function() {
+  var raw = sessionStorage.getItem('cpBuiltForm');
+  if (!raw) return;
+  try {
+    var data = JSON.parse(raw);
+    if (data.fields && data.fields.length) {
+      fields = data.fields;
+      fieldIdSeq = fields.reduce(function(m, f) { return Math.max(m, f.id || 0); }, 0) + 1;
+    }
+    if (data.formName)  document.getElementById('fbFormName').value  = data.formName;
+    if (data.formType)  document.getElementById('fbFormType').value  = data.formType;
+    if (data.formDesc)  document.getElementById('fbFormDesc').value  = data.formDesc;
+    renderCanvas();
+  } catch(e) {}
+})();
+
+// ── Field type metadata ───────────────────────────────────────────────────
+var TYPE_META = {
+  text:      { label: 'Text Input',       badge: 'Text'      },
+  textarea:  { label: 'Text Area',        badge: 'Text Area' },
+  number:    { label: 'Number',           badge: 'Number'    },
+  date:      { label: 'Date',             badge: 'Date'      },
+  dropdown:  { label: 'Dropdown',         badge: 'Dropdown'  },
+  checkbox:  { label: 'Checkbox',         badge: 'Checkbox'  },
+  yesno:     { label: 'Yes / No',         badge: 'Yes / No'  },
+  signature: { label: 'Signature',        badge: 'Signature' },
+  section:   { label: 'Section Heading',  badge: 'Section'   },
+};
+
+// ── Add field ─────────────────────────────────────────────────────────────
+function addField(type) {
+  var meta = TYPE_META[type];
+  var field = {
+    id:       ++fieldIdSeq,
+    type:     type,
+    label:    meta.label,
+    required: (type !== 'section'),
+    options:  type === 'dropdown' ? ['Option 1', 'Option 2', 'Option 3'] : [],
+  };
+  fields.push(field);
+  renderCanvas();
+
+  // Auto-open dropdown options editor
+  if (type === 'dropdown') {
+    editingDropdownFieldId = field.id;
+    document.getElementById('dropdownOptionsInput').value = field.options.join('\n');
+    new bootstrap.Modal(document.getElementById('dropdownOptionsModal')).show();
+  }
+}
+
+// ── Remove field ──────────────────────────────────────────────────────────
+function removeField(id) {
+  fields = fields.filter(function(f) { return f.id !== id; });
+  renderCanvas();
+}
+
+// ── Move field up/down ────────────────────────────────────────────────────
+function moveField(id, dir) {
+  var idx = fields.findIndex(function(f) { return f.id === id; });
+  if (idx < 0) return;
+  var swapIdx = idx + dir;
+  if (swapIdx < 0 || swapIdx >= fields.length) return;
+  var tmp = fields[idx];
+  fields[idx] = fields[swapIdx];
+  fields[swapIdx] = tmp;
+  renderCanvas();
+}
+
+// ── Toggle required ───────────────────────────────────────────────────────
+function toggleRequired(id, checked) {
+  var f = fields.find(function(f) { return f.id === id; });
+  if (f) f.required = checked;
+}
+
+// ── Edit label ────────────────────────────────────────────────────────────
+function updateLabel(id, val) {
+  var f = fields.find(function(f) { return f.id === id; });
+  if (f) f.label = val;
+  updateFieldCount();
+}
+
+// ── Edit dropdown options ─────────────────────────────────────────────────
+function openDropdownOptions(id) {
+  var f = fields.find(function(f) { return f.id === id; });
+  if (!f) return;
+  editingDropdownFieldId = id;
+  document.getElementById('dropdownOptionsInput').value = (f.options || []).join('\n');
+  new bootstrap.Modal(document.getElementById('dropdownOptionsModal')).show();
+}
+
+function saveDropdownOptions() {
+  var f = fields.find(function(f) { return f.id === editingDropdownFieldId; });
+  if (!f) return;
+  var raw = document.getElementById('dropdownOptionsInput').value;
+  f.options = raw.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+  bootstrap.Modal.getInstance(document.getElementById('dropdownOptionsModal')).hide();
+  renderCanvas();
+}
+
+// ── Clear all ─────────────────────────────────────────────────────────────
+function clearAll() {
+  if (!confirm('Remove all fields?')) return;
+  fields = [];
+  renderCanvas();
+}
+
+// ── Render canvas ─────────────────────────────────────────────────────────
+function renderCanvas() {
+  var canvas    = document.getElementById('fieldCanvas');
+  var empty     = document.getElementById('emptyState');
+  var clearBtn  = document.getElementById('clearBtn');
+
+  if (!fields.length) {
+    canvas.innerHTML = '';
+    empty.style.display = '';
+    clearBtn.style.display = 'none';
+    updateFieldCount();
+    return;
+  }
+
+  empty.style.display = 'none';
+  clearBtn.style.display = '';
+
+  var html = '';
+  fields.forEach(function(f, idx) {
+    var isSection = f.type === 'section';
+    html += '<div class="fb-field-row' + (isSection ? ' fb-section-row' : '') + '" id="frow-' + f.id + '">';
+
+    // Drag handle
+    html += '<div class="fb-drag-handle" title="Drag to reorder">⠿</div>';
+
+    // Body
+    html += '<div class="fb-field-body">';
+
+    if (isSection) {
+      // Section heading — just an editable label
+      html += '<input class="fb-field-label-input" style="font-size:15px;color:#1a3a6e;" '
+           +  'value="' + escHtml(f.label) + '" placeholder="Section heading..." '
+           +  'oninput="updateLabel(' + f.id + ', this.value)">';
+      html += '<span class="fb-field-type-badge" style="background:#dbeafe;color:#1e40af;">Section</span>';
+    } else {
+      // Label input
+      html += '<input class="fb-field-label-input" value="' + escHtml(f.label) + '" '
+           +  'placeholder="Field label..." oninput="updateLabel(' + f.id + ', this.value)">';
+      html += '<span class="fb-field-type-badge">' + (TYPE_META[f.type] ? TYPE_META[f.type].badge : f.type) + '</span>';
+
+      // Field preview
+      html += '<div class="fb-field-preview">';
+      if (f.type === 'text' || f.type === 'number') {
+        html += '<input type="text" placeholder="' + (f.type === 'number' ? '0' : 'Field preview') + '" disabled>';
+      } else if (f.type === 'textarea') {
+        html += '<textarea rows="2" placeholder="Field preview" disabled></textarea>';
+      } else if (f.type === 'date') {
+        html += '<input type="text" placeholder="DD / MM / YYYY" disabled>';
+      } else if (f.type === 'dropdown') {
+        html += '<select disabled>';
+        (f.options || ['Option 1']).forEach(function(o) { html += '<option>' + escHtml(o) + '</option>'; });
+        html += '</select>';
+        html += '<div class="mt-1"><a href="#" class="small text-primary" style="font-size:11px;" '
+             +  'onclick="openDropdownOptions(' + f.id + ');return false;">Edit options (' + (f.options||[]).length + ')</a></div>';
+      } else if (f.type === 'checkbox') {
+        html += '<div class="d-flex gap-2 align-items-center" style="font-size:13px;">'
+             +  '<input type="checkbox" disabled class="form-check-input mt-0"> <span class="text-secondary">Checkbox field</span></div>';
+      } else if (f.type === 'yesno') {
+        html += '<div class="d-flex gap-3" style="font-size:13px;">'
+             +  '<label><input type="radio" disabled name="yn_' + f.id + '" class="form-check-input me-1"> Yes</label>'
+             +  '<label><input type="radio" disabled name="yn_' + f.id + '" class="form-check-input me-1"> No</label></div>';
+      } else if (f.type === 'signature') {
+        html += '<div class="fb-sig-placeholder">✍ Signature block — user signs here</div>';
+      }
+      html += '</div>'; // /preview
+
+      // Required toggle
+      html += '<div class="fb-required-toggle">'
+           +  '<input type="checkbox" class="form-check-input" id="req_' + f.id + '" '
+           +  (f.required ? 'checked' : '') + ' onchange="toggleRequired(' + f.id + ', this.checked)">'
+           +  '<label for="req_' + f.id + '">Required field</label>'
+           +  (f.required ? '<span class="text-danger ms-1" style="font-size:11px;">*</span>' : '')
+           +  '</div>';
+    }
+
+    html += '</div>'; // /body
+
+    // Actions
+    html += '<div class="fb-field-actions">';
+    if (idx > 0) {
+      html += '<button class="up-btn" title="Move up" onclick="moveField(' + f.id + ',-1)">↑</button>';
+    }
+    if (idx < fields.length - 1) {
+      html += '<button class="down-btn" title="Move down" onclick="moveField(' + f.id + ',1)">↓</button>';
+    }
+    html += '<button title="Remove field" onclick="removeField(' + f.id + ')">✕</button>';
+    html += '</div>'; // /actions
+
+    html += '</div>'; // /fb-field-row
+  });
+
+  canvas.innerHTML = html;
+  updateFieldCount();
+}
+
+function updateFieldCount() {
+  var nonSection = fields.filter(function(f) { return f.type !== 'section'; }).length;
+  var sections   = fields.filter(function(f) { return f.type === 'section'; }).length;
+  var label = document.getElementById('fieldCountLabel');
+  var parts = [];
+  if (nonSection) parts.push(nonSection + ' field' + (nonSection !== 1 ? 's' : ''));
+  if (sections)   parts.push(sections + ' section' + (sections !== 1 ? 's' : ''));
+  label.textContent = parts.length ? parts.join(', ') + ' added' : '0 fields added';
+}
+
+// ── Preview modal ─────────────────────────────────────────────────────────
+function openPreview() {
+  var formName = document.getElementById('fbFormName').value.trim() || 'Untitled Form';
+  document.getElementById('previewModalLabel').textContent = formName;
+  document.getElementById('previewSubtitle').textContent =
+    'Preview — ' + fields.filter(function(f){return f.type!=='section';}).length + ' fields';
+
+  var html = '';
+  if (!fields.length) {
+    html = '<div class="text-center text-secondary py-4">No fields added yet.</div>';
+  } else {
+    fields.forEach(function(f) {
+      if (f.type === 'section') {
+        html += '<div class="preview-section-head">' + escHtml(f.label) + '</div>';
+        return;
+      }
+      html += '<div class="preview-field-wrap">';
+      html += '<label>' + escHtml(f.label) + (f.required ? ' <span class="text-danger">*</span>' : '') + '</label>';
+      if (f.type === 'text' || f.type === 'number') {
+        html += '<input type="' + f.type + '" placeholder="Enter ' + escHtml(f.label.toLowerCase()) + '">';
+      } else if (f.type === 'textarea') {
+        html += '<textarea rows="3" placeholder="Enter ' + escHtml(f.label.toLowerCase()) + '"></textarea>';
+      } else if (f.type === 'date') {
+        html += '<input type="date">';
+      } else if (f.type === 'dropdown') {
+        html += '<select><option value="">-- Select --</option>';
+        (f.options || []).forEach(function(o) { html += '<option>' + escHtml(o) + '</option>'; });
+        html += '</select>';
+      } else if (f.type === 'checkbox') {
+        html += '<div class="form-check"><input class="form-check-input" type="checkbox" id="pv_' + f.id + '">'
+             +  '<label class="form-check-label" for="pv_' + f.id + '">' + escHtml(f.label) + '</label></div>';
+      } else if (f.type === 'yesno') {
+        html += '<div class="d-flex gap-4">'
+             +  '<div class="form-check"><input class="form-check-input" type="radio" name="pvyn_' + f.id + '">'
+             +  '<label class="form-check-label">Yes</label></div>'
+             +  '<div class="form-check"><input class="form-check-input" type="radio" name="pvyn_' + f.id + '">'
+             +  '<label class="form-check-label">No</label></div></div>';
+      } else if (f.type === 'signature') {
+        html += '<div class="sig-box">✍ Sign here</div>';
+      }
+      html += '</div>';
+    });
+  }
+
+  document.getElementById('previewModalBody').innerHTML = html;
+  new bootstrap.Modal(document.getElementById('previewModal')).show();
+}
+
+// ── Validate form name (basic uniqueness placeholder) ─────────────────────
+document.getElementById('fbFormName').addEventListener('input', function() {
+  var val = this.value.trim();
+  var hint = document.getElementById('fbNameValidation');
+  if (!val) {
+    hint.textContent = 'Form name is required.';
+    hint.className = 'form-text text-danger';
+  } else {
+    // In real PHP: async AJAX check for uniqueness
+    hint.textContent = '✓ Name looks good — uniqueness confirmed on save.';
+    hint.className = 'form-text text-success';
+  }
+});
+
+// ── Confirm & return to create-document ──────────────────────────────────
+function confirmAndReturn() {
+  var formName = document.getElementById('fbFormName').value.trim();
+  if (!formName) {
+    alert('Please enter a Form / Checklist Name before confirming.');
+    document.getElementById('fbFormName').focus();
+    return;
+  }
+  if (!fields.length) {
+    alert('Please add at least one field to your form before confirming.');
+    return;
+  }
+
+  var sections = 0;
+  fields.forEach(function(f) { if (f.type === 'section') sections++; });
+
+  var data = {
+    formName:  formName,
+    formType:  document.getElementById('fbFormType').value.trim(),
+    formDesc:  document.getElementById('fbFormDesc').value.trim(),
+    fields:    fields,
+    sections:  sections,
+    savedAt:   new Date().toISOString(),
+  };
+
+  sessionStorage.setItem('cpBuiltForm', JSON.stringify(data));
+  window.location.href = 'create-document.html';
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Initial render
+renderCanvas();
+</script>
 </body>
 </html>

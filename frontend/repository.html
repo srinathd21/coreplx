@@ -10,49 +10,229 @@
 <nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
   <div class="container-fluid px-4 px-xxl-5">
     <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
-    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="topNav">
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
-        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.html">Dashboard</a></li>
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.html">Create Document</a></li><li><a class="dropdown-item" href="update-document.html">Update Document</a></li><li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li><li><a class="dropdown-item" href="repository.html">Repository</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="document-types.html">Document Types</a></li><li><a class="dropdown-item" href="document-id.html">Document ID</a></li><li><a class="dropdown-item" href="content-editor.html">Content Editor</a></li><li><a class="dropdown-item" href="form-builder.html">Form Builder</a></li><li><a class="dropdown-item" href="form-type-name.html">Form Type &amp; Name</a></li><li><a class="dropdown-item" href="approver-selection.html">Approver Selection</a></li><li><a class="dropdown-item" href="submit-review.html">Submit for Review</a></li><li><a class="dropdown-item" href="electronic-signature.html">Electronic Signature</a></li><li><a class="dropdown-item" href="approver-comments.html">Approver Comments</a></li><li><a class="dropdown-item" href="notifications.html">Notifications</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="audit-creation.html">Audit - Creation</a></li><li><a class="dropdown-item" href="audit-approval.html">Audit - Approval</a></li><li><a class="dropdown-item" href="audit-comments.html">Audit - Comments</a></li><li><a class="dropdown-item" href="qa-admin.html">QA Admin</a></li><li><a class="dropdown-item" href="employee-role.html">Employee Role</a></li><li><a class="dropdown-item" href="super-admin.html">Super Admin</a></li><li><a class="dropdown-item" href="user-management.html">User Management</a></li><li><a class="dropdown-item" href="role-assignment.html">Role Assignment</a></li></ul></li>
-        
+        <li class="nav-item"><a class="nav-link" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item active" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
         <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
       </ul>
-      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small">QA Admin</span><a class="nav-link px-0" href="notifications.html">Notifications</a><span class="navbar-text small">Profile</span></div>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
     </div>
   </div>
 </nav>
+
 <main class="app-shell">
 <div class="content-wrap px-4 py-4 mx-auto">
-<div class="mb-4">
-<h1 class="page-title mb-2">Effective Documents Repository</h1>
-<p class="page-subtitle mb-0">Access approved and effective controlled documents in a read-only repository.</p>
-</div>
-<div class="card cp-card"><div class="card-body">
-<h2 class="card-title mb-1">Effective Controlled Documents</h2>
-<p class="card-subtitle mb-3">Approved documents appear here in a read-only repository.</p>
-<div class="table-responsive">
-<table class="table align-middle">
-<thead><tr><th>Document ID</th><th>Title</th><th>Effective Date</th><th>Next Review Date</th><th>Status</th><th>Actions</th></tr></thead>
-<tbody>
-<tr><td class="fw-semibold">SOP-104-CAPA-03</td><td>CAPA Closure Workflow</td><td>01-Apr-2026</td><td>01-Apr-2027</td><td><span class="badge badge-soft-success">Effective</span></td><td><button class="btn btn-sm btn-outline-primary">View</button> <button class="btn btn-sm btn-outline-secondary">PDF</button></td></tr>
-<tr><td class="fw-semibold">POL-021-SEC-02</td><td>Information Security Policy</td><td>11-Jan-2026</td><td>05-Apr-2026</td><td><span class="badge badge-soft-danger">Overdue</span></td><td><button class="btn btn-sm btn-outline-primary">View</button> <button class="btn btn-sm btn-outline-secondary">PDF</button></td></tr>
-<tr><td class="fw-semibold">GUI-089-DMS-04</td><td>DMS Access Guidance</td><td>09-Feb-2026</td><td>09-Feb-2027</td><td><span class="badge badge-soft-success">Effective</span></td><td><button class="btn btn-sm btn-outline-primary">View</button> <button class="btn btn-sm btn-outline-secondary">PDF</button></td></tr>
-</tbody>
-</table>
-</div>
-</div></div>
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Effective Documents Repository</h1>
+    <p class="page-subtitle mb-0">Organisation-wide library of all approved and effective controlled documents. Read-only.</p>
+  </div>
+
+  <!-- Summary KPI strip -->
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6 col-xl-3">
+      <div class="card cp-card"><div class="card-body py-3 px-4 d-flex justify-content-between align-items-center">
+        <div><div class="section-kicker mb-1">Total Effective</div><div class="stat-value" style="font-size:1.6rem;">211</div></div>
+        <span style="font-size:1.8rem;">📋</span>
+      </div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card cp-card"><div class="card-body py-3 px-4 d-flex justify-content-between align-items-center">
+        <div><div class="section-kicker mb-1">Overdue Review</div><div class="stat-value" style="font-size:1.6rem;color:#dc2626;">7</div></div>
+        <span style="font-size:1.8rem;">⚠️</span>
+      </div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card cp-card"><div class="card-body py-3 px-4 d-flex justify-content-between align-items-center">
+        <div><div class="section-kicker mb-1">Added This Month</div><div class="stat-value" style="font-size:1.6rem;">12</div></div>
+        <span style="font-size:1.8rem;">✅</span>
+      </div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card cp-card"><div class="card-body py-3 px-4 d-flex justify-content-between align-items-center">
+        <div><div class="section-kicker mb-1">Pending Retirement</div><div class="stat-value" style="font-size:1.6rem;">3</div></div>
+        <span style="font-size:1.8rem;">🗄️</span>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="card cp-card mb-3">
+    <div class="card-body py-3">
+      <div class="d-flex gap-2 flex-wrap align-items-end">
+        <div>
+          <label class="form-label mb-1">Search</label>
+          <input type="text" class="form-control form-control-sm" id="repoSearch" placeholder="Search ID or title..." style="max-width:220px;" oninput="applyFilters()">
+        </div>
+        <div>
+          <label class="form-label mb-1">Type</label>
+          <select class="form-select form-select-sm" id="repoType" style="max-width:140px;" onchange="applyFilters()">
+            <option value="">All Types</option>
+            <option>SOP</option>
+            <option>Policy</option>
+            <option>Guidance</option>
+            <option>Form</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label mb-1">Department</label>
+          <select class="form-select form-select-sm" id="repoDept" style="max-width:180px;" onchange="applyFilters()">
+            <option value="">All Departments</option>
+            <option>Quality Assurance</option>
+            <option>Operations</option>
+            <option>Human Resources</option>
+            <option>Information Technology</option>
+            <option>Finance</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label mb-1">Review Status</label>
+          <select class="form-select form-select-sm" id="repoReview" style="max-width:160px;" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="overdue">Overdue</option>
+            <option value="current">Current</option>
+          </select>
+        </div>
+        <div class="d-flex gap-2 ms-auto">
+          <button class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">Reset</button>
+          <button class="btn btn-sm btn-outline-primary">&#11015; Export PDF</button>
+          <button class="btn btn-sm btn-outline-primary">&#11015; Export Excel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card cp-card" style="padding:0;">
+    <table class="table mb-0" id="repoTable">
+      <thead>
+        <tr>
+          <th>Document ID</th>
+          <th>Title</th>
+          <th>Type</th>
+          <th>Version</th>
+          <th>Department</th>
+          <th>Owner</th>
+          <th>Effective Date</th>
+          <th>Next Review</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="repoBody"></tbody>
+    </table>
+    <div class="text-center text-secondary py-4 small d-none" id="repoEmpty">No documents found.</div>
+    <div class="px-4 py-2 border-top d-flex justify-content-between align-items-center">
+      <span class="small text-secondary" id="repoCount"></span>
+      <span class="small" style="color:#dc2626;font-weight:600;">&#128274; Read-only — no documents can be edited or deleted from this view.</span>
+    </div>
+  </div>
+
 </div>
 </main>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+var DOCS = [
+  { id:'SOP-104-CAPA-V3',       title:'CAPA Management',              type:'SOP',     ver:'V3', dept:'Quality Assurance',      owner:'Pradeep',   effective:'2026-01-15', review:'2028-01-15', overdue:false },
+  { id:'SOP-021-Training-V1',   title:'Training Procedure',           type:'SOP',     ver:'V1', dept:'Human Resources',        owner:'Ariharan',  effective:'2026-03-01', review:'2028-03-01', overdue:false },
+  { id:'SOP-007-DevControl-V2', title:'Deviation Control',            type:'SOP',     ver:'V2', dept:'Operations',             owner:'Kavin',     effective:'2025-11-10', review:'2025-10-10', overdue:true  },
+  { id:'POL-004-Quality-V2',    title:'Quality Policy',               type:'Policy',  ver:'V2', dept:'Quality Assurance',      owner:'Kavin',     effective:'2026-01-15', review:'2028-01-15', overdue:false },
+  { id:'POL-011-DataInt-V1',    title:'Data Integrity Policy',        type:'Policy',  ver:'V1', dept:'Information Technology', owner:'Pradeep',   effective:'2025-09-01', review:'2025-09-01', overdue:true  },
+  { id:'POL-021-Security-V2',   title:'Information Security Policy',  type:'Policy',  ver:'V2', dept:'Information Technology', owner:'Anita Rao', effective:'2025-08-15', review:'2025-08-15', overdue:true  },
+  { id:'GUI-003-CAPA-V1',       title:'CAPA Workflow Guidance',       type:'Guidance',ver:'V1', dept:'Quality Assurance',      owner:'Ariharan',  effective:'2026-02-01', review:'2028-02-01', overdue:false },
+  { id:'GUI-008-Audit-V2',      title:'Internal Audit Guidance',      type:'Guidance',ver:'V2', dept:'Quality Assurance',      owner:'Deepa',     effective:'2025-10-20', review:'2025-10-20', overdue:true  },
+  { id:'GUI-089-DMS-V4',        title:'DMS Access Guidance',          type:'Guidance',ver:'V4', dept:'Information Technology', owner:'Pradeep',   effective:'2026-02-09', review:'2027-02-09', overdue:false },
+  { id:'FRM-010-Inspection-V3', title:'Inspection Form',              type:'Form',    ver:'V3', dept:'Operations',             owner:'Priya',     effective:'2025-11-20', review:'2025-11-20', overdue:true  },
+  { id:'FRM-015-Training-V1',   title:'Training Acknowledgement',     type:'Form',    ver:'V1', dept:'Human Resources',        owner:'Ariharan',  effective:'2026-03-10', review:'2028-03-10', overdue:false },
+];
+
+function applyFilters() {
+  var q      = document.getElementById('repoSearch').value.toLowerCase();
+  var type   = document.getElementById('repoType').value;
+  var dept   = document.getElementById('repoDept').value;
+  var review = document.getElementById('repoReview').value;
+
+  var filtered = DOCS.filter(function(d) {
+    return (!q      || d.id.toLowerCase().includes(q) || d.title.toLowerCase().includes(q)) &&
+           (!type   || d.type === type) &&
+           (!dept   || d.dept === dept) &&
+           (!review || (review === 'overdue' ? d.overdue : !d.overdue));
+  });
+  renderTable(filtered);
+}
+
+function resetFilters() {
+  document.getElementById('repoSearch').value = '';
+  document.getElementById('repoType').value   = '';
+  document.getElementById('repoDept').value   = '';
+  document.getElementById('repoReview').value = '';
+  renderTable(DOCS);
+}
+
+function renderTable(data) {
+  var body  = document.getElementById('repoBody');
+  var empty = document.getElementById('repoEmpty');
+  var count = document.getElementById('repoCount');
+
+  count.textContent = 'Showing ' + data.length + ' of ' + DOCS.length + ' documents';
+
+  if (!data.length) { body.innerHTML = ''; empty.classList.remove('d-none'); return; }
+  empty.classList.add('d-none');
+
+  body.innerHTML = data.map(function(d) {
+    var reviewColor = d.overdue ? 'color:#dc2626;font-weight:600;' : 'color:#6b7280;';
+    var statusBadge = d.overdue
+      ? '<span class="badge badge-soft-danger">Overdue Review</span>'
+      : '<span class="badge badge-soft-success">Effective</span>';
+    return '<tr>' +
+      '<td class="fw-semibold" style="color:#2563eb;font-size:13px;">' + d.id + '</td>' +
+      '<td style="font-size:13px;">' + d.title + '</td>' +
+      '<td><span class="badge badge-soft-info">' + d.type + '</span></td>' +
+      '<td style="font-size:13px;">' + d.ver + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + d.dept + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + d.owner + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + fmt(d.effective) + '</td>' +
+      '<td style="font-size:12px;' + reviewColor + '">' + fmt(d.review) + '</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '<td style="white-space:nowrap;">' +
+        '<button class="btn btn-sm btn-outline-primary"   style="height:28px;padding:0 10px;font-size:12px;">View</button>&nbsp;' +
+        '<button class="btn btn-sm btn-outline-secondary" style="height:28px;padding:0 10px;font-size:12px;">&#11015; PDF</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function fmt(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+}
+
+renderTable(DOCS);
+</script>
 </body>
 </html>

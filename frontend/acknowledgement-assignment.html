@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - Acknowledgement Assignment</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    .field-locked {
+      background: #f5f7fa !important;
+      color: #6b7280 !important;
+      cursor: not-allowed;
+    }
+    select:disabled { background: #f5f7fa; color: #aaa; cursor: not-allowed; }
+
+    /* Employee selection checkboxes */
+    .emp-check-list {
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid #dde3ec;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .emp-check-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+      border-bottom: 1px solid #f0f2f5;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .emp-check-item:last-child { border-bottom: none; }
+    .emp-check-item:hover { background: #f4f7ff; }
+    .emp-check-item input[type=checkbox] { cursor: pointer; flex-shrink: 0; }
+    .emp-check-item .emp-name  { font-weight: 600; color: #1e2a3a; }
+    .emp-check-item .emp-dept  { font-size: 11px; color: #6b7280; margin-top: 1px; }
+    .emp-check-item .emp-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: #dbeafe; color: #1d4ed8;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; flex-shrink: 0;
+    }
+
+    /* Assignment tracker table */
+    .progress-thin {
+      height: 6px;
+      border-radius: 3px;
+      background: #e5e7eb;
+      overflow: hidden;
+      min-width: 80px;
+    }
+    .progress-thin .bar {
+      height: 100%;
+      border-radius: 3px;
+      background: #16a34a;
+      transition: width 0.3s;
+    }
+    .progress-thin .bar.warn { background: #f59e0b; }
+    .progress-thin .bar.danger { background: #dc2626; }
+
+    /* Tab strip for existing assignments */
+    .assign-tab {
+      display: inline-block;
+      padding: 7px 18px;
+      border-radius: 6px 6px 0 0;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #e0e7ef;
+      border-bottom: none;
+      margin-right: 4px;
+    }
+    .assign-tab.active { background: #fff; color: #1a3a6e; }
+    .assign-tab.inactive { background: #f3f4f6; color: #6b7280; }
+
+    .selected-count {
+      display: inline-block;
+      background: #2563eb;
+      color: #fff;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 1px 8px;
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="app-shell">
+<div class="content-wrap px-4 py-4 mx-auto">
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Acknowledgement Assignment</h1>
+    <p class="page-subtitle mb-0">Assign mandatory read &amp; confirm tasks to employees or departments for effective controlled documents.</p>
+  </div>
+
+  <div class="row g-3">
+
+    <!-- ── Left: New Assignment Form ── -->
+    <div class="col-lg-8">
+
+      <!-- Step 1 & 2 — Document selection -->
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Select Document</h2>
+          <p class="card-subtitle mb-3">Only Effective documents can be assigned for acknowledgement.</p>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Step 1 — Document Type <span class="text-danger">*</span></label>
+              <select class="form-select" id="docTypeSelect" onchange="onTypeChange(this.value)">
+                <option value="">-- Select Type --</option>
+                <option value="SOP">SOP</option>
+                <option value="Policy">Policy</option>
+                <option value="Guidance">Guidance</option>
+                <option value="Form">Form</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Step 2 — Select Document <span class="text-danger">*</span></label>
+              <select class="form-select" id="docSelect" disabled onchange="onDocSelect(this.value)">
+                <option value="">-- Select Type first --</option>
+              </select>
+              <div class="form-text" id="docSelectHint">Choose a type above to load effective documents.</div>
+            </div>
+          </div>
+
+          <!-- Doc info strip -->
+          <div id="docInfoPanel" class="d-none mt-3 p-3 rounded-3" style="background:#f0f4ff;border:1px solid #c7d7f8;font-size:13px;">
+            <div class="fw-bold text-primary" id="diId">—</div>
+            <div class="text-secondary mt-1" id="diMeta">—</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Step 3 — Assign to -->
+      <div class="card cp-card mb-3 d-none" id="assignCard">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Assign To</h2>
+          <p class="card-subtitle mb-3">Choose to assign by department (all employees in that dept) or select individual employees.</p>
+
+          <!-- Assign mode toggle -->
+          <div class="d-flex gap-2 mb-3" id="assignModeBtns">
+            <button class="btn btn-primary btn-sm" id="btnDept" onclick="setAssignMode('dept')">By Department</button>
+            <button class="btn btn-outline-secondary btn-sm" id="btnIndividual" onclick="setAssignMode('individual')">Individual Employees</button>
+            <button class="btn btn-outline-secondary btn-sm" id="btnAll" onclick="setAssignMode('all')">All Employees</button>
+          </div>
+
+          <!-- Department mode -->
+          <div id="deptMode">
+            <label class="form-label">Select Department <span class="text-danger">*</span></label>
+            <select class="form-select" id="deptSelect" onchange="onDeptChange(this.value)">
+              <option value="">-- Select Department --</option>
+              <option value="QA">Quality Assurance</option>
+              <option value="OPS">Operations</option>
+              <option value="HR">Human Resources</option>
+              <option value="IT">Information Technology</option>
+              <option value="Finance">Finance</option>
+            </select>
+            <div class="form-text" id="deptHint">&nbsp;</div>
+          </div>
+
+          <!-- Individual mode -->
+          <div id="individualMode" class="d-none">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label class="form-label mb-0">
+                Select Employees
+                <span class="selected-count" id="selectedCount">0</span>
+              </label>
+              <div class="d-flex gap-2">
+                <input type="text" class="form-control form-control-sm" id="empSearch"
+                       placeholder="Search name or dept..." oninput="filterEmployees(this.value)"
+                       style="max-width:200px;">
+                <button class="btn btn-outline-secondary btn-sm" onclick="selectAll()">Select All</button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="clearAll()">Clear</button>
+              </div>
+            </div>
+            <div class="emp-check-list" id="empCheckList">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- All employees mode -->
+          <div id="allMode" class="d-none">
+            <div class="p-3 rounded-3" style="background:#f0fdf4;border:1px solid #bbf7d0;font-size:13px;">
+              ✓ &nbsp;This document will be assigned to <strong>all active employees</strong> in the system.
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Step 4 — Deadline & note -->
+      <div class="card cp-card mb-3 d-none" id="deadlineCard">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Deadline &amp; Instructions</h2>
+          <p class="card-subtitle mb-3">Set a read-by date and optional message for employees.</p>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Read-by Deadline <span class="text-danger">*</span></label>
+              <input class="form-control" id="fDeadline" type="date">
+              <div class="form-text">Employees will receive a reminder email if not completed by this date.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Priority</label>
+              <select class="form-select" id="fPriority">
+                <option value="normal">Normal</option>
+                <option value="high">High — highlighted in employee dashboard</option>
+                <option value="urgent">Urgent — email sent immediately</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Message to Employees <span class="text-secondary fw-normal">(optional)</span></label>
+              <textarea class="form-control" id="fNote" rows="2"
+                placeholder="e.g. Please read this updated SOP before your next shift and confirm acknowledgement by the deadline."></textarea>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 mt-4">
+            <button class="btn btn-outline-secondary" onclick="resetForm()">Cancel</button>
+            <button class="btn btn-success" onclick="submitAssignment()">
+              ✓ Assign &amp; Notify Employees
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Right: summary card ── -->
+    <div class="col-lg-4">
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">How It Works</h2>
+          <p class="card-subtitle mb-3">What happens after you assign.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Selected employees receive an email notification with a direct link to the document.</li>
+            <li>The document appears in their <strong>Pending Acknowledgements</strong> list on their dashboard.</li>
+            <li>Employee reads the document and clicks <strong>Confirm Read</strong>.</li>
+            <li>Admin can track completion status in the tracker below.</li>
+            <li>Overdue employees receive an automatic reminder email.</li>
+            <li>All acknowledgements are captured in the audit trail.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card cp-card">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Audit Note</h2>
+          <p class="card-subtitle mb-3">Compliance traceability.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Assignment logged with: assigned by, date, document ID, version.</li>
+            <li>Each employee confirmation logged with: name, timestamp, IP address.</li>
+            <li>Records are immutable — cannot be deleted.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
+
+  <!-- ── Acknowledgement Tracker ── -->
+  <div class="mt-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+      <div>
+        <h2 class="page-title mb-0" style="font-size:1.2rem;">Acknowledgement Tracker</h2>
+        <p class="page-subtitle mb-0 small">Track read confirmation status for all active assignments.</p>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <select class="form-select form-select-sm" style="max-width:160px;" id="filterStatus" onchange="filterTracker()">
+          <option value="">All Statuses</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Completed">Completed</option>
+          <option value="Overdue">Overdue</option>
+        </select>
+        <select class="form-select form-select-sm" style="max-width:160px;" id="filterType" onchange="filterTracker()">
+          <option value="">All Types</option>
+          <option value="SOP">SOP</option>
+          <option value="Policy">Policy</option>
+          <option value="Guidance">Guidance</option>
+          <option value="Form">Form</option>
+        </select>
+        <button class="btn btn-sm btn-outline-secondary">&#11015; Export</button>
+      </div>
+    </div>
+
+    <div class="card cp-card" style="padding:0;">
+      <table class="table mb-0" id="trackerTable">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th>Type</th>
+            <th>Assigned To</th>
+            <th>Deadline</th>
+            <th>Progress</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="trackerBody">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+      <div id="trackerEmpty" class="text-center text-secondary py-4 small d-none">No assignments found.</div>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<!-- ── Detail Modal ── -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title fw-bold" id="detailModalTitle">Assignment Detail</h5>
+          <div class="small text-secondary" id="detailModalSub"></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <table class="table mb-0" id="detailTable">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Department</th>
+              <th>Status</th>
+              <th>Confirmed On</th>
+              <th>IP Address</th>
+            </tr>
+          </thead>
+          <tbody id="detailBody"></tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary btn-sm">&#11015; Export this list</button>
+        <button class="btn btn-primary btn-sm" id="sendReminderBtn">Send Reminder to Pending</button>
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── Sample data — replace with PHP json_encode from DB ───────────────────
+
+var EFFECTIVE_DOCS = {
+  SOP: [
+    { id:'SOP-021-Training-V1',   topic:'Training Procedure',      version:'V1', owner:'Ariharan' },
+    { id:'SOP-104-CAPA-V3',       topic:'CAPA Management',         version:'V3', owner:'Pradeep'  },
+    { id:'SOP-007-DevControl-V2', topic:'Deviation Control',       version:'V2', owner:'Kavin'    },
+  ],
+  Policy: [
+    { id:'POL-004-Quality-V2',       topic:'Quality Policy',        version:'V2', owner:'Kavin'   },
+    { id:'POL-011-DataIntegrity-V1', topic:'Data Integrity Policy', version:'V1', owner:'Pradeep' },
+  ],
+  Guidance: [
+    { id:'GUI-003-CAPA-V1',   topic:'CAPA Workflow Guidance',   version:'V1', owner:'Ariharan' },
+    { id:'GUI-008-Audit-V2',  topic:'Internal Audit Guidance',  version:'V2', owner:'Deepa'    },
+  ],
+  Form: [
+    { id:'FRM-010-Inspection-V3', topic:'Inspection Form',          version:'V3', owner:'Priya'    },
+    { id:'FRM-015-Training-V1',   topic:'Training Acknowledgement', version:'V1', owner:'Ariharan' },
+  ]
+};
+
+var ALL_EMPLOYEES = [
+  { id:1, name:'Ravi Kumar',    dept:'Quality Assurance',     initials:'RK' },
+  { id:2, name:'Sneha Patel',   dept:'Quality Assurance',     initials:'SP' },
+  { id:3, name:'Mohan Das',     dept:'Operations',            initials:'MD' },
+  { id:4, name:'Anita Rao',     dept:'Operations',            initials:'AR' },
+  { id:5, name:'Vikram Singh',  dept:'Human Resources',       initials:'VS' },
+  { id:6, name:'Divya Nair',    dept:'Information Technology',initials:'DN' },
+  { id:7, name:'Suresh Menon',  dept:'Finance',               initials:'SM' },
+  { id:8, name:'Lakshmi Iyer',  dept:'Quality Assurance',     initials:'LI' },
+  { id:9, name:'Arjun Reddy',   dept:'Operations',            initials:'AR' },
+  { id:10,name:'Pooja Sharma',  dept:'Human Resources',       initials:'PS' },
+];
+
+// Sample existing assignments for tracker
+var ASSIGNMENTS = [
+  { id:1, docId:'SOP-021-Training-V1',   type:'SOP',    assignedTo:'Quality Assurance', deadline:'2026-04-20', confirmed:3, total:3, status:'Completed' },
+  { id:2, docId:'POL-004-Quality-V2',    type:'Policy', assignedTo:'All Employees',     deadline:'2026-04-25', confirmed:6, total:10,status:'In Progress' },
+  { id:3, docId:'SOP-104-CAPA-V3',       type:'SOP',    assignedTo:'Operations',        deadline:'2026-04-10', confirmed:1, total:3, status:'Overdue' },
+  { id:4, docId:'GUI-003-CAPA-V1',       type:'Guidance',assignedTo:'Quality Assurance',deadline:'2026-05-01', confirmed:0, total:3, status:'In Progress' },
+];
+
+var assignMode = 'dept';
+var selectedEmployeeIds = [];
+
+// ── Type → Document cascade ──────────────────────────────────────────────
+function onTypeChange(type) {
+  var docSel = document.getElementById('docSelect');
+  var hint   = document.getElementById('docSelectHint');
+  resetBelowDoc();
+
+  if (!type) {
+    docSel.disabled = true;
+    docSel.innerHTML = '<option value="">-- Select Type first --</option>';
+    hint.textContent = 'Choose a type above to load effective documents.';
+    return;
+  }
+  var docs = EFFECTIVE_DOCS[type] || [];
+  docSel.innerHTML = '<option value="">-- Select a ' + type + ' document --</option>';
+  docs.forEach(function(d) {
+    var o = document.createElement('option');
+    o.value = d.id;
+    o.textContent = d.id + '  —  ' + d.topic;
+    docSel.appendChild(o);
+  });
+  docSel.disabled = false;
+  hint.textContent = docs.length + ' effective ' + type + ' document' + (docs.length!==1?'s':'') + ' available.';
+}
+
+function onDocSelect(docId) {
+  resetBelowDoc();
+  if (!docId) return;
+  var type = document.getElementById('docTypeSelect').value;
+  var doc  = (EFFECTIVE_DOCS[type]||[]).find(function(d){return d.id===docId;});
+  if (!doc) return;
+
+  document.getElementById('diId').textContent   = doc.id;
+  document.getElementById('diMeta').textContent = 'Topic: ' + doc.topic + '  ·  Version: ' + doc.version + '  ·  Owner: ' + doc.owner;
+  document.getElementById('docInfoPanel').classList.remove('d-none');
+  document.getElementById('assignCard').classList.remove('d-none');
+  document.getElementById('deadlineCard').classList.remove('d-none');
+
+  // default deadline = today + 7 days
+  var d = new Date(); d.setDate(d.getDate()+7);
+  document.getElementById('fDeadline').value = toInputDate(d);
+
+  renderEmployeeList('');
+}
+
+function resetBelowDoc() {
+  document.getElementById('docInfoPanel').classList.add('d-none');
+  document.getElementById('assignCard').classList.add('d-none');
+  document.getElementById('deadlineCard').classList.add('d-none');
+  selectedEmployeeIds = [];
+  updateSelectedCount();
+}
+
+// ── Assign mode ──────────────────────────────────────────────────────────
+function setAssignMode(mode) {
+  assignMode = mode;
+  document.getElementById('deptMode').classList.toggle('d-none', mode !== 'dept');
+  document.getElementById('individualMode').classList.toggle('d-none', mode !== 'individual');
+  document.getElementById('allMode').classList.toggle('d-none', mode !== 'all');
+
+  document.getElementById('btnDept').className       = mode==='dept'       ? 'btn btn-primary btn-sm'          : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('btnIndividual').className = mode==='individual' ? 'btn btn-primary btn-sm'          : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('btnAll').className        = mode==='all'        ? 'btn btn-primary btn-sm'          : 'btn btn-outline-secondary btn-sm';
+}
+
+function onDeptChange(dept) {
+  var count = ALL_EMPLOYEES.filter(function(e){return e.dept === document.getElementById('deptSelect').options[document.getElementById('deptSelect').selectedIndex].text;}).length;
+  var hint = document.getElementById('deptHint');
+  if (dept) {
+    var label = document.getElementById('deptSelect').options[document.getElementById('deptSelect').selectedIndex].text;
+    var n = ALL_EMPLOYEES.filter(function(e){return e.dept===label;}).length;
+    hint.textContent = n + ' active employee' + (n!==1?'s':'') + ' in this department will be assigned.';
+    hint.className = 'form-text text-success';
+  } else {
+    hint.textContent = '';
+  }
+}
+
+// ── Employee list ────────────────────────────────────────────────────────
+function renderEmployeeList(filter) {
+  var list = document.getElementById('empCheckList');
+  var filtered = ALL_EMPLOYEES.filter(function(e) {
+    var q = filter.toLowerCase();
+    return !q || e.name.toLowerCase().includes(q) || e.dept.toLowerCase().includes(q);
+  });
+  list.innerHTML = filtered.map(function(e) {
+    var checked = selectedEmployeeIds.indexOf(e.id) > -1;
+    return '<div class="emp-check-item" onclick="toggleEmployee(' + e.id + ')">' +
+      '<input type="checkbox" ' + (checked?'checked':'') + ' onclick="event.stopPropagation();toggleEmployee(' + e.id + ')">' +
+      '<div class="emp-avatar">' + e.initials + '</div>' +
+      '<div><div class="emp-name">' + e.name + '</div><div class="emp-dept">' + e.dept + '</div></div>' +
+      '</div>';
+  }).join('');
+}
+
+function toggleEmployee(id) {
+  var idx = selectedEmployeeIds.indexOf(id);
+  if (idx > -1) selectedEmployeeIds.splice(idx, 1);
+  else selectedEmployeeIds.push(id);
+  updateSelectedCount();
+  renderEmployeeList(document.getElementById('empSearch').value);
+}
+
+function selectAll() {
+  selectedEmployeeIds = ALL_EMPLOYEES.map(function(e){return e.id;});
+  updateSelectedCount();
+  renderEmployeeList(document.getElementById('empSearch').value);
+}
+
+function clearAll() {
+  selectedEmployeeIds = [];
+  updateSelectedCount();
+  renderEmployeeList(document.getElementById('empSearch').value);
+}
+
+function filterEmployees(val) { renderEmployeeList(val); }
+
+function updateSelectedCount() {
+  document.getElementById('selectedCount').textContent = selectedEmployeeIds.length;
+}
+
+// ── Submit ───────────────────────────────────────────────────────────────
+function submitAssignment() {
+  var docId    = document.getElementById('docSelect').value;
+  var deadline = document.getElementById('fDeadline').value;
+
+  if (!docId)    { alert('Please select a document.'); return; }
+  if (!deadline) { alert('Please set a Read-by Deadline.'); return; }
+
+  if (assignMode === 'dept' && !document.getElementById('deptSelect').value) {
+    alert('Please select a department.'); return;
+  }
+  if (assignMode === 'individual' && selectedEmployeeIds.length === 0) {
+    alert('Please select at least one employee.'); return;
+  }
+
+  var type = document.getElementById('docTypeSelect').value;
+  var label = assignMode === 'all' ? 'All Employees'
+            : assignMode === 'dept' ? document.getElementById('deptSelect').options[document.getElementById('deptSelect').selectedIndex].text
+            : selectedEmployeeIds.length + ' employee' + (selectedEmployeeIds.length!==1?'s':'');
+
+  // Add to tracker (in PHP: INSERT into assignments table)
+  ASSIGNMENTS.unshift({
+    id: ASSIGNMENTS.length + 1,
+    docId: docId,
+    type: type,
+    assignedTo: label,
+    deadline: deadline,
+    confirmed: 0,
+    total: assignMode === 'all' ? ALL_EMPLOYEES.length
+         : assignMode === 'individual' ? selectedEmployeeIds.length
+         : ALL_EMPLOYEES.filter(function(e){
+             return e.dept === document.getElementById('deptSelect').options[document.getElementById('deptSelect').selectedIndex].text;
+           }).length,
+    status: 'In Progress'
+  });
+
+  renderTracker(ASSIGNMENTS);
+  resetForm();
+  alert('Assignment created. Employees have been notified by email.');
+}
+
+function resetForm() {
+  document.getElementById('docTypeSelect').value = '';
+  document.getElementById('docSelect').innerHTML = '<option value="">-- Select Type first --</option>';
+  document.getElementById('docSelect').disabled = true;
+  document.getElementById('docSelectHint').textContent = 'Choose a type above to load effective documents.';
+  document.getElementById('fNote').value = '';
+  selectedEmployeeIds = [];
+  resetBelowDoc();
+}
+
+// ── Tracker ──────────────────────────────────────────────────────────────
+function renderTracker(data) {
+  var body  = document.getElementById('trackerBody');
+  var empty = document.getElementById('trackerEmpty');
+  if (!data.length) { body.innerHTML=''; empty.classList.remove('d-none'); return; }
+  empty.classList.add('d-none');
+
+  body.innerHTML = data.map(function(a) {
+    var pct      = a.total ? Math.round(a.confirmed / a.total * 100) : 0;
+    var barClass = pct === 100 ? '' : (a.status==='Overdue' ? 'danger' : pct>50 ? '' : 'warn');
+    var statusBadge = a.status === 'Completed' ? '<span class="badge badge-soft-success">Completed</span>'
+                    : a.status === 'Overdue'   ? '<span class="badge badge-soft-danger">Overdue</span>'
+                    :                            '<span class="badge badge-soft-warning">In Progress</span>';
+    return '<tr>' +
+      '<td><span class="fw-semibold text-primary" style="font-size:13px;">' + a.docId + '</span></td>' +
+      '<td><span class="badge badge-soft-info">' + a.type + '</span></td>' +
+      '<td style="font-size:13px;">' + a.assignedTo + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + formatDate(a.deadline) + '</td>' +
+      '<td>' +
+        '<div class="d-flex align-items-center gap-2">' +
+          '<div class="progress-thin"><div class="bar ' + barClass + '" style="width:' + pct + '%"></div></div>' +
+          '<span style="font-size:12px;color:#6b7280;white-space:nowrap;">' + a.confirmed + ' / ' + a.total + '</span>' +
+        '</div>' +
+      '</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '<td>' +
+        '<button class="btn btn-sm btn-outline-secondary" style="height:28px;padding:0 10px;font-size:12px;" onclick="openDetail(' + a.id + ')">View Detail</button>' +
+        (a.status !== 'Completed' ? '&nbsp;<button class="btn btn-sm btn-outline-warning" style="height:28px;padding:0 10px;font-size:12px;" onclick="sendReminder(' + a.id + ')">Remind</button>' : '') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function filterTracker() {
+  var st   = document.getElementById('filterStatus').value;
+  var type = document.getElementById('filterType').value;
+  var filtered = ASSIGNMENTS.filter(function(a) {
+    return (!st   || a.status === st) &&
+           (!type || a.type   === type);
+  });
+  renderTracker(filtered);
+}
+
+function openDetail(id) {
+  var a = ASSIGNMENTS.find(function(x){return x.id===id;});
+  if (!a) return;
+  document.getElementById('detailModalTitle').textContent = a.docId;
+  document.getElementById('detailModalSub').textContent   = 'Assigned to: ' + a.assignedTo + '  ·  Deadline: ' + formatDate(a.deadline);
+
+  // Sample per-employee rows
+  var rows = ALL_EMPLOYEES.slice(0, a.total).map(function(e, i) {
+    var confirmed = i < a.confirmed;
+    return '<tr>' +
+      '<td class="fw-semibold" style="font-size:13px;">' + e.name + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + e.dept + '</td>' +
+      '<td>' + (confirmed ? '<span class="badge badge-soft-success">Confirmed</span>' : '<span class="badge badge-soft-warning">Pending</span>') + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + (confirmed ? '0' + (i+3) + ' Apr 2026  ' + (10+i) + ':' + (15+i) + ':00' : '—') + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + (confirmed ? '192.168.1.' + (40+i) : '—') + '</td>' +
+    '</tr>';
+  }).join('');
+
+  document.getElementById('detailBody').innerHTML = rows;
+  new bootstrap.Modal(document.getElementById('detailModal')).show();
+}
+
+function sendReminder(id) {
+  alert('Reminder email sent to all pending employees for this assignment.');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function toInputDate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function formatDate(str) {
+  if (!str) return '—';
+  return new Date(str).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+}
+
+// Initial render
+renderTracker(ASSIGNMENTS);
+renderEmployeeList('');
+</script>
+</body>
+</html>

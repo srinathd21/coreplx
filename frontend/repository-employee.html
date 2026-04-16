@@ -10,45 +10,236 @@
 <nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
   <div class="container-fluid px-4 px-xxl-5">
     <a class="navbar-brand fw-bold" href="dashboard-employee.html">CorePlx Quality DMS</a>
-    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="topNav">
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
-        <li class="nav-item"><a class="nav-link active" href="dashboard-employee.html">Dashboard</a></li>
-        <li class="nav-item"><a class="nav-link" href="repository.html">Repository</a></li>
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Acknowledgements</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="pending-acknowledgements.html">Pending Acknowledgements</a></li><li><a class="dropdown-item" href="my-acknowledgements.html">My Acknowledgements</a></li></ul></li>
-        
-        
+        <li class="nav-item"><a class="nav-link" href="dashboard-employee.html">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link active" href="repository-employee.html">Repository</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Acknowledgements</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="pending-acknowledgements.html">Pending Acknowledgements</a></li>
+            <li><a class="dropdown-item" href="my-acknowledgements.html">My Acknowledgements</a></li>
+          </ul>
+        </li>
         <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to Admin</a></li>
       </ul>
-      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small">Employee</span><a class="nav-link px-0" href="notifications.html">Notifications</a><span class="navbar-text small">Profile</span></div>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">Employee</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
     </div>
   </div>
 </nav>
+
 <main class="app-shell">
 <div class="content-wrap px-4 py-4 mx-auto">
-<div class="mb-4">
-<h1 class="page-title mb-2">Effective Documents Repository</h1>
-<p class="page-subtitle mb-0">Access approved and effective controlled documents in a read-only repository.</p>
-</div>
-<div class="card cp-card"><div class="card-body">
-<h2 class="card-title mb-1">Effective Controlled Documents</h2>
-<p class="card-subtitle mb-3">Approved documents appear here in a read-only repository.</p>
-<div class="table-responsive">
-<table class="table align-middle">
-<thead><tr><th>Document ID</th><th>Title</th><th>Effective Date</th><th>Next Review Date</th><th>Status</th><th>Actions</th></tr></thead>
-<tbody>
-<tr><td class="fw-semibold">SOP-104-CAPA-03</td><td>CAPA Closure Workflow</td><td>01-Apr-2026</td><td>01-Apr-2027</td><td><span class="badge badge-soft-success">Effective</span></td><td><button class="btn btn-sm btn-outline-primary">View</button> <button class="btn btn-sm btn-outline-secondary">PDF</button></td></tr>
-<tr><td class="fw-semibold">POL-021-SEC-02</td><td>Information Security Policy</td><td>11-Jan-2026</td><td>05-Apr-2026</td><td><span class="badge badge-soft-danger">Overdue</span></td><td><button class="btn btn-sm btn-outline-primary">View</button> <button class="btn btn-sm btn-outline-secondary">PDF</button></td></tr>
-<tr><td class="fw-semibold">GUI-089-DMS-04</td><td>DMS Access Guidance</td><td>09-Feb-2026</td><td>09-Feb-2027</td><td><span class="badge badge-soft-success">Effective</span></td><td><button class="btn btn-sm btn-outline-primary">View</button> <button class="btn btn-sm btn-outline-secondary">PDF</button></td></tr>
-</tbody>
-</table>
-</div>
-</div></div>
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Effective Documents Repository</h1>
+    <p class="page-subtitle mb-0">All approved and effective controlled documents available to you. Read-only.</p>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="card cp-card mb-3">
+    <div class="card-body py-3">
+      <div class="d-flex gap-2 flex-wrap align-items-end">
+        <div>
+          <label class="form-label mb-1">Search</label>
+          <input type="text" class="form-control form-control-sm" id="repoSearch" placeholder="Search ID or title..." style="max-width:220px;" oninput="applyFilters()">
+        </div>
+        <div>
+          <label class="form-label mb-1">Type</label>
+          <select class="form-select form-select-sm" id="repoType" style="max-width:140px;" onchange="applyFilters()">
+            <option value="">All Types</option>
+            <option>SOP</option>
+            <option>Policy</option>
+            <option>Guidance</option>
+            <option>Form</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label mb-1">Department</label>
+          <select class="form-select form-select-sm" id="repoDept" style="max-width:180px;" onchange="applyFilters()">
+            <option value="">All Departments</option>
+            <option>Quality Assurance</option>
+            <option>Operations</option>
+            <option>Human Resources</option>
+            <option>Information Technology</option>
+            <option>Finance</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label mb-1">My Read Status</label>
+          <select class="form-select form-select-sm" id="repoReadStatus" style="max-width:160px;" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="unread">Not Read Yet</option>
+            <option value="read">Confirmed Read</option>
+          </select>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="resetFilters()">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card cp-card" style="padding:0;">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th>Document ID</th>
+          <th>Title</th>
+          <th>Type</th>
+          <th>Version</th>
+          <th>Department</th>
+          <th>Effective Date</th>
+          <th>My Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="repoBody"></tbody>
+    </table>
+    <div class="text-center text-secondary py-4 small d-none" id="repoEmpty">No documents found.</div>
+    <div class="px-4 py-2 border-top">
+      <span class="small text-secondary" id="repoCount"></span>
+    </div>
+  </div>
+
 </div>
 </main>
+
+<!-- Confirm Read Modal -->
+<div class="modal fade" id="confirmReadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">Confirm Read</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:#374151;" id="confirmReadMsg">I confirm that I have read and understood this document.</p>
+        <div class="form-check mt-2">
+          <input class="form-check-input" type="checkbox" id="confirmCheck">
+          <label class="form-check-label" style="font-size:13px;" for="confirmCheck">
+            I have read and understood this document.
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-success btn-sm" onclick="submitConfirmRead()">&#10003; Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+var DOCS = [
+  { id:'SOP-104-CAPA-V3',       title:'CAPA Management',              type:'SOP',     ver:'V3', dept:'Quality Assurance',      effective:'2026-01-15', read:false },
+  { id:'SOP-021-Training-V1',   title:'Training Procedure',           type:'SOP',     ver:'V1', dept:'Human Resources',        effective:'2026-03-01', read:true  },
+  { id:'SOP-007-DevControl-V2', title:'Deviation Control',            type:'SOP',     ver:'V2', dept:'Operations',             effective:'2025-11-10', read:false },
+  { id:'POL-004-Quality-V2',    title:'Quality Policy',               type:'Policy',  ver:'V2', dept:'Quality Assurance',      effective:'2026-01-15', read:true  },
+  { id:'POL-011-DataInt-V1',    title:'Data Integrity Policy',        type:'Policy',  ver:'V1', dept:'Information Technology', effective:'2025-09-01', read:false },
+  { id:'POL-021-Security-V2',   title:'Information Security Policy',  type:'Policy',  ver:'V2', dept:'Information Technology', effective:'2025-08-15', read:false },
+  { id:'GUI-003-CAPA-V1',       title:'CAPA Workflow Guidance',       type:'Guidance',ver:'V1', dept:'Quality Assurance',      effective:'2026-02-01', read:true  },
+  { id:'GUI-008-Audit-V2',      title:'Internal Audit Guidance',      type:'Guidance',ver:'V2', dept:'Quality Assurance',      effective:'2025-10-20', read:false },
+  { id:'GUI-089-DMS-V4',        title:'DMS Access Guidance',          type:'Guidance',ver:'V4', dept:'Information Technology', effective:'2026-02-09', read:true  },
+  { id:'FRM-010-Inspection-V3', title:'Inspection Form',              type:'Form',    ver:'V3', dept:'Operations',             effective:'2025-11-20', read:false },
+  { id:'FRM-015-Training-V1',   title:'Training Acknowledgement',     type:'Form',    ver:'V1', dept:'Human Resources',        effective:'2026-03-10', read:false },
+];
+
+var pendingConfirmId = null;
+
+function applyFilters() {
+  var q    = document.getElementById('repoSearch').value.toLowerCase();
+  var type = document.getElementById('repoType').value;
+  var dept = document.getElementById('repoDept').value;
+  var rs   = document.getElementById('repoReadStatus').value;
+
+  var filtered = DOCS.filter(function(d) {
+    return (!q    || d.id.toLowerCase().includes(q) || d.title.toLowerCase().includes(q)) &&
+           (!type || d.type === type) &&
+           (!dept || d.dept === dept) &&
+           (!rs   || (rs === 'read' ? d.read : !d.read));
+  });
+  renderTable(filtered);
+}
+
+function resetFilters() {
+  document.getElementById('repoSearch').value     = '';
+  document.getElementById('repoType').value       = '';
+  document.getElementById('repoDept').value       = '';
+  document.getElementById('repoReadStatus').value = '';
+  renderTable(DOCS);
+}
+
+function renderTable(data) {
+  var body  = document.getElementById('repoBody');
+  var empty = document.getElementById('repoEmpty');
+  var count = document.getElementById('repoCount');
+
+  count.textContent = 'Showing ' + data.length + ' of ' + DOCS.length + ' documents';
+
+  if (!data.length) { body.innerHTML = ''; empty.classList.remove('d-none'); return; }
+  empty.classList.add('d-none');
+
+  body.innerHTML = data.map(function(d) {
+    var myStatus = d.read
+      ? '<span class="badge badge-soft-success">&#10003; Read</span>'
+      : '<span class="badge badge-soft-warning">Not Read</span>';
+
+    var confirmBtn = d.read
+      ? '<button class="btn btn-sm btn-outline-secondary" disabled style="height:28px;padding:0 10px;font-size:12px;">&#10003; Confirmed</button>'
+      : '<button class="btn btn-sm btn-primary" style="height:28px;padding:0 10px;font-size:12px;" onclick="openConfirmModal(\'' + d.id + '\')">&#10003; Confirm Read</button>';
+
+    return '<tr>' +
+      '<td class="fw-semibold" style="color:#2563eb;font-size:13px;">' + d.id + '</td>' +
+      '<td style="font-size:13px;">' + d.title + '</td>' +
+      '<td><span class="badge badge-soft-info">' + d.type + '</span></td>' +
+      '<td style="font-size:13px;">' + d.ver + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + d.dept + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + fmt(d.effective) + '</td>' +
+      '<td>' + myStatus + '</td>' +
+      '<td style="white-space:nowrap;">' +
+        '<button class="btn btn-sm btn-outline-primary" style="height:28px;padding:0 10px;font-size:12px;">View</button>&nbsp;' +
+        '<button class="btn btn-sm btn-outline-secondary" style="height:28px;padding:0 10px;font-size:12px;">&#11015; PDF</button>&nbsp;' +
+        confirmBtn +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function openConfirmModal(id) {
+  pendingConfirmId = id;
+  var doc = DOCS.find(function(d) { return d.id === id; });
+  document.getElementById('confirmReadMsg').textContent =
+    'Document: ' + doc.id + ' — ' + doc.title;
+  document.getElementById('confirmCheck').checked = false;
+  new bootstrap.Modal(document.getElementById('confirmReadModal')).show();
+}
+
+function submitConfirmRead() {
+  if (!document.getElementById('confirmCheck').checked) {
+    alert('Please check the box to confirm you have read this document.');
+    return;
+  }
+  var doc = DOCS.find(function(d) { return d.id === pendingConfirmId; });
+  if (doc) doc.read = true;
+  bootstrap.Modal.getInstance(document.getElementById('confirmReadModal')).hide();
+  applyFilters();
+  // In PHP: POST { doc_id, user_id, timestamp } to acknowledgement endpoint
+}
+
+function fmt(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+}
+
+renderTable(DOCS);
+</script>
 </body>
 </html>

@@ -16,7 +16,7 @@
     <div class="collapse navbar-collapse" id="topNav">
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
         <li class="nav-item"><a class="nav-link active" href="dashboard-employee.html">Dashboard</a></li>
-        <li class="nav-item"><a class="nav-link" href="repository.html">Repository</a></li>
+        <li class="nav-item"><a class="nav-link" href="repository-employee.html">Repository</a></li>
         
         <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Acknowledgements</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="pending-acknowledgements.html">Pending Acknowledgements</a></li><li><a class="dropdown-item" href="my-acknowledgements.html">My Acknowledgements</a></li></ul></li>
         
@@ -46,17 +46,23 @@
               </div>
             </div>
             <div class="user-meta-grid mb-4">
-              <div class="user-meta-box"><div class="user-meta-value">12</div><div class="user-meta-label">Assigned Documents</div></div>
-              <div class="user-meta-box"><div class="user-meta-value">5</div><div class="user-meta-label">Pending Acknowledgements</div></div>
-              <div class="user-meta-box"><div class="user-meta-value">2</div><div class="user-meta-label">Overdue</div></div>
-              <div class="user-meta-box"><div class="user-meta-value">10</div><div class="user-meta-label">Completed This Month</div></div>
+              <a href="my-documents-employee.html?filter=assigned" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View all assigned documents">
+                <div class="user-meta-value">12</div>
+                <div class="user-meta-label">Assigned Documents</div>
+              </a>
+              <a href="my-documents-employee.html?filter=pending" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View pending acknowledgements">
+                <div class="user-meta-value">5</div>
+                <div class="user-meta-label">Pending Acknowledgements</div>
+              </a>
+              <a href="my-documents-employee.html?filter=overdue" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View overdue items">
+                <div class="user-meta-value">2</div>
+                <div class="user-meta-label">Overdue</div>
+              </a>
+              <a href="my-documents-employee.html?filter=completed" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View completed this month">
+                <div class="user-meta-value">10</div>
+                <div class="user-meta-label">Completed This Month</div>
+              </a>
             </div>
-            <div class="section-kicker mb-2">Workspace</div>
-<ul class="dashboard-link-list list-unstyled mb-0 mt-auto" style="font-size:0.78rem;">
-  <li style="margin-bottom:4px;"><a href="pending-acknowledgements.html" style="text-decoration:none;">Pending Acknowledgements</a></li>
-  <li style="margin-bottom:4px;"><a href="repository.html" style="text-decoration:none;">Document Repository</a></li>
-  <li><a href="my-acknowledgements.html" style="text-decoration:none;">My Acknowledgements</a></li>
-            </ul>
           </div>
         </div>
       </div>
@@ -116,13 +122,6 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="row g-3 g-xxl-4 mb-4">
-      <div class="col-sm-6 col-xl-3"><div class="card cp-card stat-card h-100"><div class="card-body p-4"><div class="section-kicker mb-2">Pending Acknowledgements</div><div class="stat-value">5</div><div class="stat-note">Assigned items waiting for your confirmation.</div></div></div></div>
-      <div class="col-sm-6 col-xl-3"><div class="card cp-card stat-card h-100"><div class="card-body p-4"><div class="section-kicker mb-2">Overdue</div><div class="stat-value">2</div><div class="stat-note">Items that are past due date.</div></div></div></div>
-      <div class="col-sm-6 col-xl-3"><div class="card cp-card stat-card h-100"><div class="card-body p-4"><div class="section-kicker mb-2">Completed This Month</div><div class="stat-value">10</div><div class="stat-note">Acknowledgements completed this month.</div></div></div></div>
-      <div class="col-sm-6 col-xl-3"><div class="card cp-card stat-card h-100"><div class="card-body p-4"><div class="section-kicker mb-2">Effective Records</div><div class="stat-value">211</div><div class="stat-note">Current effective documents available in repository.</div></div></div></div>
     </div>
 
     <div class="row g-3 g-xxl-4 mb-4">

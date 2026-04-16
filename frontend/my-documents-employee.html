@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CorePlx Quality DMS - My Documents</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    .doc-tab-strip {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid #e0e7ef;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .doc-tab {
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b7280;
+      border: none;
+      background: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .doc-tab:hover  { color: #1a3a6e; }
+    .doc-tab.active { color: #1a3a6e; border-bottom-color: #2563eb; }
+    .doc-tab .tab-count {
+      display: inline-block;
+      background: #e0e7ef;
+      color: #1a3a6e;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 1px 7px;
+      margin-left: 5px;
+    }
+    .doc-tab.active .tab-count { background: #2563eb; color: #fff; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
+  <div class="container-fluid px-4 px-xxl-5">
+    <a class="navbar-brand fw-bold" href="dashboard-employee.html">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link" href="dashboard-employee.html">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="repository-employee.html">Repository</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Acknowledgements</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="pending-acknowledgements.html">Pending Acknowledgements</a></li>
+            <li><a class="dropdown-item" href="my-acknowledgements.html">My Acknowledgements</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to Admin</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">Employee</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="app-shell">
+<div class="content-wrap px-4 py-4 mx-auto">
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">My Documents</h1>
+    <p class="page-subtitle mb-0">All controlled documents assigned to you for reading and acknowledgement.</p>
+  </div>
+
+  <!-- Tab strip -->
+  <div class="doc-tab-strip">
+    <button class="doc-tab" id="tabAll"       onclick="switchTab('all')">      All Assigned    <span class="tab-count">12</span></button>
+    <button class="doc-tab" id="tabPending"   onclick="switchTab('pending')">  Pending         <span class="tab-count">5</span></button>
+    <button class="doc-tab" id="tabOverdue"   onclick="switchTab('overdue')">  Overdue         <span class="tab-count">2</span></button>
+    <button class="doc-tab" id="tabCompleted" onclick="switchTab('completed')">Completed       <span class="tab-count">10</span></button>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="card cp-card mb-3">
+    <div class="card-body py-3">
+      <div class="d-flex gap-2 flex-wrap">
+        <input type="text" class="form-control form-control-sm" placeholder="Search by ID or title..." style="max-width:240px;" oninput="filterTable(this.value)">
+        <select class="form-select form-select-sm" style="max-width:160px;" onchange="filterByType(this.value)">
+          <option value="">All Types</option>
+          <option>SOP</option>
+          <option>Policy</option>
+          <option>Guidance</option>
+          <option>Form</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Documents table -->
+  <div class="card cp-card" style="padding:0;">
+    <table class="table mb-0" id="docsTable">
+      <thead>
+        <tr>
+          <th>Document ID</th>
+          <th>Title</th>
+          <th>Type</th>
+          <th>Version</th>
+          <th>Assigned On</th>
+          <th>Due Date</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="docsBody"></tbody>
+    </table>
+    <div class="text-center text-secondary py-4 small d-none" id="docsEmpty">No documents found for this filter.</div>
+  </div>
+
+</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Sample data — replace with PHP json_encode from DB
+var DOCS = [
+  { id:'POL-021-SEC-02',        title:'Information Security Policy',    type:'Policy',  ver:'V2', assigned:'2026-04-01', due:'2026-04-09', status:'Pending'   },
+  { id:'FRM-301-TRN-01',        title:'Training Acknowledgement Form',  type:'Form',    ver:'V1', assigned:'2026-03-28', due:'2026-04-05', status:'Overdue'   },
+  { id:'GUI-089-DMS-04',        title:'DMS Access Guidance',            type:'Guidance',ver:'V4', assigned:'2026-04-02', due:'2026-04-10', status:'Pending'   },
+  { id:'SOP-104-CAPA-03',       title:'CAPA Closure Workflow',          type:'SOP',     ver:'V3', assigned:'2026-04-03', due:'2026-04-11', status:'Pending'   },
+  { id:'POL-004-Quality-V2',    title:'Quality Policy',                 type:'Policy',  ver:'V2', assigned:'2026-03-01', due:'2026-03-15', status:'Completed' },
+  { id:'SOP-021-Training-V1',   title:'Training Procedure',             type:'SOP',     ver:'V1', assigned:'2026-03-05', due:'2026-03-20', status:'Completed' },
+  { id:'GUI-003-CAPA-V1',       title:'CAPA Workflow Guidance',         type:'Guidance',ver:'V1', assigned:'2026-03-10', due:'2026-03-25', status:'Completed' },
+  { id:'FRM-010-Inspection-V3', title:'Inspection Form',                type:'Form',    ver:'V3', assigned:'2026-03-12', due:'2026-03-27', status:'Completed' },
+  { id:'POL-011-DataInt-V1',    title:'Data Integrity Policy',          type:'Policy',  ver:'V1', assigned:'2026-03-15', due:'2026-03-30', status:'Completed' },
+  { id:'GUI-008-Audit-V2',      title:'Internal Audit Guidance',        type:'Guidance',ver:'V2', assigned:'2026-03-18', due:'2026-04-01', status:'Overdue'   },
+  { id:'SOP-007-DevControl-V2', title:'Deviation Control',              type:'SOP',     ver:'V2', assigned:'2026-04-05', due:'2026-04-20', status:'Pending'   },
+  { id:'FRM-015-Training-V1',   title:'Training Acknowledgement',       type:'Form',    ver:'V1', assigned:'2026-03-20', due:'2026-04-03', status:'Completed' },
+];
+
+var currentTab = 'all';
+var currentSearch = '';
+var currentType = '';
+
+function switchTab(tab) {
+  currentTab = tab;
+  ['all','pending','overdue','completed'].forEach(function(t) {
+    document.getElementById('tab' + cap(t)).classList.toggle('active', t === tab);
+  });
+  renderTable();
+}
+
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function filterTable(q)  { currentSearch = q.toLowerCase(); renderTable(); }
+function filterByType(t) { currentType = t; renderTable(); }
+
+function statusMatchesTab(status, tab) {
+  if (tab === 'all')       return true;
+  if (tab === 'pending')   return status === 'Pending';
+  if (tab === 'overdue')   return status === 'Overdue';
+  if (tab === 'completed') return status === 'Completed';
+  return true;
+}
+
+function renderTable() {
+  var body  = document.getElementById('docsBody');
+  var empty = document.getElementById('docsEmpty');
+
+  var filtered = DOCS.filter(function(d) {
+    return statusMatchesTab(d.status, currentTab) &&
+           (!currentSearch || d.id.toLowerCase().includes(currentSearch) || d.title.toLowerCase().includes(currentSearch)) &&
+           (!currentType   || d.type === currentType);
+  });
+
+  if (!filtered.length) {
+    body.innerHTML = '';
+    empty.classList.remove('d-none');
+    return;
+  }
+  empty.classList.add('d-none');
+
+  body.innerHTML = filtered.map(function(d) {
+    var statusBadge =
+      d.status === 'Completed' ? '<span class="badge badge-soft-success">Completed</span>' :
+      d.status === 'Pending'   ? '<span class="badge badge-soft-warning">Pending</span>'   :
+      d.status === 'Overdue'   ? '<span class="badge badge-soft-danger">Overdue</span>'    :
+      '<span class="badge badge-soft-secondary">' + d.status + '</span>';
+
+    var dueColor = d.status === 'Overdue' ? 'color:#dc2626;font-weight:600;' : 'color:#6b7280;';
+
+    var actions = '<a href="repository.html" class="btn btn-sm btn-outline-secondary" style="height:28px;padding:0 10px;font-size:12px;">View</a>';
+    if (d.status !== 'Completed') {
+      actions += '&nbsp;<a href="repository.html" class="btn btn-sm btn-primary" style="height:28px;padding:0 10px;font-size:12px;">&#10003; Confirm Read</a>';
+    }
+
+    return '<tr>' +
+      '<td class="fw-semibold" style="color:#2563eb;font-size:13px;">' + d.id + '</td>' +
+      '<td style="font-size:13px;">' + d.title + '</td>' +
+      '<td><span class="badge badge-soft-info">' + d.type + '</span></td>' +
+      '<td style="font-size:13px;">' + d.ver + '</td>' +
+      '<td style="font-size:12px;color:#6b7280;">' + fmtDate(d.assigned) + '</td>' +
+      '<td style="font-size:12px;' + dueColor + '">' + fmtDate(d.due) + '</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '<td style="white-space:nowrap;">' + actions + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function fmtDate(str) {
+  if (!str) return '—';
+  return new Date(str).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'});
+}
+
+// Read URL param to pre-select tab
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var f = params.get('filter') || 'all';
+  var map = { 'assigned':'all', 'pending':'pending', 'overdue':'overdue', 'completed':'completed' };
+  switchTab(map[f] || 'all');
+})();
+</script>
+</body>
+</html>

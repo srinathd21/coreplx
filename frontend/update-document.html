@@ -5,8 +5,44 @@
   <title>CorePlx Quality DMS - Update Document</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    /* Locked / read-only field visual */
+    .field-locked {
+      background: #f5f7fa !important;
+      color: #6b7280 !important;
+      cursor: not-allowed;
+    }
+    /* Version badge strip */
+    .version-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: #f0f4ff;
+      border: 1px solid #c7d7f8;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .version-strip .vs-label { color: #6b7280; }
+    .version-strip .vs-val   { font-weight: 700; color: #1a3a6e; }
+    .version-strip .vs-arrow { color: #9ca3af; font-size: 16px; }
+    .version-strip .vs-new   { font-weight: 700; color: #16a34a; font-size: 15px; }
+    /* Selected document info panel */
+    #docInfoPanel {
+      background: #f8fafc;
+      border: 1px solid #dde3ec;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+    }
+    #docInfoPanel .di-id   { font-weight: 700; color: #2563eb; font-size: 14px; }
+    #docInfoPanel .di-meta { color: #6b7280; margin-top: 2px; }
+    /* Placeholder state for second dropdown */
+    select:disabled { background: #f5f7fa; color: #aaa; cursor: not-allowed; }
+  </style>
 </head>
 <body>
+
 <nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
   <div class="container-fluid px-4 px-xxl-5">
     <a class="navbar-brand fw-bold" href="dashboard-admin.html">CorePlx Quality DMS</a>
@@ -16,92 +52,399 @@
     <div class="collapse navbar-collapse" id="topNav">
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
         <li class="nav-item"><a class="nav-link active" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
         
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.html">Create Document</a></li><li><a class="dropdown-item" href="update-document.html">Update Document</a></li><li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li><li><a class="dropdown-item" href="repository.html">Repository</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="document-types.html">Document Types</a></li><li><a class="dropdown-item" href="document-id.html">Document ID</a></li><li><a class="dropdown-item" href="content-editor.html">Content Editor</a></li><li><a class="dropdown-item" href="form-builder.html">Form Builder</a></li><li><a class="dropdown-item" href="form-type-name.html">Form Type &amp; Name</a></li><li><a class="dropdown-item" href="approver-selection.html">Approver Selection</a></li><li><a class="dropdown-item" href="submit-review.html">Submit for Review</a></li><li><a class="dropdown-item" href="electronic-signature.html">Electronic Signature</a></li><li><a class="dropdown-item" href="approver-comments.html">Approver Comments</a></li><li><a class="dropdown-item" href="notifications.html">Notifications</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="audit-creation.html">Audit - Creation</a></li><li><a class="dropdown-item" href="audit-approval.html">Audit - Approval</a></li><li><a class="dropdown-item" href="audit-comments.html">Audit - Comments</a></li><li><a class="dropdown-item" href="qa-admin.html">QA Admin</a></li><li><a class="dropdown-item" href="employee-role.html">Employee Role</a></li><li><a class="dropdown-item" href="super-admin.html">Super Admin</a></li><li><a class="dropdown-item" href="user-management.html">User Management</a></li><li><a class="dropdown-item" href="role-assignment.html">Role Assignment</a></li></ul></li>
-        
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
         <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
       </ul>
-      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small">QA Admin</span><a class="nav-link px-0" href="notifications.html">Notifications</a><span class="navbar-text small">Profile</span></div>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
     </div>
   </div>
 </nav>
+
 <main class="app-shell">
 <div class="content-wrap px-4 py-4 mx-auto">
-<div class="mb-4">
-<h1 class="page-title mb-2">Update Controlled Document</h1>
-<p class="page-subtitle mb-0">Revise an existing controlled document with version control and change justification.</p>
-</div>
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-<span class="badge badge-soft-info">Under Review</span>
-<div class="d-flex gap-2 flex-wrap">
-<a class="btn btn-outline-secondary" href="#">Cancel</a>
-<a class="btn btn-outline-primary" href="#">Save Draft</a>
-<a class="btn btn-success" href="submit-review.html">Submit for Review</a>
-</div>
-</div>
-<div class="row g-3">
-<div class="col-lg-8">
-<div class="card cp-card mb-3"><div class="card-body">
-<h2 class="card-title mb-1">Document Information</h2>
-<p class="card-subtitle mb-3">Review current version data and enter controlled changes.</p>
-<div class="row g-3">
-<div class="col-md-6"><label class="form-label">Document Type</label><select class="form-select"><option>SOP</option><option>Policy</option><option>Guidance</option><option>Form</option></select></div>
-<div class="col-md-6"><label class="form-label">Document Topic</label><input class="form-control" value="CAPA"/></div>
-<div class="col-md-6"><label class="form-label">Document Number</label><input class="form-control" value="104"/></div>
-<div class="col-md-6"><label class="form-label">Version</label><input class="form-control readonly" readonly="" value="04"/></div>
-<div class="col-md-6"><label class="form-label">Owner</label><select class="form-select"><option>Pradeep</option><option>QA Manager</option></select></div>
-<div class="col-md-6"><label class="form-label">Approver</label><select class="form-select"><option>QA Head</option><option>Compliance Manager</option></select><div class="form-text">Creator cannot select themselves as approver.</div></div>
-<div class="col-md-6"><label class="form-label">Effective Date</label><input class="form-control" type="date"/></div>
-<div class="col-md-6"><label class="form-label">Review Date</label><input class="form-control" type="date"/></div>
-<div class="col-md-6"><label class="form-label">Current Version</label><input class="form-control readonly" readonly="" value="03"/></div>
-<div class="col-md-6"><label class="form-label">Next Version</label><input class="form-control readonly" readonly="" value="04"/></div>
-<div class="col-12"><label class="form-label">Change Summary</label><textarea class="form-control" placeholder="Mandatory description of what changed and why" rows="3"></textarea><div class="form-text">Required for revision traceability and approval context.</div></div>
-<div class="col-12"><label class="form-label">Version Comparison</label><div class="kv p-3 small">Previous version highlights, redline preview, and impacted metadata should be visible before submit.</div></div>
-</div>
-</div></div>
-<div class="card cp-card"><div class="card-body">
-<h2 class="card-title mb-1">Document Content</h2>
-<p class="card-subtitle mb-3">Add document content using rich text or controlled file upload.</p>
-<ul class="nav nav-pills gap-2 mb-3">
-<li class="nav-item"><a class="nav-link active tab-pill" href="#">Rich Text Editor</a></li>
-<li class="nav-item"><a class="nav-link tab-pill" href="#">File Upload</a></li>
-</ul>
-<div class="mb-3"><label class="form-label">Document Body</label><textarea class="form-control" placeholder="Enter document content here" rows="9"></textarea></div>
-<div class="upload-box p-4 text-center small text-secondary">Drag and drop file here or click to browse.<br/>Supported: PDF, DOCX, XLSX | Maximum size: 25 MB</div>
-</div></div>
-</div>
-<div class="col-lg-4">
-<div class="card cp-card mb-3"><div class="card-body">
-<h2 class="card-title mb-1">Submission Readiness</h2>
-<p class="card-subtitle mb-3">Verify required information before sending for approval.</p>
-<ul class="small text-secondary note-list mb-0">
-<li>Metadata completed.</li>
-<li>Unique document ID validated.</li>
-<li>Content entered or file attached.</li>
-<li>Approver selected and validated.</li>
-<li>Email notification will be generated on submit.</li>
-</ul>
-</div></div>
-<div class="card cp-card"><div class="card-body">
-<h2 class="card-title mb-1">Audit Controls</h2>
-<p class="card-subtitle mb-3">Key controls expected for an audit-grade process.</p>
-<ul class="small text-secondary note-list mb-0">
-<li>Created by / created on / IP address captured automatically.</li>
-<li>Draft saves logged with timestamp.</li>
-<li>Critical field changes stored with old and new values.</li>
-<li>Immutable audit record for every workflow action.</li>
-</ul>
-</div></div>
-</div>
-</div>
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Update Controlled Document</h1>
+    <p class="page-subtitle mb-0">Select the document you want to update. All existing details will load automatically — only the fields you need to change should be edited.</p>
+  </div>
+
+  <!-- Action bar -->
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <span class="badge badge-soft-info">Under Review</span>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary" href="#">Cancel</a>
+      <a class="btn btn-outline-primary" href="#">Save Draft</a>
+      <a class="btn btn-success" href="submit-review.html">Submit for Review</a>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- ── Left column ── -->
+    <div class="col-lg-8">
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Document Selection</h2>
+          <p class="card-subtitle mb-3">Select the document type first, then choose the specific document to update.</p>
+
+          <div class="row g-3 mb-3">
+
+            <!-- Step 1: Type -->
+            <div class="col-md-6">
+              <label class="form-label">
+                Step 1 — Document Type <span class="text-danger">*</span>
+              </label>
+              <select class="form-select" id="docTypeSelect" onchange="onTypeChange(this.value)">
+                <option value="">-- Select Type --</option>
+                <option value="SOP">SOP</option>
+                <option value="Policy">Policy</option>
+                <option value="Guidance">Guidance</option>
+                <option value="Form">Form</option>
+              </select>
+              <div class="form-text">Only Effective documents will appear in the next dropdown.</div>
+            </div>
+
+            <!-- Step 2: Document -->
+            <div class="col-md-6">
+              <label class="form-label">
+                Step 2 — Select Document <span class="text-danger">*</span>
+              </label>
+              <select class="form-select" id="docSelect" disabled onchange="onDocSelect(this.value)">
+                <option value="">-- Select Type first --</option>
+              </select>
+              <div class="form-text" id="docSelectHint">Choose a document type above to populate this list.</div>
+            </div>
+
+          </div>
+
+          <!-- Selected document info strip (hidden until doc selected) -->
+          <div id="docInfoPanel" class="d-none mb-1">
+            <div class="di-id" id="diId">—</div>
+            <div class="di-meta" id="diMeta">—</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── Document Information (hidden until a doc is selected) ── -->
+      <div class="card cp-card mb-3 d-none" id="docDetailsCard">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Document Information</h2>
+          <p class="card-subtitle mb-3">Existing values are pre-filled. Edit only what needs to change in this version.</p>
+
+          <div class="row g-3">
+
+            <!-- Document ID — fully locked -->
+            <div class="col-md-6">
+              <label class="form-label">Document ID</label>
+              <input class="form-control field-locked" id="fDocId" readonly>
+              <div class="form-text">Auto-generated — cannot be changed.</div>
+            </div>
+
+            <!-- Document Title / Topic — editable -->
+            <div class="col-md-6">
+              <label class="form-label">Document Title / Topic</label>
+              <input class="form-control" id="fDocTopic">
+            </div>
+
+            <!-- Current version — locked -->
+            <div class="col-md-6">
+              <label class="form-label">Current Version</label>
+              <input class="form-control field-locked" id="fCurrentVersion" readonly>
+              <div class="form-text">The version currently in effect.</div>
+            </div>
+
+            <!-- New version — locked, auto-calculated -->
+            <div class="col-md-6">
+              <label class="form-label">New Version <span class="text-success">(auto)</span></label>
+              <input class="form-control field-locked" id="fNewVersion" readonly>
+              <div class="form-text">System generated — incremented automatically.</div>
+            </div>
+
+            <!-- Version visual strip -->
+            <div class="col-12">
+              <div class="version-strip" id="versionStrip">
+                <span class="vs-label">Current:</span>
+                <span class="vs-val" id="vsCurrentBadge">—</span>
+                <span class="vs-arrow">→</span>
+                <span class="vs-label">New version after update:</span>
+                <span class="vs-new" id="vsNewBadge">—</span>
+              </div>
+            </div>
+
+            <!-- Owner — editable -->
+            <div class="col-md-6">
+              <label class="form-label">Owner</label>
+              <select class="form-select" id="fOwner">
+                <option>Pradeep</option>
+                <option>QA Manager</option>
+                <option>Ariharan</option>
+                <option>Kavin</option>
+              </select>
+            </div>
+
+            <!-- Approver — name + designation -->
+            <div class="col-md-6">
+              <label class="form-label">Approver <span class="text-danger">*</span></label>
+              <select class="form-select" id="fApprover">
+                <option value="">-- Select Approver --</option>
+                <option value="ramesh_qa_head">Ramesh — QA Head</option>
+                <option value="priya_compliance">Priya — Compliance Manager</option>
+                <option value="deepa_qa_admin">Deepa — QA Admin</option>
+                <option value="ariharan_qa_mgr">Ariharan — QA Manager</option>
+              </select>
+              <div class="form-text">Creator cannot select themselves as approver.</div>
+            </div>
+
+            <!-- Effective Date -->
+            <div class="col-md-6">
+              <label class="form-label">Effective Date <span class="text-danger">*</span></label>
+              <input class="form-control" id="fEffectiveDate" type="date">
+            </div>
+
+            <!-- Review Date -->
+            <div class="col-md-6">
+              <label class="form-label">Review Date <span class="text-danger">*</span></label>
+              <input class="form-control" id="fReviewDate" type="date">
+            </div>
+
+            <!-- Change Summary — correct label for update context -->
+            <div class="col-12">
+              <label class="form-label">Change Summary <span class="text-danger">*</span></label>
+              <textarea class="form-control" id="fChangeSummary" placeholder="Describe what changed in this version and why — e.g. updated escalation path in Section 3, revised approval thresholds" rows="3"></textarea>
+              <div class="form-text">Mandatory — used in the approval notification, audit trail, and version history.</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Document Content (hidden until a doc is selected) ── -->
+      <div class="card cp-card d-none" id="contentCard">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Updated Document Content</h2>
+          <p class="card-subtitle mb-3">Replace or revise the document content for the new version.</p>
+          <ul class="nav nav-pills gap-2 mb-3">
+            <li class="nav-item"><a class="nav-link active tab-pill" href="#">Rich Text Editor</a></li>
+            <li class="nav-item"><a class="nav-link tab-pill" href="#">File Upload</a></li>
+          </ul>
+          <div class="mb-3">
+            <label class="form-label">Document Body</label>
+            <textarea class="form-control" placeholder="Enter updated document content here" rows="9"></textarea>
+          </div>
+          <div class="upload-box p-4 text-center small text-secondary">
+            Drag and drop file here or click to browse.<br/>
+            Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /col-lg-8 -->
+
+    <!-- ── Right column ── -->
+    <div class="col-lg-4">
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Submission Readiness</h2>
+          <p class="card-subtitle mb-3">Verify required information before sending for approval.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Document selected from effective repository.</li>
+            <li>Version auto-incremented by system.</li>
+            <li>Change Summary entered.</li>
+            <li>Approver selected and validated.</li>
+            <li>Email notification will be generated on submit.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card cp-card">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Audit Controls</h2>
+          <p class="card-subtitle mb-3">Key controls expected for an audit-grade process.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Previous version archived automatically on submit.</li>
+            <li>Created by / updated on / IP address captured.</li>
+            <li>Draft saves logged with timestamp.</li>
+            <li>Old and new field values stored for every change.</li>
+            <li>Immutable audit record for every workflow action.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
 </div>
 </main>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── Sample data — replace with PHP echo of JSON from DB ───────────────────
+// Structure: { TYPE: [ {id, topic, number, version, owner, effectiveDate, reviewDate} ] }
+var EFFECTIVE_DOCS = {
+  SOP: [
+    { id: 'SOP-021-Training-V1',      topic: 'Training Procedure',          number: '021', version: 'V1', owner: 'Ariharan',  effectiveDate: '2026-03-01', reviewDate: '2028-03-01' },
+    { id: 'SOP-104-CAPA-V3',          topic: 'CAPA Management',             number: '104', version: 'V3', owner: 'Pradeep',   effectiveDate: '2026-01-15', reviewDate: '2028-01-15' },
+    { id: 'SOP-007-DevControl-V2',    topic: 'Deviation Control',           number: '007', version: 'V2', owner: 'Kavin',     effectiveDate: '2025-11-10', reviewDate: '2027-11-10' },
+  ],
+  Policy: [
+    { id: 'POL-004-Quality-V2',       topic: 'Quality Policy',              number: '004', version: 'V2', owner: 'Kavin',     effectiveDate: '2026-01-15', reviewDate: '2028-01-15' },
+    { id: 'POL-011-DataIntegrity-V1', topic: 'Data Integrity Policy',       number: '011', version: 'V1', owner: 'Pradeep',   effectiveDate: '2025-09-01', reviewDate: '2027-09-01' },
+  ],
+  Guidance: [
+    { id: 'GUI-003-CAPA-V1',          topic: 'CAPA Workflow Guidance',      number: '003', version: 'V1', owner: 'Ariharan',  effectiveDate: '2026-02-01', reviewDate: '2028-02-01' },
+    { id: 'GUI-008-Audit-V2',         topic: 'Internal Audit Guidance',     number: '008', version: 'V2', owner: 'Deepa',     effectiveDate: '2025-10-20', reviewDate: '2027-10-20' },
+  ],
+  Form: [
+    { id: 'FRM-010-Inspection-V3',    topic: 'Inspection Form',             number: '010', version: 'V3', owner: 'Priya',     effectiveDate: '2025-11-20', reviewDate: '2027-11-20' },
+    { id: 'FRM-015-Training-V1',      topic: 'Training Acknowledgement',    number: '015', version: 'V1', owner: 'Ariharan',  effectiveDate: '2026-03-10', reviewDate: '2028-03-10' },
+  ]
+};
+
+// ── Step 1: Type selected → populate document dropdown ────────────────────
+function onTypeChange(type) {
+  var docSel  = document.getElementById('docSelect');
+  var hint    = document.getElementById('docSelectHint');
+
+  // Reset downstream
+  resetDocDetails();
+
+  if (!type) {
+    docSel.disabled = true;
+    docSel.innerHTML = '<option value="">-- Select Type first --</option>';
+    hint.textContent = 'Choose a document type above to populate this list.';
+    return;
+  }
+
+  var docs = EFFECTIVE_DOCS[type] || [];
+  docSel.innerHTML = '<option value="">-- Select a ' + type + ' document --</option>';
+  docs.forEach(function(doc) {
+    var opt = document.createElement('option');
+    opt.value = doc.id;
+    opt.textContent = doc.id + '  —  ' + doc.topic;
+    docSel.appendChild(opt);
+  });
+
+  docSel.disabled = false;
+  hint.textContent = docs.length + ' effective ' + type + ' document' + (docs.length !== 1 ? 's' : '') + ' available.';
+}
+
+// ── Step 2: Document selected → auto-fill all fields ─────────────────────
+function onDocSelect(docId) {
+  resetDocDetails();
+  if (!docId) return;
+
+  var type = document.getElementById('docTypeSelect').value;
+  var docs = EFFECTIVE_DOCS[type] || [];
+  var doc  = docs.find(function(d) { return d.id === docId; });
+  if (!doc) return;
+
+  // Calculate next version
+  var newVersion = incrementVersion(doc.version);
+
+  // Show info strip
+  var panel = document.getElementById('docInfoPanel');
+  document.getElementById('diId').textContent   = doc.id;
+  document.getElementById('diMeta').textContent =
+    'Topic: ' + doc.topic +
+    '  ·  Owner: ' + doc.owner +
+    '  ·  Effective: ' + formatDate(doc.effectiveDate);
+  panel.classList.remove('d-none');
+
+  // Fill fields
+  document.getElementById('fDocId').value        = doc.id;
+  document.getElementById('fDocTopic').value      = doc.topic;
+  document.getElementById('fCurrentVersion').value = doc.version;
+  document.getElementById('fNewVersion').value    = newVersion;
+
+  // Version visual strip
+  document.getElementById('vsCurrentBadge').textContent = doc.version;
+  document.getElementById('vsNewBadge').textContent      = newVersion;
+
+  // Owner
+  setSelectValue('fOwner', doc.owner);
+
+  // Dates — pre-fill effective with today, review with +2 years
+  var today = new Date();
+  document.getElementById('fEffectiveDate').value = toInputDate(today);
+  var reviewDate = new Date(today);
+  reviewDate.setFullYear(reviewDate.getFullYear() + 2);
+  document.getElementById('fReviewDate').value = toInputDate(reviewDate);
+
+  // Show detail cards
+  document.getElementById('docDetailsCard').classList.remove('d-none');
+  document.getElementById('contentCard').classList.remove('d-none');
+}
+
+// ── Reset when type or doc changes ────────────────────────────────────────
+function resetDocDetails() {
+  document.getElementById('docInfoPanel').classList.add('d-none');
+  document.getElementById('docDetailsCard').classList.add('d-none');
+  document.getElementById('contentCard').classList.add('d-none');
+  ['fDocId','fDocTopic','fCurrentVersion','fNewVersion',
+   'fEffectiveDate','fReviewDate','fChangeSummary'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('vsCurrentBadge').textContent = '—';
+  document.getElementById('vsNewBadge').textContent      = '—';
+}
+
+// ── Version increment logic ────────────────────────────────────────────────
+// Handles V1→V2, V3→V4, V09→V10, etc.
+function incrementVersion(ver) {
+  var match = ver.match(/^([A-Za-z]*)(\d+)$/);
+  if (!match) return ver + '-Rev2';
+  var prefix = match[1];
+  var num    = parseInt(match[2], 10);
+  var newNum = num + 1;
+  // Preserve zero-padding if original had it (e.g. V01→V02)
+  var padded = match[2].length > 1
+    ? String(newNum).padStart(match[2].length, '0')
+    : String(newNum);
+  return prefix + padded;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function setSelectValue(id, value) {
+  var sel = document.getElementById(id);
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].text === value || sel.options[i].value === value) {
+      sel.selectedIndex = i;
+      return;
+    }
+  }
+}
+
+function toInputDate(d) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function formatDate(str) {
+  if (!str) return '—';
+  var d = new Date(str);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+</script>
 </body>
 </html>

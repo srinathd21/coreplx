@@ -5,6 +5,27 @@
   <title>CorePlx Quality DMS - Retire Document</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    .field-locked {
+      background: #f5f7fa !important;
+      color: #6b7280 !important;
+      cursor: not-allowed;
+    }
+    select:disabled {
+      background: #f5f7fa;
+      color: #aaa;
+      cursor: not-allowed;
+    }
+    #docInfoPanel {
+      background: #f8fafc;
+      border: 1px solid #dde3ec;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+    }
+    #docInfoPanel .di-id   { font-weight: 700; color: #2563eb; font-size: 14px; }
+    #docInfoPanel .di-meta { color: #6b7280; margin-top: 2px; }
+  </style>
 </head>
 <body>
 <nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
@@ -16,62 +37,314 @@
     <div class="collapse navbar-collapse" id="topNav">
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
         <li class="nav-item"><a class="nav-link active" href="dashboard-admin.html">Dashboard</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.html">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.html">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.html">Repository</a></li>
+          </ul>
+        </li>
         
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="create-document.html">Create Document</a></li><li><a class="dropdown-item" href="update-document.html">Update Document</a></li><li><a class="dropdown-item" href="retire-document.html">Retire Document</a></li><li><a class="dropdown-item" href="repository.html">Repository</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Workflow</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="document-types.html">Document Types</a></li><li><a class="dropdown-item" href="document-id.html">Document ID</a></li><li><a class="dropdown-item" href="content-editor.html">Content Editor</a></li><li><a class="dropdown-item" href="form-builder.html">Form Builder</a></li><li><a class="dropdown-item" href="form-type-name.html">Form Type &amp; Name</a></li><li><a class="dropdown-item" href="approver-selection.html">Approver Selection</a></li><li><a class="dropdown-item" href="submit-review.html">Submit for Review</a></li><li><a class="dropdown-item" href="electronic-signature.html">Electronic Signature</a></li><li><a class="dropdown-item" href="approver-comments.html">Approver Comments</a></li><li><a class="dropdown-item" href="notifications.html">Notifications</a></li></ul></li>
-        
-        
-        <li class="nav-item dropdown"><a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a><ul class="dropdown-menu"><li><a class="dropdown-item" href="audit-creation.html">Audit - Creation</a></li><li><a class="dropdown-item" href="audit-approval.html">Audit - Approval</a></li><li><a class="dropdown-item" href="audit-comments.html">Audit - Comments</a></li><li><a class="dropdown-item" href="qa-admin.html">QA Admin</a></li><li><a class="dropdown-item" href="employee-role.html">Employee Role</a></li><li><a class="dropdown-item" href="super-admin.html">Super Admin</a></li><li><a class="dropdown-item" href="user-management.html">User Management</a></li><li><a class="dropdown-item" href="role-assignment.html">Role Assignment</a></li></ul></li>
-        
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.html">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.html">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.html">User Management</a></li>
+          </ul>
+        </li>
         <li class="nav-item"><a class="nav-link" href="portal-select.html">Switch to User</a></li>
       </ul>
-      <div class="d-flex align-items-center gap-3 ms-xl-3"><span class="navbar-text small">QA Admin</span><a class="nav-link px-0" href="notifications.html">Notifications</a><span class="navbar-text small">Profile</span></div>
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small">QA Admin</span>
+        <a class="nav-link px-0" href="notifications.html">Notifications</a>
+        <span class="navbar-text small">Profile</span>
+      </div>
     </div>
   </div>
 </nav>
+
 <main class="app-shell">
 <div class="content-wrap px-4 py-4 mx-auto">
-<div class="mb-4">
-<h1 class="page-title mb-2">Retire Controlled Document</h1>
-<p class="page-subtitle mb-0">Submit a controlled document for retirement with reason, review, and approval.</p>
-</div>
-<div class="row g-3">
-<div class="col-lg-8">
-<div class="card cp-card"><div class="card-body">
-<h2 class="card-title mb-1">Retire Request</h2>
-<p class="card-subtitle mb-3">Retirement requires approval and must not be immediate.</p>
-<div class="row g-3">
-<div class="col-md-6"><label class="form-label">Document ID</label><input class="form-control readonly" readonly="" value="POL-021-SEC-02"/></div>
-<div class="col-md-6"><label class="form-label">Current Status</label><input class="form-control readonly" readonly="" value="Effective"/></div>
-<div class="col-md-6"><label class="form-label">Owner</label><input class="form-control readonly" readonly="" value="Anita Rao"/></div>
-<div class="col-md-6"><label class="form-label">Requested By</label><input class="form-control readonly" readonly="" value="Pradeep"/></div>
-<div class="col-12"><label class="form-label">Retirement Reason</label><textarea class="form-control" placeholder="Minimum 20 characters required" rows="4"></textarea><div class="form-text">Retirement reason is mandatory and fully auditable.</div></div>
-<div class="col-md-6"><label class="form-label">Replacement Document</label><select class="form-select"><option>Select replacement if applicable</option></select></div>
-<div class="col-md-6"><label class="form-label">Approver</label><select class="form-select"><option>QA Head</option><option>Compliance Manager</option></select></div>
-</div>
-<div class="d-flex gap-2 mt-4">
-<button class="btn btn-outline-secondary">Cancel</button>
-<button class="btn btn-danger">Submit Retirement Request</button>
-</div>
-</div></div>
-</div>
-<div class="col-lg-4">
-<div class="card cp-card"><div class="card-body">
-<h2 class="card-title mb-1">Control Notes</h2>
-<p class="card-subtitle mb-3">Retired records remain traceable.</p>
-<ul class="small text-secondary note-list mb-0">
-<li>Status should move to Pending Retirement until approved.</li>
-<li>Repository history must still show prior effective versions.</li>
-<li>Delete should never be available for controlled records.</li>
-<li>Approval, denial, and comment actions must be fully logged.</li>
-</ul>
-</div></div>
-</div>
-</div>
+
+  <div class="mb-4">
+    <h1 class="page-title mb-2">Retire Controlled Document</h1>
+    <p class="page-subtitle mb-0">Submit a controlled document for retirement with reason, review, and approval.</p>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="card cp-card">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Retire Request</h2>
+          <p class="card-subtitle mb-3">Retirement requires approval and must not be immediate.</p>
+
+          <div class="row g-3">
+
+            <!-- ── Step 1: Type ── -->
+            <div class="col-md-6">
+              <label class="form-label">Step 1 — Document Type <span class="text-danger">*</span></label>
+              <select class="form-select" id="docTypeSelect" onchange="onTypeChange(this.value)">
+                <option value="">-- Select Type --</option>
+                <option value="SOP">SOP</option>
+                <option value="Policy">Policy</option>
+                <option value="Guidance">Guidance</option>
+                <option value="Form">Form</option>
+              </select>
+              <div class="form-text">Only Effective documents will appear below.</div>
+            </div>
+
+            <!-- ── Step 2: Document ── -->
+            <div class="col-md-6">
+              <label class="form-label">Step 2 — Select Document <span class="text-danger">*</span></label>
+              <select class="form-select" id="docSelect" disabled onchange="onDocSelect(this.value)">
+                <option value="">-- Select Type first --</option>
+              </select>
+              <div class="form-text" id="docSelectHint">Choose a document type above to populate this list.</div>
+            </div>
+
+            <!-- Selected document info strip -->
+            <div class="col-12 d-none" id="docInfoWrap">
+              <div id="docInfoPanel">
+                <div class="di-id" id="diId">—</div>
+                <div class="di-meta" id="diMeta">—</div>
+              </div>
+            </div>
+
+            <!-- ── Fields — hidden until doc selected ── -->
+            <div class="col-md-6 d-none doc-field">
+              <label class="form-label">Current Status</label>
+              <input class="form-control field-locked" id="fStatus" readonly value="Effective">
+            </div>
+
+            <div class="col-md-6 d-none doc-field">
+              <label class="form-label">Owner</label>
+              <input class="form-control field-locked" id="fOwner" readonly>
+            </div>
+
+            <div class="col-md-6 d-none doc-field">
+              <label class="form-label">Requested By</label>
+              <input class="form-control field-locked" id="fRequestedBy" readonly value="Pradeep">
+            </div>
+
+            <div class="col-md-6 d-none doc-field">
+              <label class="form-label">Retirement Date <span class="text-danger">*</span></label>
+              <input class="form-control field-locked" id="fRetireDate" readonly>
+              <div class="form-text">Auto-set to today — read only.</div>
+            </div>
+
+            <div class="col-12 d-none doc-field">
+              <label class="form-label">Retirement Reason <span class="text-danger">*</span></label>
+              <textarea class="form-control" id="fReason" placeholder="Minimum 20 characters required — describe why this document is being retired" rows="4"></textarea>
+              <div class="form-text d-flex justify-content-between">
+                <span>Retirement reason is mandatory and fully auditable.</span>
+                <span id="charCount" class="text-secondary">0 / 20 min</span>
+              </div>
+            </div>
+
+            <div class="col-md-6 d-none doc-field">
+              <label class="form-label">Replacement Document <span class="text-secondary fw-normal">(if applicable)</span></label>
+              <select class="form-select" id="fReplacement">
+                <option value="">None — no replacement</option>
+              </select>
+              <div class="form-text">Select a replacement document if this one is being superseded.</div>
+            </div>
+
+            <div class="col-md-6 d-none doc-field">
+              <label class="form-label">Approver <span class="text-danger">*</span></label>
+              <select class="form-select" id="fApprover">
+                <option value="">-- Select Approver --</option>
+                <option value="ramesh_qa_head">Ramesh — QA Head</option>
+                <option value="priya_compliance">Priya — Compliance Manager</option>
+                <option value="deepa_qa_admin">Deepa — QA Admin</option>
+                <option value="ariharan_qa_mgr">Ariharan — QA Manager</option>
+              </select>
+              <div class="form-text">Creator cannot select themselves as approver.</div>
+            </div>
+
+          </div><!-- /row -->
+
+          <div class="d-flex gap-2 mt-4">
+            <button class="btn btn-outline-secondary">Cancel</button>
+            <button class="btn btn-danger" id="submitBtn" disabled onclick="submitRetirement()">
+              Submit Retirement Request
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div class="col-lg-4">
+      <div class="card cp-card">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Control Notes</h2>
+          <p class="card-subtitle mb-3">Retired records remain traceable.</p>
+          <ul class="small text-secondary note-list mb-0">
+            <li>Status moves to Pending Retirement until approved.</li>
+            <li>Repository history still shows prior effective versions.</li>
+            <li>Delete is never available for controlled records.</li>
+            <li>Approval, denial, and comment actions are fully logged.</li>
+            <li>Retirement date and approver are captured in the audit trail.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 </main>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── Sample data — same source as update-document, replace with PHP json_encode ──
+var EFFECTIVE_DOCS = {
+  SOP: [
+    { id: 'SOP-021-Training-V1',      topic: 'Training Procedure',       number: '021', version: 'V1', owner: 'Ariharan',  effectiveDate: '2026-03-01' },
+    { id: 'SOP-104-CAPA-V3',          topic: 'CAPA Management',          number: '104', version: 'V3', owner: 'Pradeep',   effectiveDate: '2026-01-15' },
+    { id: 'SOP-007-DevControl-V2',    topic: 'Deviation Control',        number: '007', version: 'V2', owner: 'Kavin',     effectiveDate: '2025-11-10' },
+  ],
+  Policy: [
+    { id: 'POL-004-Quality-V2',       topic: 'Quality Policy',           number: '004', version: 'V2', owner: 'Kavin',     effectiveDate: '2026-01-15' },
+    { id: 'POL-011-DataIntegrity-V1', topic: 'Data Integrity Policy',    number: '011', version: 'V1', owner: 'Pradeep',   effectiveDate: '2025-09-01' },
+    { id: 'POL-021-SEC-V2',           topic: 'Security Policy',          number: '021', version: 'V2', owner: 'Anita Rao', effectiveDate: '2025-08-15' },
+  ],
+  Guidance: [
+    { id: 'GUI-003-CAPA-V1',          topic: 'CAPA Workflow Guidance',   number: '003', version: 'V1', owner: 'Ariharan',  effectiveDate: '2026-02-01' },
+    { id: 'GUI-008-Audit-V2',         topic: 'Internal Audit Guidance',  number: '008', version: 'V2', owner: 'Deepa',     effectiveDate: '2025-10-20' },
+  ],
+  Form: [
+    { id: 'FRM-010-Inspection-V3',    topic: 'Inspection Form',          number: '010', version: 'V3', owner: 'Priya',     effectiveDate: '2025-11-20' },
+    { id: 'FRM-015-Training-V1',      topic: 'Training Acknowledgement', number: '015', version: 'V1', owner: 'Ariharan',  effectiveDate: '2026-03-10' },
+  ]
+};
+
+// ── Step 1: populate document dropdown ───────────────────────────────────
+function onTypeChange(type) {
+  var docSel = document.getElementById('docSelect');
+  var hint   = document.getElementById('docSelectHint');
+  resetFields();
+
+  if (!type) {
+    docSel.disabled = true;
+    docSel.innerHTML = '<option value="">-- Select Type first --</option>';
+    hint.textContent = 'Choose a document type above to populate this list.';
+    return;
+  }
+
+  var docs = EFFECTIVE_DOCS[type] || [];
+  docSel.innerHTML = '<option value="">-- Select a ' + type + ' document --</option>';
+  docs.forEach(function(doc) {
+    var opt = document.createElement('option');
+    opt.value = doc.id;
+    opt.textContent = doc.id + '  —  ' + doc.topic;
+    docSel.appendChild(opt);
+  });
+  docSel.disabled = false;
+  hint.textContent = docs.length + ' effective ' + type + ' document' + (docs.length !== 1 ? 's' : '') + ' available.';
+}
+
+// ── Step 2: auto-fill fields ──────────────────────────────────────────────
+function onDocSelect(docId) {
+  resetFields();
+  if (!docId) return;
+
+  var type = document.getElementById('docTypeSelect').value;
+  var docs = EFFECTIVE_DOCS[type] || [];
+  var doc  = docs.find(function(d) { return d.id === docId; });
+  if (!doc) return;
+
+  // Info strip
+  document.getElementById('diId').textContent   = doc.id;
+  document.getElementById('diMeta').textContent =
+    'Topic: ' + doc.topic +
+    '  ·  Version: ' + doc.version +
+    '  ·  Owner: ' + doc.owner +
+    '  ·  Effective: ' + formatDate(doc.effectiveDate);
+  document.getElementById('docInfoWrap').classList.remove('d-none');
+
+  // Fill locked fields
+  document.getElementById('fOwner').value      = doc.owner;
+  document.getElementById('fRetireDate').value = toInputDate(new Date());
+
+  // Populate replacement dropdown with all other effective docs
+  var repSel = document.getElementById('fReplacement');
+  repSel.innerHTML = '<option value="">None — no replacement</option>';
+  Object.keys(EFFECTIVE_DOCS).forEach(function(t) {
+    EFFECTIVE_DOCS[t].forEach(function(d) {
+      if (d.id !== doc.id) {
+        var opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = d.id + '  —  ' + d.topic;
+        repSel.appendChild(opt);
+      }
+    });
+  });
+
+  // Show all doc-field rows
+  document.querySelectorAll('.doc-field').forEach(function(el) {
+    el.classList.remove('d-none');
+  });
+
+  document.getElementById('submitBtn').disabled = false;
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────
+function resetFields() {
+  document.getElementById('docInfoWrap').classList.add('d-none');
+  document.querySelectorAll('.doc-field').forEach(function(el) {
+    el.classList.add('d-none');
+  });
+  document.getElementById('fReason').value  = '';
+  document.getElementById('charCount').textContent = '0 / 20 min';
+  document.getElementById('submitBtn').disabled = true;
+}
+
+// ── Character counter on reason textarea ─────────────────────────────────
+document.getElementById('fReason').addEventListener('input', function() {
+  var len = this.value.trim().length;
+  var el  = document.getElementById('charCount');
+  if (len < 20) {
+    el.textContent = len + ' / 20 min';
+    el.className   = 'text-danger';
+  } else {
+    el.textContent = len + ' chars ✓';
+    el.className   = 'text-success';
+  }
+});
+
+// ── Submit validation ─────────────────────────────────────────────────────
+function submitRetirement() {
+  var reason   = document.getElementById('fReason').value.trim();
+  var approver = document.getElementById('fApprover').value;
+
+  if (reason.length < 20) {
+    alert('Retirement Reason must be at least 20 characters.');
+    document.getElementById('fReason').focus();
+    return;
+  }
+  if (!approver) {
+    alert('Please select an Approver before submitting.');
+    document.getElementById('fApprover').focus();
+    return;
+  }
+  // In PHP: POST form data here
+  alert('Retirement request submitted. Status changed to Pending Retirement.');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function toInputDate(d) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+function formatDate(str) {
+  if (!str) return '—';
+  return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+</script>
 </body>
 </html>
