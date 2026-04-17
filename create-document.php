@@ -162,6 +162,23 @@ $ownerOptions = fetch_all_assoc($conn, "
     ORDER BY first_name ASC, last_name ASC, email ASC
 ");
 
+/* Ensure current user always exists in owner dropdown */
+$ownerFound = false;
+foreach ($ownerOptions as $opt) {
+    if ((int)$opt['id'] === $currentUserId) {
+        $ownerFound = true;
+        break;
+    }
+}
+if (!$ownerFound && $currentUser) {
+    $ownerOptions[] = [
+        'id' => $currentUserId,
+        'first_name' => $currentUser['first_name'] ?? '',
+        'last_name'  => $currentUser['last_name'] ?? '',
+        'email'      => $currentUser['email'] ?? ''
+    ];
+}
+
 $defaultTypeId = (int)($documentTypes[0]['id'] ?? 0);
 $defaultReviewCycle = (int)($documentTypes[0]['review_cycle_days'] ?? 365);
 
@@ -221,6 +238,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'form_builder_json'  => trim((string)($_POST['form_builder_json'] ?? '')),
     ];
 
+    /* Safer defaults for draft save */
+    if ($formData['document_type_id'] === '' && $defaultTypeId > 0) {
+        $formData['document_type_id'] = (string)$defaultTypeId;
+    }
+    if ($formData['owner_user_id'] === '') {
+        $formData['owner_user_id'] = (string)$currentUserId;
+    }
+    if ($formData['effective_date'] === '') {
+        $formData['effective_date'] = date('Y-m-d');
+    }
+    if ($formData['review_date'] === '') {
+        $formData['review_date'] = date('Y-m-d', strtotime('+' . max(1, $defaultReviewCycle) . ' days'));
+    }
+
     $_SESSION['create_document_old'] = $formData;
 
     $documentTypeId = (int)$formData['document_type_id'];
@@ -246,8 +277,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $docPrefix = (string)$docType['prefix'];
     $isFormDocument = strtolower($docTypeName) === 'form';
 
-    if ($formData['document_number'] === '' || $formData['document_topic'] === '' || $ownerUserId <= 0) {
-        $_SESSION['flash_error'] = 'Document type, topic, number, and owner are required.';
+    if ($formData['document_topic'] === '') {
+        $_SESSION['flash_error'] = 'Document topic is required.';
+        redirect_back();
+    }
+
+    if ($formData['document_number'] === '') {
+        $_SESSION['flash_error'] = 'Document number is required.';
+        redirect_back();
+    }
+
+    if ($ownerUserId <= 0) {
+        $_SESSION['flash_error'] = 'Owner is required.';
         redirect_back();
     }
 
@@ -289,16 +330,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $existingDoc = null;
-        $currentVersion = null;
 
         if ($draftId > 0) {
-            $checkStmt = mysqli_prepare($conn, "
-                SELECT d.*, dv.id AS version_id, dv.form_definition_id
+            $checkSql = "
+                SELECT d.*, dv.id AS version_id" . ($hasFormDefinitionLink ? ", dv.form_definition_id" : "") . "
                 FROM documents d
                 LEFT JOIN document_versions dv ON dv.id = d.current_version_id
                 WHERE d.id = ?
                 LIMIT 1
-            ");
+            ";
+            $checkStmt = mysqli_prepare($conn, $checkSql);
             if ($checkStmt) {
                 mysqli_stmt_bind_param($checkStmt, "i", $draftId);
                 mysqli_stmt_execute($checkStmt);
@@ -418,6 +459,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_close($updateDocStmt);
 
             if ($documentVersionId > 0) {
+                $changeSummary = ($action === 'submit_review') ? 'Draft updated and submitted for review' : 'Draft updated';
+
                 if ($hasFormDefinitionLink) {
                     $updateVersionStmt = mysqli_prepare($conn, "
                         UPDATE document_versions
@@ -439,8 +482,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!$updateVersionStmt) {
                         throw new Exception('Unable to update document version.');
                     }
-
-                    $changeSummary = ($action === 'submit_review') ? 'Draft updated and submitted for review' : 'Draft updated';
 
                     mysqli_stmt_bind_param(
                         $updateVersionStmt,
@@ -481,11 +522,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         throw new Exception('Unable to update document version.');
                     }
 
-                    $changeSummary = ($action === 'submit_review') ? 'Draft updated and submitted for review' : 'Draft updated';
-
                     mysqli_stmt_bind_param(
                         $updateVersionStmt,
-                        "ssisssssisi",
+                        "ssisssssisis",
                         $documentTitle,
                         $formData['document_topic'],
                         $ownerUserId,
@@ -502,6 +541,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     mysqli_stmt_close($updateVersionStmt);
                 }
             } else {
+                $changeSummary = ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created';
+
                 if ($hasFormDefinitionLink) {
                     $insertVersionStmt = mysqli_prepare($conn, "
                         INSERT INTO document_versions
@@ -512,11 +553,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         throw new Exception('Unable to create document version.');
                     }
 
-                    $changeSummary = ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created';
-
                     mysqli_stmt_bind_param(
                         $insertVersionStmt,
-                        "issiisssssiis",
+                        "issiisssssiiis",
                         $documentId,
                         $documentTitle,
                         $formData['document_topic'],
@@ -544,11 +583,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         throw new Exception('Unable to create document version.');
                     }
 
-                    $changeSummary = ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created';
-
                     mysqli_stmt_bind_param(
                         $insertVersionStmt,
-                        "issiisssssis",
+                        "issiisssssiss",
                         $documentId,
                         $documentTitle,
                         $formData['document_topic'],
@@ -630,8 +667,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            mysqli_commit($conn);
-
             $newValue = [
                 'document_id' => $documentId,
                 'document_version_id' => $documentVersionId,
@@ -653,6 +688,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $currentUserId,
                 $action === 'submit_review' ? 'Document draft updated and submitted for review.' : 'Document draft updated.'
             );
+
+            mysqli_commit($conn);
 
             unset($_SESSION['create_document_old']);
 
@@ -694,6 +731,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $documentId = (int)mysqli_insert_id($conn);
             mysqli_stmt_close($insertDocStmt);
 
+            $changeSummary = ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created';
+
             if ($hasFormDefinitionLink) {
                 $versionStmt = mysqli_prepare($conn, "
                     INSERT INTO document_versions
@@ -704,11 +743,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('Unable to create document version.');
                 }
 
-                $changeSummary = ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created';
-
                 mysqli_stmt_bind_param(
                     $versionStmt,
-                    "issiisssssiis",
+                    "issiisssssiiis",
                     $documentId,
                     $documentTitle,
                     $formData['document_topic'],
@@ -736,11 +773,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('Unable to create document version.');
                 }
 
-                $changeSummary = ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created';
-
                 mysqli_stmt_bind_param(
                     $versionStmt,
-                    "issiisssssis",
+                    "issiisssssiss",
                     $documentId,
                     $documentTitle,
                     $formData['document_topic'],
@@ -804,8 +839,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            mysqli_commit($conn);
-
             $newValue = [
                 'document_id' => $documentId,
                 'document_version_id' => $documentVersionId,
@@ -827,6 +860,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $currentUserId,
                 $action === 'submit_review' ? 'Document created and submitted for review.' : 'Document draft created.'
             );
+
+            mysqli_commit($conn);
 
             unset($_SESSION['create_document_old']);
 
