@@ -20,7 +20,11 @@ if (!function_exists('tableExists')) {
     {
         $tableName = mysqli_real_escape_string($conn, $tableName);
         $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
-        return ($res && mysqli_num_rows($res) > 0);
+        $ok = ($res && mysqli_num_rows($res) > 0);
+        if ($res) {
+            mysqli_free_result($res);
+        }
+        return $ok;
     }
 }
 
@@ -30,7 +34,11 @@ if (!function_exists('columnExists')) {
         $tableName = mysqli_real_escape_string($conn, $tableName);
         $columnName = mysqli_real_escape_string($conn, $columnName);
         $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$tableName}` LIKE '{$columnName}'");
-        return ($res && mysqli_num_rows($res) > 0);
+        $ok = ($res && mysqli_num_rows($res) > 0);
+        if ($res) {
+            mysqli_free_result($res);
+        }
+        return $ok;
     }
 }
 
@@ -70,17 +78,6 @@ if (!function_exists('fetchAllAssoc')) {
             mysqli_free_result($res);
         }
         return $rows;
-    }
-}
-
-if (!function_exists('formatDateDisplay')) {
-    function formatDateDisplay($date): string
-    {
-        if (empty($date) || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
-            return '—';
-        }
-        $ts = strtotime((string)$date);
-        return $ts ? date('d M Y', $ts) : '—';
     }
 }
 
@@ -274,7 +271,6 @@ $documentTypes = fetchAllAssoc($conn, "
     WHERE status = 'active'
     ORDER BY type_name ASC
 ");
-
 $documentTypeIdToName = resolveDocumentTypeMap($documentTypes);
 
 $departments = fetchAllAssoc($conn, "
@@ -338,6 +334,7 @@ foreach ($employeeQueries as $qry) {
                 'initials' => $initials !== '' ? $initials : 'U'
             ];
         }
+        mysqli_free_result($res);
         if (!empty($temp)) {
             $employees = $temp;
             break;
@@ -393,6 +390,7 @@ foreach ($approverQueries as $qry) {
                 'label' => $label
             ];
         }
+        mysqli_free_result($res);
         if (!empty($temp)) {
             $approvers = $temp;
             break;
@@ -451,9 +449,10 @@ if ($docsRes) {
             'effectiveDate' => (string)($row['effective_date'] ?? '')
         ];
     }
+    mysqli_free_result($docsRes);
 }
 
-/* -------- POST SAVE -------- */
+/* ---------- SAVE ASSIGNMENT ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create_assignment') {
     $documentId = (int)($_POST['document_id'] ?? 0);
     $documentType = trim((string)($_POST['document_type'] ?? ''));
@@ -607,7 +606,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     }
 }
 
-/* -------- TRACKER -------- */
+/* ---------- TRACKER ---------- */
 $trackerRows = [];
 $detailMap = [];
 
@@ -655,6 +654,24 @@ if ($assignmentTable !== null) {
         $selectParts[] = "0 AS assigned_to_user_id";
     }
 
+    if (columnExists($conn, $assignmentTable, 'acknowledged_at')) {
+        $selectParts[] = "a.acknowledged_at";
+    } elseif (columnExists($conn, $assignmentTable, 'confirmed_at')) {
+        $selectParts[] = "a.confirmed_at AS acknowledged_at";
+    } elseif (columnExists($conn, $assignmentTable, 'read_at')) {
+        $selectParts[] = "a.read_at AS acknowledged_at";
+    } else {
+        $selectParts[] = "NULL AS acknowledged_at";
+    }
+
+    if (columnExists($conn, $assignmentTable, 'confirmed_ip')) {
+        $selectParts[] = "a.confirmed_ip";
+    } elseif (columnExists($conn, $assignmentTable, 'ip_address')) {
+        $selectParts[] = "a.ip_address AS confirmed_ip";
+    } else {
+        $selectParts[] = "NULL AS confirmed_ip";
+    }
+
     $userJoinField = columnExists($conn, $assignmentTable, 'assigned_to_user_id')
         ? "a.assigned_to_user_id"
         : (columnExists($conn, $assignmentTable, 'user_id')
@@ -683,6 +700,7 @@ if ($assignmentTable !== null) {
         while ($row = mysqli_fetch_assoc($trackerRes)) {
             $rawAssignments[] = $row;
         }
+        mysqli_free_result($trackerRes);
     }
 
     $grouped = [];
@@ -737,8 +755,8 @@ if ($assignmentTable !== null) {
             'employee' => $employeeName,
             'department' => (string)($row['employee_department'] ?? '—'),
             'status' => $isConfirmed ? 'Confirmed' : 'Pending',
-            'confirmed_on' => $isConfirmed ? 'Completed' : '—',
-            'ip' => '—'
+            'confirmed_on' => $isConfirmed && !empty($row['acknowledged_at']) ? date('d M Y H:i', strtotime($row['acknowledged_at'])) : '—',
+            'ip' => $isConfirmed && !empty($row['confirmed_ip']) ? (string)$row['confirmed_ip'] : '—'
         ];
     }
 
@@ -899,7 +917,6 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
   <div class="row g-3">
 
     <div class="col-lg-8">
-
       <form method="post" id="assignmentForm">
         <input type="hidden" name="action" value="create_assignment">
         <input type="hidden" name="document_id" id="document_id">
