@@ -25,71 +25,162 @@ if (!function_exists('generate_uuid_v4')) {
     }
 }
 
-function write_audit_log(mysqli $conn, string $entityType, $entityId, string $action, $oldValue, $newValue, $performedBy, string $remarks = ''): void
-{
-    $eventId = generate_uuid_v4();
-    $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
-    $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
-    $oldJson = $oldValue !== null ? json_encode($oldValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
-    $newJson = $newValue !== null ? json_encode($newValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
-
-    $entityId = $entityId !== null ? (int)$entityId : null;
-    $performedBy = $performedBy !== null ? (int)$performedBy : null;
-
-    $stmt = mysqli_prepare($conn, "
-        INSERT INTO audit_logs
-        (event_id, entity_type, entity_id, action, old_value, new_value, performed_by, performed_at, remarks, ip_address, user_agent)
-        VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
-    ");
-    if ($stmt) {
-        mysqli_stmt_bind_param(
-            $stmt,
-            "ssisssisss",
-            $eventId,
-            $entityType,
-            $entityId,
-            $action,
-            $oldJson,
-            $newJson,
-            $performedBy,
-            $remarks,
-            $ipAddress,
-            $userAgent
-        );
-        mysqli_stmt_execute($stmt);
-        mysqli_stmt_close($stmt);
-    }
-}
-
-function fetch_all_assoc(mysqli $conn, string $sql): array
-{
-    $rows = [];
-    $res = mysqli_query($conn, $sql);
-    if ($res) {
-        while ($row = mysqli_fetch_assoc($res)) {
-            $rows[] = $row;
+if (!function_exists('has_column')) {
+    function has_column(mysqli $conn, string $table, string $column): bool
+    {
+        $table = mysqli_real_escape_string($conn, $table);
+        $column = mysqli_real_escape_string($conn, $column);
+        $res = mysqli_query($conn, "SHOW COLUMNS FROM `$table` LIKE '$column'");
+        $has = $res && mysqli_num_rows($res) > 0;
+        if ($res) {
+            mysqli_free_result($res);
         }
-        mysqli_free_result($res);
+        return $has;
     }
-    return $rows;
 }
 
-function has_column(mysqli $conn, string $table, string $column): bool
-{
-    $table = mysqli_real_escape_string($conn, $table);
-    $column = mysqli_real_escape_string($conn, $column);
-    $res = mysqli_query($conn, "SHOW COLUMNS FROM `$table` LIKE '$column'");
-    $has = $res && mysqli_num_rows($res) > 0;
-    if ($res) {
-        mysqli_free_result($res);
+if (!function_exists('table_exists')) {
+    function table_exists(mysqli $conn, string $table): bool
+    {
+        $table = mysqli_real_escape_string($conn, $table);
+        $res = mysqli_query($conn, "SHOW TABLES LIKE '$table'");
+        $has = $res && mysqli_num_rows($res) > 0;
+        if ($res) {
+            mysqli_free_result($res);
+        }
+        return $has;
     }
-    return $has;
 }
 
-function redirect_back(): void
-{
-    header('Location: create-document.php');
-    exit;
+if (!function_exists('make_bind_refs')) {
+    function make_bind_refs(array &$arr): array
+    {
+        $refs = [];
+        foreach ($arr as $key => &$value) {
+            $refs[$key] = &$value;
+        }
+        return $refs;
+    }
+}
+
+if (!function_exists('stmt_bind_execute')) {
+    function stmt_bind_execute(mysqli_stmt $stmt, array $params = []): bool
+    {
+        if (empty($params)) {
+            return mysqli_stmt_execute($stmt);
+        }
+
+        $types = '';
+        $values = [];
+
+        foreach ($params as $param) {
+            if (is_int($param)) {
+                $types .= 'i';
+            } elseif (is_float($param)) {
+                $types .= 'd';
+            } else {
+                $types .= 's';
+            }
+            $values[] = $param;
+        }
+
+        $bindParams = array_merge([$types], $values);
+        $refs = make_bind_refs($bindParams);
+
+        call_user_func_array([$stmt, 'bind_param'], $refs);
+        return mysqli_stmt_execute($stmt);
+    }
+}
+
+if (!function_exists('fetch_all_assoc')) {
+    function fetch_all_assoc(mysqli $conn, string $sql): array
+    {
+        $rows = [];
+        $res = mysqli_query($conn, $sql);
+        if ($res) {
+            while ($row = mysqli_fetch_assoc($res)) {
+                $rows[] = $row;
+            }
+            mysqli_free_result($res);
+        }
+        return $rows;
+    }
+}
+
+if (!function_exists('fetch_one_prepared')) {
+    function fetch_one_prepared(mysqli $conn, string $sql, array $params = [])
+    {
+        $stmt = mysqli_prepare($conn, $sql);
+        if (!$stmt) {
+            return null;
+        }
+        stmt_bind_execute($stmt, $params);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('exec_prepared')) {
+    function exec_prepared(mysqli $conn, string $sql, array $params = []): mysqli_stmt
+    {
+        $stmt = mysqli_prepare($conn, $sql);
+        if (!$stmt) {
+            throw new Exception('Database prepare failed: ' . mysqli_error($conn));
+        }
+        if (!stmt_bind_execute($stmt, $params)) {
+            $err = mysqli_stmt_error($stmt);
+            mysqli_stmt_close($stmt);
+            throw new Exception('Database execute failed: ' . $err);
+        }
+        return $stmt;
+    }
+}
+
+if (!function_exists('redirect_back')) {
+    function redirect_back(): void
+    {
+        header('Location: create-document.php');
+        exit;
+    }
+}
+
+if (!function_exists('write_audit_log')) {
+    function write_audit_log(mysqli $conn, string $entityType, $entityId, string $action, $oldValue, $newValue, $performedBy, string $remarks = ''): void
+    {
+        if (!table_exists($conn, 'audit_logs')) {
+            return;
+        }
+
+        $eventId = generate_uuid_v4();
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        $oldJson = $oldValue !== null ? json_encode($oldValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+        $newJson = $newValue !== null ? json_encode($newValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+
+        $sql = "
+            INSERT INTO audit_logs
+            (event_id, entity_type, entity_id, action, old_value, new_value, performed_by, performed_at, remarks, ip_address, user_agent)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
+        ";
+        $stmt = mysqli_prepare($conn, $sql);
+        if ($stmt) {
+            stmt_bind_execute($stmt, [
+                $eventId,
+                $entityType,
+                $entityId !== null ? (int)$entityId : null,
+                $action,
+                $oldJson,
+                $newJson,
+                $performedBy !== null ? (int)$performedBy : null,
+                $remarks,
+                $ipAddress,
+                $userAgent
+            ]);
+            mysqli_stmt_close($stmt);
+        }
+    }
 }
 
 $currentUserId = (int)($_SESSION['user_id'] ?? $_SESSION['admin_id'] ?? 0);
@@ -109,21 +200,14 @@ if (!in_array($currentRoleCode, ['qa_admin', 'super_admin'], true)) {
 $hasFormDefinitionLink = has_column($conn, 'document_versions', 'form_definition_id');
 $hasFormBuilderJson = has_column($conn, 'form_definitions', 'builder_json');
 
-$userStmt = mysqli_prepare($conn, "
+$currentUser = fetch_one_prepared($conn, "
     SELECT u.*, r.role_code, r.role_name
     FROM users u
     LEFT JOIN roles r ON r.id = u.current_role_id
     WHERE u.id = ?
     LIMIT 1
-");
-$currentUser = null;
-if ($userStmt) {
-    mysqli_stmt_bind_param($userStmt, "i", $currentUserId);
-    mysqli_stmt_execute($userStmt);
-    $result = mysqli_stmt_get_result($userStmt);
-    $currentUser = $result ? mysqli_fetch_assoc($result) : null;
-    mysqli_stmt_close($userStmt);
-}
+", [$currentUserId]);
+
 if (!$currentUser) {
     die('User not found.');
 }
@@ -162,7 +246,6 @@ $ownerOptions = fetch_all_assoc($conn, "
     ORDER BY first_name ASC, last_name ASC, email ASC
 ");
 
-/* Ensure current user always exists in owner dropdown */
 $ownerFound = false;
 foreach ($ownerOptions as $opt) {
     if ((int)$opt['id'] === $currentUserId) {
@@ -170,12 +253,12 @@ foreach ($ownerOptions as $opt) {
         break;
     }
 }
-if (!$ownerFound && $currentUser) {
+if (!$ownerFound) {
     $ownerOptions[] = [
         'id' => $currentUserId,
         'first_name' => $currentUser['first_name'] ?? '',
-        'last_name'  => $currentUser['last_name'] ?? '',
-        'email'      => $currentUser['email'] ?? ''
+        'last_name' => $currentUser['last_name'] ?? '',
+        'email' => $currentUser['email'] ?? ''
     ];
 }
 
@@ -238,7 +321,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'form_builder_json'  => trim((string)($_POST['form_builder_json'] ?? '')),
     ];
 
-    /* Safer defaults for draft save */
     if ($formData['document_type_id'] === '' && $defaultTypeId > 0) {
         $formData['document_type_id'] = (string)$defaultTypeId;
     }
@@ -339,25 +421,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 WHERE d.id = ?
                 LIMIT 1
             ";
-            $checkStmt = mysqli_prepare($conn, $checkSql);
-            if ($checkStmt) {
-                mysqli_stmt_bind_param($checkStmt, "i", $draftId);
-                mysqli_stmt_execute($checkStmt);
-                $res = mysqli_stmt_get_result($checkStmt);
-                $existingDoc = $res ? mysqli_fetch_assoc($res) : null;
-                mysqli_stmt_close($checkStmt);
-            }
+            $existingDoc = fetch_one_prepared($conn, $checkSql, [$draftId]);
         } else {
-            $dupStmt = mysqli_prepare($conn, "SELECT id FROM documents WHERE document_number = ? LIMIT 1");
-            if ($dupStmt) {
-                mysqli_stmt_bind_param($dupStmt, "s", $documentNumberFull);
-                mysqli_stmt_execute($dupStmt);
-                $dupRes = mysqli_stmt_get_result($dupStmt);
-                if ($dupRes && mysqli_num_rows($dupRes) > 0) {
-                    mysqli_stmt_close($dupStmt);
-                    throw new Exception('Document ID already exists. Please change the number/topic.');
-                }
-                mysqli_stmt_close($dupStmt);
+            $dupStmt = exec_prepared($conn, "SELECT id FROM documents WHERE document_number = ? LIMIT 1", [$documentNumberFull]);
+            $dupRes = mysqli_stmt_get_result($dupStmt);
+            $dupRow = $dupRes ? mysqli_fetch_assoc($dupRes) : null;
+            mysqli_stmt_close($dupStmt);
+            if ($dupRow) {
+                throw new Exception('Document ID already exists. Please change the number/topic.');
             }
         }
 
@@ -370,47 +441,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($existingFormDefinitionId > 0) {
-                $updFormStmt = mysqli_prepare($conn, "
+                $stmt = exec_prepared($conn, "
                     UPDATE form_definitions
                     SET form_name = ?, form_type = ?, linked_document_type_id = ?, builder_json = ?, updated_by = ?, updated_at = NOW()
                     WHERE id = ?
-                ");
-                if ($updFormStmt) {
-                    mysqli_stmt_bind_param(
-                        $updFormStmt,
-                        "ssisii",
-                        $formData['form_name'],
-                        $formData['form_type'],
-                        $documentTypeId,
-                        $formData['form_builder_json'],
-                        $currentUserId,
-                        $existingFormDefinitionId
-                    );
-                    mysqli_stmt_execute($updFormStmt);
-                    mysqli_stmt_close($updFormStmt);
-                    $formDefinitionId = $existingFormDefinitionId;
-                }
+                ", [
+                    $formData['form_name'],
+                    $formData['form_type'],
+                    $documentTypeId,
+                    $formData['form_builder_json'],
+                    $currentUserId,
+                    $existingFormDefinitionId
+                ]);
+                mysqli_stmt_close($stmt);
+                $formDefinitionId = $existingFormDefinitionId;
             } else {
-                $insFormStmt = mysqli_prepare($conn, "
+                $stmt = exec_prepared($conn, "
                     INSERT INTO form_definitions
                     (form_name, form_type, linked_document_type_id, status, builder_json, created_by, updated_by, created_at, updated_at)
                     VALUES (?, ?, ?, 'active', ?, ?, ?, NOW(), NOW())
-                ");
-                if ($insFormStmt) {
-                    mysqli_stmt_bind_param(
-                        $insFormStmt,
-                        "ssisii",
-                        $formData['form_name'],
-                        $formData['form_type'],
-                        $documentTypeId,
-                        $formData['form_builder_json'],
-                        $currentUserId,
-                        $currentUserId
-                    );
-                    mysqli_stmt_execute($insFormStmt);
-                    $formDefinitionId = (int)mysqli_insert_id($conn);
-                    mysqli_stmt_close($insFormStmt);
-                }
+                ", [
+                    $formData['form_name'],
+                    $formData['form_type'],
+                    $documentTypeId,
+                    $formData['form_builder_json'],
+                    $currentUserId,
+                    $currentUserId
+                ]);
+                $formDefinitionId = (int)mysqli_insert_id($conn);
+                mysqli_stmt_close($stmt);
             }
         }
 
@@ -419,7 +478,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $documentVersionId = (int)($existingDoc['current_version_id'] ?? 0);
             $oldDocument = $existingDoc;
 
-            $updateDocStmt = mysqli_prepare($conn, "
+            $stmt = exec_prepared($conn, "
                 UPDATE documents
                 SET document_number = ?,
                     document_type_id = ?,
@@ -434,14 +493,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     updated_at = NOW(),
                     approver = ?
                 WHERE id = ?
-            ");
-            if (!$updateDocStmt) {
-                throw new Exception('Unable to update document.');
-            }
-
-            mysqli_stmt_bind_param(
-                $updateDocStmt,
-                "siissisisisi",
+            ", [
                 $documentNumberFull,
                 $documentTypeId,
                 $departmentId,
@@ -454,15 +506,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $currentUserId,
                 $approverText,
                 $documentId
-            );
-            mysqli_stmt_execute($updateDocStmt);
-            mysqli_stmt_close($updateDocStmt);
+            ]);
+            mysqli_stmt_close($stmt);
 
             if ($documentVersionId > 0) {
                 $changeSummary = ($action === 'submit_review') ? 'Draft updated and submitted for review' : 'Draft updated';
 
                 if ($hasFormDefinitionLink) {
-                    $updateVersionStmt = mysqli_prepare($conn, "
+                    $stmt = exec_prepared($conn, "
                         UPDATE document_versions
                         SET title_snapshot = ?,
                             topic_snapshot = ?,
@@ -478,14 +529,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             submitted_at = ?,
                             updated_at = NOW()
                         WHERE id = ?
-                    ");
-                    if (!$updateVersionStmt) {
-                        throw new Exception('Unable to update document version.');
-                    }
-
-                    mysqli_stmt_bind_param(
-                        $updateVersionStmt,
-                        "ssisssssiiisi",
+                    ", [
                         $documentTitle,
                         $formData['document_topic'],
                         $ownerUserId,
@@ -498,11 +542,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $submittedBy,
                         $submittedAt,
                         $documentVersionId
-                    );
-                    mysqli_stmt_execute($updateVersionStmt);
-                    mysqli_stmt_close($updateVersionStmt);
+                    ]);
+                    mysqli_stmt_close($stmt);
                 } else {
-                    $updateVersionStmt = mysqli_prepare($conn, "
+                    $stmt = exec_prepared($conn, "
                         UPDATE document_versions
                         SET title_snapshot = ?,
                             topic_snapshot = ?,
@@ -517,14 +560,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             submitted_at = ?,
                             updated_at = NOW()
                         WHERE id = ?
-                    ");
-                    if (!$updateVersionStmt) {
-                        throw new Exception('Unable to update document version.');
-                    }
-
-                    mysqli_stmt_bind_param(
-                        $updateVersionStmt,
-                        "ssisssssisis",
+                    ", [
                         $documentTitle,
                         $formData['document_topic'],
                         $ownerUserId,
@@ -536,26 +572,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $submittedBy,
                         $submittedAt,
                         $documentVersionId
-                    );
-                    mysqli_stmt_execute($updateVersionStmt);
-                    mysqli_stmt_close($updateVersionStmt);
+                    ]);
+                    mysqli_stmt_close($stmt);
                 }
             } else {
                 $changeSummary = ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created';
 
                 if ($hasFormDefinitionLink) {
-                    $insertVersionStmt = mysqli_prepare($conn, "
+                    $stmt = exec_prepared($conn, "
                         INSERT INTO document_versions
                         (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, form_definition_id, submitted_by, submitted_at, created_at, updated_at)
                         VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, 'rich_text', ?, ?, ?, ?, NOW(), NOW())
-                    ");
-                    if (!$insertVersionStmt) {
-                        throw new Exception('Unable to create document version.');
-                    }
-
-                    mysqli_stmt_bind_param(
-                        $insertVersionStmt,
-                        "issiisssssiiis",
+                    ", [
                         $documentId,
                         $documentTitle,
                         $formData['document_topic'],
@@ -569,23 +597,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $formDefinitionId,
                         $submittedBy,
                         $submittedAt
-                    );
-                    mysqli_stmt_execute($insertVersionStmt);
+                    ]);
                     $documentVersionId = (int)mysqli_insert_id($conn);
-                    mysqli_stmt_close($insertVersionStmt);
+                    mysqli_stmt_close($stmt);
                 } else {
-                    $insertVersionStmt = mysqli_prepare($conn, "
+                    $stmt = exec_prepared($conn, "
                         INSERT INTO document_versions
                         (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, submitted_by, submitted_at, created_at, updated_at)
                         VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, 'rich_text', ?, ?, ?, NOW(), NOW())
-                    ");
-                    if (!$insertVersionStmt) {
-                        throw new Exception('Unable to create document version.');
-                    }
-
-                    mysqli_stmt_bind_param(
-                        $insertVersionStmt,
-                        "issiisssssiss",
+                    ", [
                         $documentId,
                         $documentTitle,
                         $formData['document_topic'],
@@ -598,72 +618,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $contentText,
                         $submittedBy,
                         $submittedAt
-                    );
-                    mysqli_stmt_execute($insertVersionStmt);
+                    ]);
                     $documentVersionId = (int)mysqli_insert_id($conn);
-                    mysqli_stmt_close($insertVersionStmt);
+                    mysqli_stmt_close($stmt);
                 }
 
-                $setCurrentStmt = mysqli_prepare($conn, "UPDATE documents SET current_version_id = ? WHERE id = ?");
-                if ($setCurrentStmt) {
-                    mysqli_stmt_bind_param($setCurrentStmt, "ii", $documentVersionId, $documentId);
-                    mysqli_stmt_execute($setCurrentStmt);
-                    mysqli_stmt_close($setCurrentStmt);
-                }
+                $stmt = exec_prepared($conn, "UPDATE documents SET current_version_id = ? WHERE id = ?", [
+                    $documentVersionId,
+                    $documentId
+                ]);
+                mysqli_stmt_close($stmt);
             }
 
             if ($action === 'submit_review' && $approverUserId > 0) {
-                $existingWorkflowStmt = mysqli_prepare($conn, "
+                $workflowExists = fetch_one_prepared($conn, "
                     SELECT id
                     FROM workflow_instances
                     WHERE document_version_id = ? AND workflow_type = 'document_approval'
                     LIMIT 1
-                ");
-                $workflowExists = false;
-                if ($existingWorkflowStmt) {
-                    mysqli_stmt_bind_param($existingWorkflowStmt, "i", $documentVersionId);
-                    mysqli_stmt_execute($existingWorkflowStmt);
-                    $workflowRes = mysqli_stmt_get_result($existingWorkflowStmt);
-                    $workflowExists = $workflowRes && mysqli_num_rows($workflowRes) > 0;
-                    mysqli_stmt_close($existingWorkflowStmt);
-                }
+                ", [$documentVersionId]);
 
                 if (!$workflowExists) {
-                    $wfStmt = mysqli_prepare($conn, "
+                    $stmt = exec_prepared($conn, "
                         INSERT INTO workflow_instances
                         (document_version_id, workflow_type, workflow_status, current_step_number, initiated_by, initiated_at)
                         VALUES (?, 'document_approval', 'pending', 1, ?, NOW())
-                    ");
-                    if ($wfStmt) {
-                        mysqli_stmt_bind_param($wfStmt, "ii", $documentVersionId, $currentUserId);
-                        mysqli_stmt_execute($wfStmt);
-                        $workflowInstanceId = (int)mysqli_insert_id($conn);
-                        mysqli_stmt_close($wfStmt);
+                    ", [
+                        $documentVersionId,
+                        $currentUserId
+                    ]);
+                    $workflowInstanceId = (int)mysqli_insert_id($conn);
+                    mysqli_stmt_close($stmt);
 
-                        $stepStmt = mysqli_prepare($conn, "
-                            INSERT INTO workflow_steps
-                            (workflow_instance_id, document_version_id, step_number, step_type, approver_user_id, step_name, status, action_status, due_at)
-                            VALUES (?, ?, 1, 'approval', ?, 'Approval Required', 'pending', 'pending', NULL)
-                        ");
-                        if ($stepStmt) {
-                            mysqli_stmt_bind_param($stepStmt, "iii", $workflowInstanceId, $documentVersionId, $approverUserId);
-                            mysqli_stmt_execute($stepStmt);
-                            mysqli_stmt_close($stepStmt);
-                        }
-                    }
+                    $stmt = exec_prepared($conn, "
+                        INSERT INTO workflow_steps
+                        (workflow_instance_id, document_version_id, step_number, step_type, approver_user_id, step_name, status, action_status, due_at)
+                        VALUES (?, ?, 1, 'approval', ?, 'Approval Required', 'pending', 'pending', NULL)
+                    ", [
+                        $workflowInstanceId,
+                        $documentVersionId,
+                        $approverUserId
+                    ]);
+                    mysqli_stmt_close($stmt);
                 }
 
-                $notifStmt = mysqli_prepare($conn, "
-                    INSERT INTO notifications
-                    (user_id, notification_type, reference_type, reference_id, title, message, is_read, created_at)
-                    VALUES (?, 'submit', 'document_version', ?, ?, ?, 0, NOW())
-                ");
-                if ($notifStmt) {
-                    $title = 'Document Submitted for Review';
-                    $message = 'A new document "' . $documentTitle . '" has been submitted for your review.';
-                    mysqli_stmt_bind_param($notifStmt, "iiss", $approverUserId, $documentVersionId, $title, $message);
-                    mysqli_stmt_execute($notifStmt);
-                    mysqli_stmt_close($notifStmt);
+                if (table_exists($conn, 'notifications')) {
+                    $stmt = exec_prepared($conn, "
+                        INSERT INTO notifications
+                        (user_id, notification_type, reference_type, reference_id, title, message, is_read, created_at)
+                        VALUES (?, 'submit', 'document_version', ?, ?, ?, 0, NOW())
+                    ", [
+                        $approverUserId,
+                        $documentVersionId,
+                        'Document Submitted for Review',
+                        'A new document "' . $documentTitle . '" has been submitted for your review.'
+                    ]);
+                    mysqli_stmt_close($stmt);
                 }
             }
 
@@ -703,18 +713,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['create_document_old']['draft_id'] = (string)$documentId;
             redirect_back();
         } else {
-            $insertDocStmt = mysqli_prepare($conn, "
+            $stmt = exec_prepared($conn, "
                 INSERT INTO documents
                 (document_number, document_type_id, department_id, title, topic, owner_user_id, created_by, current_status, is_acknowledgement_required, remarks, created_at, updated_at, approver)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)
-            ");
-            if (!$insertDocStmt) {
-                throw new Exception('Unable to create document.');
-            }
-
-            mysqli_stmt_bind_param(
-                $insertDocStmt,
-                "siissiisiss",
+            ", [
                 $documentNumberFull,
                 $documentTypeId,
                 $departmentId,
@@ -726,26 +729,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ackReq,
                 $remarks,
                 $approverText
-            );
-            mysqli_stmt_execute($insertDocStmt);
+            ]);
             $documentId = (int)mysqli_insert_id($conn);
-            mysqli_stmt_close($insertDocStmt);
+            mysqli_stmt_close($stmt);
 
             $changeSummary = ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created';
 
             if ($hasFormDefinitionLink) {
-                $versionStmt = mysqli_prepare($conn, "
+                $stmt = exec_prepared($conn, "
                     INSERT INTO document_versions
                     (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, form_definition_id, submitted_by, submitted_at, created_at, updated_at)
                     VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, 'rich_text', ?, ?, ?, ?, NOW(), NOW())
-                ");
-                if (!$versionStmt) {
-                    throw new Exception('Unable to create document version.');
-                }
-
-                mysqli_stmt_bind_param(
-                    $versionStmt,
-                    "issiisssssiiis",
+                ", [
                     $documentId,
                     $documentTitle,
                     $formData['document_topic'],
@@ -759,23 +754,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $formDefinitionId,
                     $submittedBy,
                     $submittedAt
-                );
-                mysqli_stmt_execute($versionStmt);
+                ]);
                 $documentVersionId = (int)mysqli_insert_id($conn);
-                mysqli_stmt_close($versionStmt);
+                mysqli_stmt_close($stmt);
             } else {
-                $versionStmt = mysqli_prepare($conn, "
+                $stmt = exec_prepared($conn, "
                     INSERT INTO document_versions
                     (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, submitted_by, submitted_at, created_at, updated_at)
                     VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, 'rich_text', ?, ?, ?, NOW(), NOW())
-                ");
-                if (!$versionStmt) {
-                    throw new Exception('Unable to create document version.');
-                }
-
-                mysqli_stmt_bind_param(
-                    $versionStmt,
-                    "issiisssssiss",
+                ", [
                     $documentId,
                     $documentTitle,
                     $formData['document_topic'],
@@ -788,54 +775,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $contentText,
                     $submittedBy,
                     $submittedAt
-                );
-                mysqli_stmt_execute($versionStmt);
+                ]);
                 $documentVersionId = (int)mysqli_insert_id($conn);
-                mysqli_stmt_close($versionStmt);
+                mysqli_stmt_close($stmt);
             }
 
-            $setCurrentStmt = mysqli_prepare($conn, "UPDATE documents SET current_version_id = ? WHERE id = ?");
-            if ($setCurrentStmt) {
-                mysqli_stmt_bind_param($setCurrentStmt, "ii", $documentVersionId, $documentId);
-                mysqli_stmt_execute($setCurrentStmt);
-                mysqli_stmt_close($setCurrentStmt);
-            }
+            $stmt = exec_prepared($conn, "UPDATE documents SET current_version_id = ? WHERE id = ?", [
+                $documentVersionId,
+                $documentId
+            ]);
+            mysqli_stmt_close($stmt);
 
             if ($action === 'submit_review' && $approverUserId > 0) {
-                $wfStmt = mysqli_prepare($conn, "
+                $stmt = exec_prepared($conn, "
                     INSERT INTO workflow_instances
                     (document_version_id, workflow_type, workflow_status, current_step_number, initiated_by, initiated_at)
                     VALUES (?, 'document_approval', 'pending', 1, ?, NOW())
-                ");
-                if ($wfStmt) {
-                    mysqli_stmt_bind_param($wfStmt, "ii", $documentVersionId, $currentUserId);
-                    mysqli_stmt_execute($wfStmt);
-                    $workflowInstanceId = (int)mysqli_insert_id($conn);
-                    mysqli_stmt_close($wfStmt);
+                ", [
+                    $documentVersionId,
+                    $currentUserId
+                ]);
+                $workflowInstanceId = (int)mysqli_insert_id($conn);
+                mysqli_stmt_close($stmt);
 
-                    $stepStmt = mysqli_prepare($conn, "
-                        INSERT INTO workflow_steps
-                        (workflow_instance_id, document_version_id, step_number, step_type, approver_user_id, step_name, status, action_status, due_at)
-                        VALUES (?, ?, 1, 'approval', ?, 'Approval Required', 'pending', 'pending', NULL)
-                    ");
-                    if ($stepStmt) {
-                        mysqli_stmt_bind_param($stepStmt, "iii", $workflowInstanceId, $documentVersionId, $approverUserId);
-                        mysqli_stmt_execute($stepStmt);
-                        mysqli_stmt_close($stepStmt);
-                    }
-                }
+                $stmt = exec_prepared($conn, "
+                    INSERT INTO workflow_steps
+                    (workflow_instance_id, document_version_id, step_number, step_type, approver_user_id, step_name, status, action_status, due_at)
+                    VALUES (?, ?, 1, 'approval', ?, 'Approval Required', 'pending', 'pending', NULL)
+                ", [
+                    $workflowInstanceId,
+                    $documentVersionId,
+                    $approverUserId
+                ]);
+                mysqli_stmt_close($stmt);
 
-                $notifStmt = mysqli_prepare($conn, "
-                    INSERT INTO notifications
-                    (user_id, notification_type, reference_type, reference_id, title, message, is_read, created_at)
-                    VALUES (?, 'submit', 'document_version', ?, ?, ?, 0, NOW())
-                ");
-                if ($notifStmt) {
-                    $title = 'Document Submitted for Review';
-                    $message = 'A new document "' . $documentTitle . '" has been submitted for your review.';
-                    mysqli_stmt_bind_param($notifStmt, "iiss", $approverUserId, $documentVersionId, $title, $message);
-                    mysqli_stmt_execute($notifStmt);
-                    mysqli_stmt_close($notifStmt);
+                if (table_exists($conn, 'notifications')) {
+                    $stmt = exec_prepared($conn, "
+                        INSERT INTO notifications
+                        (user_id, notification_type, reference_type, reference_id, title, message, is_read, created_at)
+                        VALUES (?, 'submit', 'document_version', ?, ?, ?, 0, NOW())
+                    ", [
+                        $approverUserId,
+                        $documentVersionId,
+                        'Document Submitted for Review',
+                        'A new document "' . $documentTitle . '" has been submitted for your review.'
+                    ]);
+                    mysqli_stmt_close($stmt);
                 }
             }
 
