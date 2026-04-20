@@ -5,7 +5,6 @@ require_once __DIR__ . '/includes/db.php';
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die("Database connection not found. Please check includes/db.php");
 }
-
 mysqli_set_charset($conn, 'utf8mb4');
 
 if (!function_exists('e')) {
@@ -20,26 +19,6 @@ if (!function_exists('tableExists')) {
     {
         $tableName = mysqli_real_escape_string($conn, $tableName);
         $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
-        $ok = ($res && mysqli_num_rows($res) > 0);
-        if ($res) {
-            mysqli_free_result($res);
-        }
-        return $ok;
-    }
-}
-
-if (!function_exists('viewExists')) {
-    function viewExists(mysqli $conn, string $viewName): bool
-    {
-        $viewName = mysqli_real_escape_string($conn, $viewName);
-        $sql = "
-            SELECT 1
-            FROM information_schema.VIEWS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = '{$viewName}'
-            LIMIT 1
-        ";
-        $res = mysqli_query($conn, $sql);
         $ok = ($res && mysqli_num_rows($res) > 0);
         if ($res) {
             mysqli_free_result($res);
@@ -89,6 +68,30 @@ if (!function_exists('resolveUserDisplayName')) {
     }
 }
 
+if (!function_exists('formatDateDisplay')) {
+    function formatDateDisplay($value): string
+    {
+        $value = trim((string)($value ?? ''));
+        if ($value === '' || $value === '0000-00-00' || $value === '0000-00-00 00:00:00') {
+            return '—';
+        }
+        $ts = strtotime($value);
+        return $ts ? date('d M Y', $ts) : '—';
+    }
+}
+
+if (!function_exists('formatDateTimeDisplay')) {
+    function formatDateTimeDisplay($value): string
+    {
+        $value = trim((string)($value ?? ''));
+        if ($value === '' || $value === '0000-00-00' || $value === '0000-00-00 00:00:00') {
+            return '—';
+        }
+        $ts = strtotime($value);
+        return $ts ? date('d M Y H:i', $ts) : '—';
+    }
+}
+
 if (!function_exists('writeAuditLog')) {
     function writeAuditLog(
         mysqli $conn,
@@ -133,30 +136,6 @@ if (!function_exists('writeAuditLog')) {
             mysqli_stmt_execute($stmt);
             mysqli_stmt_close($stmt);
         }
-    }
-}
-
-if (!function_exists('formatDateTimeDisplay')) {
-    function formatDateTimeDisplay($date): string
-    {
-        $date = trim((string)($date ?? ''));
-        if ($date === '' || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
-            return '—';
-        }
-        $ts = strtotime($date);
-        return $ts ? date('d M Y H:i', $ts) : '—';
-    }
-}
-
-if (!function_exists('formatDateDisplay')) {
-    function formatDateDisplay($date): string
-    {
-        $date = trim((string)($date ?? ''));
-        if ($date === '' || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
-            return '—';
-        }
-        $ts = strtotime($date);
-        return $ts ? date('d M Y', $ts) : '—';
     }
 }
 
@@ -280,65 +259,76 @@ if ($empRes) {
     mysqli_free_result($empRes);
 }
 
-/* ---------------- EFFECTIVE DOCUMENTS ---------------- */
+/* ---------------- DOCUMENTS FOR DROPDOWN ---------------- */
+/* effective docs first; if none for a type, fallback to latest current docs */
 $effectiveDocs = [];
-
-if (viewExists($conn, 'vw_repository_effective')) {
-    $docsSql = "
-        SELECT
-            vre.document_id AS id,
-            vre.document_version_id,
-            vre.document_number,
-            vre.title,
-            vre.document_type AS type_name,
-            vre.version_label,
-            vre.effective_date,
-            CONCAT(COALESCE(owner.first_name,''), ' ', COALESCE(owner.last_name,'')) AS owner_name
-        FROM vw_repository_effective vre
-        LEFT JOIN documents d ON d.id = vre.document_id
-        LEFT JOIN users owner ON owner.id = d.owner_user_id
-        ORDER BY vre.document_type ASC, vre.document_number ASC, vre.document_id DESC
-    ";
-} else {
-    $docsSql = "
-        SELECT
-            d.id,
-            dv.id AS document_version_id,
-            d.document_number,
-            d.title,
-            dt.type_name,
-            dv.version_label,
-            dv.effective_date,
-            CONCAT(COALESCE(owner.first_name,''), ' ', COALESCE(owner.last_name,'')) AS owner_name
-        FROM documents d
-        INNER JOIN document_versions dv ON dv.id = d.current_version_id
-        LEFT JOIN document_types dt ON dt.id = d.document_type_id
-        LEFT JOIN users owner ON owner.id = d.owner_user_id
-        WHERE d.current_status = 'effective'
-          AND dv.status = 'effective'
-        ORDER BY dt.type_name ASC, d.document_number ASC, d.id DESC
-    ";
-}
-
+$docsSql = "
+    SELECT
+        d.id,
+        dv.id AS document_version_id,
+        d.document_number,
+        d.title,
+        d.topic,
+        dt.type_name,
+        dt.prefix,
+        dv.version_label,
+        dv.effective_date,
+        d.current_status,
+        dv.status AS version_status,
+        CONCAT(COALESCE(owner.first_name,''), ' ', COALESCE(owner.last_name,'')) AS owner_name,
+        CASE
+            WHEN d.current_status = 'effective' AND dv.status = 'effective' THEN 1
+            ELSE 2
+        END AS sort_priority
+    FROM documents d
+    INNER JOIN document_versions dv ON dv.id = d.current_version_id
+    LEFT JOIN document_types dt ON dt.id = d.document_type_id
+    LEFT JOIN users owner ON owner.id = d.owner_user_id
+    ORDER BY dt.type_name ASC, sort_priority ASC, d.updated_at DESC, d.id DESC
+";
 $docsRes = mysqli_query($conn, $docsSql);
+
+$typeHasEffective = [];
 if ($docsRes) {
     while ($row = mysqli_fetch_assoc($docsRes)) {
         $type = trim((string)($row['type_name'] ?? 'Other'));
         if ($type === '') {
             $type = 'Other';
         }
+
         if (!isset($effectiveDocs[$type])) {
             $effectiveDocs[$type] = [];
         }
+        if (!isset($typeHasEffective[$type])) {
+            $typeHasEffective[$type] = false;
+        }
+
+        $isEffective = (
+            strtolower((string)($row['current_status'] ?? '')) === 'effective' &&
+            strtolower((string)($row['version_status'] ?? '')) === 'effective'
+        );
+
+        if ($isEffective) {
+            $typeHasEffective[$type] = true;
+        }
+
+        if ($typeHasEffective[$type] && !$isEffective) {
+            continue;
+        }
+
+        $ownerName = trim((string)($row['owner_name'] ?? ''));
+        $title = trim((string)($row['title'] ?? ''));
+        $topic = trim((string)($row['topic'] ?? ''));
 
         $effectiveDocs[$type][] = [
             'id' => (int)$row['id'],
             'document_version_id' => (int)$row['document_version_id'],
-            'docId' => (string)($row['document_number'] ?? ''),
-            'topic' => (string)($row['title'] ?? 'Untitled'),
+            'docId' => (string)($row['document_number'] ?: ('DOC-' . (int)$row['id'])),
+            'topic' => $title !== '' ? $title : ($topic !== '' ? $topic : 'Untitled'),
             'version' => (string)($row['version_label'] ?? '01'),
-            'owner' => trim((string)($row['owner_name'] ?? '')) !== '' ? (string)$row['owner_name'] : '—',
-            'effectiveDate' => (string)($row['effective_date'] ?? '')
+            'owner' => $ownerName !== '' ? $ownerName : '—',
+            'effectiveDate' => (string)($row['effective_date'] ?? ''),
+            'is_effective' => $isEffective ? 1 : 0
         ];
     }
     mysqli_free_result($docsRes);
@@ -398,13 +388,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                     d.document_number,
                     d.title,
                     d.topic,
-                    dv.id AS document_version_id,
-                    dv.version_label
+                    dv.id AS document_version_id
                 FROM documents d
                 INNER JOIN document_versions dv ON dv.id = d.current_version_id
                 WHERE d.id = ?
-                  AND d.current_status = 'effective'
-                  AND dv.status = 'effective'
                 LIMIT 1
             ");
 
@@ -418,7 +405,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             }
 
             if (!$documentRow) {
-                $errorMessage = 'Only effective documents can be assigned for acknowledgement.';
+                $errorMessage = 'Selected document not found.';
             } else {
                 mysqli_begin_transaction($conn);
 
@@ -427,6 +414,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                     $documentNumber = (string)$documentRow['document_number'];
                     $documentTitle = trim((string)($documentRow['title'] ?: $documentRow['topic'] ?: 'Untitled Document'));
                     $assignedAt = date('Y-m-d H:i:s');
+                    $dueAt = $deadline . ' 23:59:59';
 
                     $insertStmt = mysqli_prepare($conn, "
                         INSERT INTO acknowledgement_assignments
@@ -446,6 +434,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                         ");
                     }
 
+                    $insertedCount = 0;
+
                     foreach ($assignedUserIds as $employeeId) {
                         mysqli_stmt_bind_param(
                             $insertStmt,
@@ -454,7 +444,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                             $employeeId,
                             $userId,
                             $assignedAt,
-                            $deadline
+                            $dueAt
                         );
 
                         if (!mysqli_stmt_execute($insertStmt)) {
@@ -462,12 +452,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                             $sqlError = mysqli_error($conn);
 
                             if ($sqlState === '23000') {
-                                continue; // already assigned for this version/user
+                                continue;
                             }
                             throw new RuntimeException('Failed to save assignment row. ' . $sqlError);
                         }
 
                         $assignmentId = (int)mysqli_insert_id($conn);
+                        $insertedCount++;
 
                         if ($notifStmt) {
                             $notifTitle = 'Document Assignment';
@@ -482,6 +473,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                         mysqli_stmt_close($notifStmt);
                     }
 
+                    if ($insertedCount <= 0) {
+                        throw new RuntimeException('This document is already assigned to the selected employee(s).');
+                    }
+
                     writeAuditLog(
                         $conn,
                         'document_assignment',
@@ -494,10 +489,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                             'document_number' => $documentNumber,
                             'document_type' => $documentType,
                             'assigned_user_ids' => $assignedUserIds,
-                            'assigned_count' => count($assignedUserIds),
+                            'assigned_count' => $insertedCount,
                             'assign_mode' => $assignMode,
                             'department_name' => $departmentName,
-                            'deadline' => $deadline,
+                            'deadline' => $dueAt,
                             'priority' => $priority,
                             'message' => $note
                         ],
@@ -594,13 +589,13 @@ if (tableExists($conn, 'acknowledgement_assignments')) {
 
         $status = strtolower(trim((string)($row['status'] ?? 'pending')));
         $isConfirmed = ($status === 'acknowledged');
-
         if ($isConfirmed) {
             $grouped[$groupKey]['confirmed']++;
         }
 
         $employeeName = resolveUserDisplayName($row);
         $department = (string)($row['department_name'] ?? '—');
+
         $groupMembers[$groupKey][] = [
             'user_id' => (int)$row['employee_id'],
             'dept' => $department
@@ -609,7 +604,7 @@ if (tableExists($conn, 'acknowledgement_assignments')) {
         $detailMap[$groupKey][] = [
             'employee' => $employeeName,
             'department' => $department,
-            'status' => $isConfirmed ? 'Confirmed' : (($status === 'overdue') ? 'Pending' : 'Pending'),
+            'status' => $isConfirmed ? 'Confirmed' : 'Pending',
             'confirmed_on' => $isConfirmed ? formatDateTimeDisplay($row['acknowledged_at'] ?? '') : '—',
             'ip' => $isConfirmed ? ((string)($row['ip_address'] ?? '') !== '' ? (string)$row['ip_address'] : '—') : '—'
         ];
@@ -638,6 +633,7 @@ if (tableExists($conn, 'acknowledgement_assignments')) {
                     $deptEmployeeCount++;
                 }
             }
+
             if ($deptEmployeeCount > 0 && $deptEmployeeCount === count($uniqueUsers)) {
                 $g['assignedTo'] = $deptNames[0];
             } else {
@@ -778,7 +774,7 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
           </ul>
         </li>
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="audit-trail.php">Audit Trail</a></li>
             <li><a class="dropdown-item active" href="document-assignment.php">Document Assignment</a></li>
@@ -823,6 +819,96 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
     <!-- ── Left: New Assignment Form ── -->
     <div class="col-lg-8">
 
+      <!-- Step 1 & 2 — Document selection -->
+      <div class="card cp-card mb-3">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Select Document</h2>
+          <p class="card-subtitle mb-3">Only Effective documents can be assigned for acknowledgement.</p>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Step 1 — Document Type <span class="text-danger">*</span></label>
+              <select class="form-select" id="docTypeSelect" onchange="onTypeChange(this.value)">
+                <option value="">-- Select Type --</option>
+                <?php foreach ($documentTypes as $type): ?>
+                  <option value="<?php echo e($type['type_name']); ?>"><?php echo e($type['type_name']); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Step 2 — Select Document <span class="text-danger">*</span></label>
+              <select class="form-select" id="docSelect" disabled onchange="onDocSelect(this.value)">
+                <option value="">-- Select Type first --</option>
+              </select>
+              <div class="form-text" id="docSelectHint">Choose a type above to load effective documents.</div>
+            </div>
+          </div>
+
+          <!-- Doc info strip -->
+          <div id="docInfoPanel" class="d-none mt-3 p-3 rounded-3" style="background:#f0f4ff;border:1px solid #c7d7f8;font-size:13px;">
+            <div class="fw-bold text-primary" id="diId">—</div>
+            <div class="text-secondary mt-1" id="diMeta">—</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Step 3 — Assign to -->
+      <div class="card cp-card mb-3 d-none" id="assignCard">
+        <div class="card-body">
+          <h2 class="card-title mb-1">Assign To</h2>
+          <p class="card-subtitle mb-3">Choose to assign by department (all employees in that dept) or select individual employees.</p>
+
+          <!-- Assign mode toggle -->
+          <div class="d-flex gap-2 mb-3" id="assignModeBtns">
+            <button class="btn btn-primary btn-sm" id="btnDept" onclick="setAssignMode('dept'); return false;">By Department</button>
+            <button class="btn btn-outline-secondary btn-sm" id="btnIndividual" onclick="setAssignMode('individual'); return false;">Individual Employees</button>
+            <button class="btn btn-outline-secondary btn-sm" id="btnAll" onclick="setAssignMode('all'); return false;">All Employees</button>
+          </div>
+
+          <!-- Department mode -->
+          <div id="deptMode">
+            <label class="form-label">Select Department <span class="text-danger">*</span></label>
+            <select class="form-select" id="deptSelect" onchange="onDeptChange(this.value)">
+              <option value="">-- Select Department --</option>
+              <?php foreach ($departments as $dept): ?>
+                <option value="<?php echo e($dept['department_name']); ?>"><?php echo e($dept['department_name']); ?></option>
+              <?php endforeach; ?>
+            </select>
+            <div class="form-text" id="deptHint">&nbsp;</div>
+          </div>
+
+          <!-- Individual mode -->
+          <div id="individualMode" class="d-none">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label class="form-label mb-0">
+                Select Employees
+                <span class="selected-count" id="selectedCount">0</span>
+              </label>
+              <div class="d-flex gap-2">
+                <input type="text" class="form-control form-control-sm" id="empSearch"
+                       placeholder="Search name or dept..." oninput="filterEmployees(this.value)"
+                       style="max-width:200px;">
+                <button class="btn btn-outline-secondary btn-sm" onclick="selectAll(); return false;">Select All</button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="clearAll(); return false;">Clear</button>
+              </div>
+            </div>
+            <div class="emp-check-list" id="empCheckList">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- All employees mode -->
+          <div id="allMode" class="d-none">
+            <div class="p-3 rounded-3" style="background:#f0fdf4;border:1px solid #bbf7d0;font-size:13px;">
+              ✓ &nbsp;This document will be assigned to <strong>all active employees</strong> in the system.
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Step 4 — Deadline & note -->
       <form method="post" id="assignmentForm">
         <input type="hidden" name="action" value="create_assignment">
         <input type="hidden" name="document_id" id="document_id">
@@ -831,96 +917,6 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
         <input type="hidden" name="department_name" id="department_name">
         <div id="selectedEmployeeInputs"></div>
 
-        <!-- Step 1 & 2 — Document selection -->
-        <div class="card cp-card mb-3">
-          <div class="card-body">
-            <h2 class="card-title mb-1">Select Document</h2>
-            <p class="card-subtitle mb-3">Only Effective documents can be assigned for acknowledgement.</p>
-
-            <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label">Step 1 — Document Type <span class="text-danger">*</span></label>
-                <select class="form-select" id="docTypeSelect" onchange="onTypeChange(this.value)">
-                  <option value="">-- Select Type --</option>
-                  <?php foreach ($documentTypes as $type): ?>
-                    <option value="<?php echo e($type['type_name']); ?>"><?php echo e($type['type_name']); ?></option>
-                  <?php endforeach; ?>
-                </select>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Step 2 — Select Document <span class="text-danger">*</span></label>
-                <select class="form-select" id="docSelect" disabled onchange="onDocSelect(this.value)">
-                  <option value="">-- Select Type first --</option>
-                </select>
-                <div class="form-text" id="docSelectHint">Choose a type above to load effective documents.</div>
-              </div>
-            </div>
-
-            <!-- Doc info strip -->
-            <div id="docInfoPanel" class="d-none mt-3 p-3 rounded-3" style="background:#f0f4ff;border:1px solid #c7d7f8;font-size:13px;">
-              <div class="fw-bold text-primary" id="diId">—</div>
-              <div class="text-secondary mt-1" id="diMeta">—</div>
-            </div>
-
-          </div>
-        </div>
-
-        <!-- Step 3 — Assign to -->
-        <div class="card cp-card mb-3 d-none" id="assignCard">
-          <div class="card-body">
-            <h2 class="card-title mb-1">Assign To</h2>
-            <p class="card-subtitle mb-3">Choose to assign by department (all employees in that dept) or select individual employees.</p>
-
-            <!-- Assign mode toggle -->
-            <div class="d-flex gap-2 mb-3" id="assignModeBtns">
-              <button type="button" class="btn btn-primary btn-sm" id="btnDept" onclick="setAssignMode('dept')">By Department</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm" id="btnIndividual" onclick="setAssignMode('individual')">Individual Employees</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm" id="btnAll" onclick="setAssignMode('all')">All Employees</button>
-            </div>
-
-            <!-- Department mode -->
-            <div id="deptMode">
-              <label class="form-label">Select Department <span class="text-danger">*</span></label>
-              <select class="form-select" id="deptSelect" onchange="onDeptChange(this.value)">
-                <option value="">-- Select Department --</option>
-                <?php foreach ($departments as $dept): ?>
-                  <option value="<?php echo e($dept['department_name']); ?>"><?php echo e($dept['department_name']); ?></option>
-                <?php endforeach; ?>
-              </select>
-              <div class="form-text" id="deptHint">&nbsp;</div>
-            </div>
-
-            <!-- Individual mode -->
-            <div id="individualMode" class="d-none">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <label class="form-label mb-0">
-                  Select Employees
-                  <span class="selected-count" id="selectedCount">0</span>
-                </label>
-                <div class="d-flex gap-2">
-                  <input type="text" class="form-control form-control-sm" id="empSearch"
-                         placeholder="Search name or dept..." oninput="filterEmployees(this.value)"
-                         style="max-width:200px;">
-                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectAll()">Select All</button>
-                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearAll()">Clear</button>
-                </div>
-              </div>
-              <div class="emp-check-list" id="empCheckList">
-                <!-- Populated by JS -->
-              </div>
-            </div>
-
-            <!-- All employees mode -->
-            <div id="allMode" class="d-none">
-              <div class="p-3 rounded-3" style="background:#f0fdf4;border:1px solid #bbf7d0;font-size:13px;">
-                ✓ &nbsp;This document will be assigned to <strong>all active employees</strong> in the system.
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        <!-- Step 4 — Deadline & note -->
         <div class="card cp-card mb-3 d-none" id="deadlineCard">
           <div class="card-body">
             <h2 class="card-title mb-1">Deadline &amp; Instructions</h2>
@@ -1011,7 +1007,7 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
             <option value="<?php echo e($type['type_name']); ?>"><?php echo e($type['type_name']); ?></option>
           <?php endforeach; ?>
         </select>
-        <button type="button" class="btn btn-sm btn-outline-secondary">&#11015; Export</button>
+        <button class="btn btn-sm btn-outline-secondary" type="button">&#11015; Export</button>
       </div>
     </div>
 
@@ -1065,9 +1061,9 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
         </table>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary btn-sm">&#11015; Export this list</button>
-        <button type="button" class="btn btn-primary btn-sm" id="sendReminderBtn">Send Reminder to Pending</button>
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <button class="btn btn-outline-secondary btn-sm" type="button">&#11015; Export this list</button>
+        <button class="btn btn-primary btn-sm" id="sendReminderBtn" type="button">Send Reminder to Pending</button>
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button">Close</button>
       </div>
     </div>
   </div>
@@ -1098,16 +1094,23 @@ function onTypeChange(type) {
 
   var docs = EFFECTIVE_DOCS[type] || [];
   docSel.innerHTML = '<option value="">-- Select a ' + type + ' document --</option>';
-
   docs.forEach(function(d) {
     var o = document.createElement('option');
     o.value = d.id;
-    o.textContent = d.docId + '  —  ' + d.topic;
+    o.textContent = d.docId + ' — ' + d.topic;
     docSel.appendChild(o);
   });
 
   docSel.disabled = false;
-  hint.textContent = docs.length + ' effective ' + type + ' document' + (docs.length !== 1 ? 's' : '') + ' available.';
+
+  var shownCount = docs.length;
+  var effectiveCount = docs.filter(function(d){ return Number(d.is_effective || 0) === 1; }).length;
+
+  if (effectiveCount > 0) {
+    hint.textContent = effectiveCount + ' effective ' + type + ' document' + (effectiveCount !== 1 ? 's' : '') + ' available.';
+  } else {
+    hint.textContent = shownCount + ' ' + type + ' document' + (shownCount !== 1 ? 's' : '') + ' available.';
+  }
 }
 
 function onDocSelect(docId) {
@@ -1115,13 +1118,13 @@ function onDocSelect(docId) {
   if (!docId) return;
 
   var type = document.getElementById('docTypeSelect').value;
-  var doc = (EFFECTIVE_DOCS[type] || []).find(function(d){ return String(d.id) === String(docId); });
+  var doc  = (EFFECTIVE_DOCS[type] || []).find(function(d){ return String(d.id) === String(docId); });
   if (!doc) return;
 
   document.getElementById('document_id').value = doc.id;
   document.getElementById('document_type').value = type;
 
-  document.getElementById('diId').textContent = doc.docId;
+  document.getElementById('diId').textContent   = doc.docId;
   document.getElementById('diMeta').textContent = 'Topic: ' + doc.topic + '  ·  Version: ' + doc.version + '  ·  Owner: ' + doc.owner;
   document.getElementById('docInfoPanel').classList.remove('d-none');
   document.getElementById('assignCard').classList.remove('d-none');
@@ -1141,8 +1144,7 @@ function resetBelowDoc() {
   document.getElementById('document_id').value = '';
   document.getElementById('document_type').value = '';
   document.getElementById('department_name').value = '';
-  var deptEl = document.getElementById('deptSelect');
-  if (deptEl) deptEl.value = '';
+  document.getElementById('deptSelect').value = '';
   document.getElementById('deptHint').textContent = '\u00A0';
   selectedEmployeeIds = [];
   updateSelectedCount();
@@ -1157,9 +1159,9 @@ function setAssignMode(mode) {
   document.getElementById('individualMode').classList.toggle('d-none', mode !== 'individual');
   document.getElementById('allMode').classList.toggle('d-none', mode !== 'all');
 
-  document.getElementById('btnDept').className       = mode === 'dept' ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm';
-  document.getElementById('btnIndividual').className = mode === 'individual' ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm';
-  document.getElementById('btnAll').className        = mode === 'all' ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('btnDept').className       = mode==='dept'       ? 'btn btn-primary btn-sm'          : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('btnIndividual').className = mode==='individual' ? 'btn btn-primary btn-sm'          : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('btnAll').className        = mode==='all'        ? 'btn btn-primary btn-sm'          : 'btn btn-outline-secondary btn-sm';
 }
 
 function onDeptChange(dept) {
@@ -1167,7 +1169,7 @@ function onDeptChange(dept) {
   var hint = document.getElementById('deptHint');
   if (dept) {
     var n = ALL_EMPLOYEES.filter(function(e){ return e.dept === dept; }).length;
-    hint.textContent = n + ' active employee' + (n !== 1 ? 's' : '') + ' in this department will be assigned.';
+    hint.textContent = n + ' active employee' + (n!==1?'s':'') + ' in this department will be assigned.';
     hint.className = 'form-text text-success';
   } else {
     hint.textContent = '\u00A0';
@@ -1179,7 +1181,6 @@ function onDeptChange(dept) {
 function renderEmployeeList(filter) {
   var list = document.getElementById('empCheckList');
   var q = String(filter || '').toLowerCase();
-
   var filtered = ALL_EMPLOYEES.filter(function(e) {
     return !q || e.name.toLowerCase().includes(q) || e.dept.toLowerCase().includes(q);
   });
@@ -1187,7 +1188,7 @@ function renderEmployeeList(filter) {
   list.innerHTML = filtered.map(function(e) {
     var checked = selectedEmployeeIds.indexOf(Number(e.id)) > -1;
     return '<div class="emp-check-item" onclick="toggleEmployee(' + e.id + ')">' +
-      '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onclick="event.stopPropagation();toggleEmployee(' + e.id + ')">' +
+      '<input type="checkbox" ' + (checked?'checked':'') + ' onclick="event.stopPropagation();toggleEmployee(' + e.id + ')">' +
       '<div class="emp-avatar">' + e.initials + '</div>' +
       '<div><div class="emp-name">' + e.name + '</div><div class="emp-dept">' + e.dept + '</div></div>' +
       '</div>';
@@ -1199,7 +1200,6 @@ function toggleEmployee(id) {
   var idx = selectedEmployeeIds.indexOf(id);
   if (idx > -1) selectedEmployeeIds.splice(idx, 1);
   else selectedEmployeeIds.push(id);
-
   updateSelectedCount();
   syncSelectedEmployeeInputs();
   renderEmployeeList(document.getElementById('empSearch').value);
@@ -1219,9 +1219,7 @@ function clearAll() {
   renderEmployeeList(document.getElementById('empSearch').value);
 }
 
-function filterEmployees(val) {
-  renderEmployeeList(val);
-}
+function filterEmployees(val) { renderEmployeeList(val); }
 
 function updateSelectedCount() {
   document.getElementById('selectedCount').textContent = selectedEmployeeIds.length;
@@ -1239,7 +1237,26 @@ function syncSelectedEmployeeInputs() {
   });
 }
 
-// ── Reset ────────────────────────────────────────────────────────────────
+// ── Submit ───────────────────────────────────────────────────────────────
+document.getElementById('assignmentForm').addEventListener('submit', function(e) {
+  var docId    = document.getElementById('document_id').value;
+  var deadline = document.getElementById('fDeadline').value;
+
+  if (!docId)    { e.preventDefault(); alert('Please select a document.'); return; }
+  if (!deadline) { e.preventDefault(); alert('Please set a Read-by Deadline.'); return; }
+
+  if (assignMode === 'dept' && !document.getElementById('deptSelect').value) {
+    e.preventDefault();
+    alert('Please select a department.');
+    return;
+  }
+  if (assignMode === 'individual' && selectedEmployeeIds.length === 0) {
+    e.preventDefault();
+    alert('Please select at least one employee.');
+    return;
+  }
+});
+
 function resetForm() {
   document.getElementById('assignmentForm').reset();
   document.getElementById('docTypeSelect').value = '';
@@ -1249,14 +1266,12 @@ function resetForm() {
   document.getElementById('fNote').value = '';
   setAssignMode('dept');
   resetBelowDoc();
-  renderEmployeeList('');
 }
 
 // ── Tracker ──────────────────────────────────────────────────────────────
 function renderTracker(data) {
   var body  = document.getElementById('trackerBody');
   var empty = document.getElementById('trackerEmpty');
-
   if (!data.length) {
     body.innerHTML = '';
     empty.classList.remove('d-none');
@@ -1265,14 +1280,11 @@ function renderTracker(data) {
   empty.classList.add('d-none');
 
   body.innerHTML = data.map(function(a) {
-    var pct      = a.total ? Math.round((a.confirmed / a.total) * 100) : 0;
-    var barClass = pct === 100 ? '' : (a.status === 'Overdue' ? 'danger' : pct > 50 ? '' : 'warn');
-    var statusBadge = a.status === 'Completed'
-      ? '<span class="badge badge-soft-success">Completed</span>'
-      : a.status === 'Overdue'
-        ? '<span class="badge badge-soft-danger">Overdue</span>'
-        : '<span class="badge badge-soft-warning">In Progress</span>';
-
+    var pct      = a.total ? Math.round(a.confirmed / a.total * 100) : 0;
+    var barClass = pct === 100 ? '' : (a.status==='Overdue' ? 'danger' : pct>50 ? '' : 'warn');
+    var statusBadge = a.status === 'Completed' ? '<span class="badge badge-soft-success">Completed</span>'
+                    : a.status === 'Overdue'   ? '<span class="badge badge-soft-danger">Overdue</span>'
+                    :                            '<span class="badge badge-soft-warning">In Progress</span>';
     return '<tr>' +
       '<td><span class="fw-semibold text-primary" style="font-size:13px;">' + a.docId + '</span></td>' +
       '<td><span class="badge badge-soft-info">' + a.type + '</span></td>' +
@@ -1294,10 +1306,11 @@ function renderTracker(data) {
 }
 
 function filterTracker() {
-  var st = document.getElementById('filterStatus').value;
+  var st   = document.getElementById('filterStatus').value;
   var type = document.getElementById('filterType').value;
   var filtered = ASSIGNMENTS.filter(function(a) {
-    return (!st || a.status === st) && (!type || a.type === type);
+    return (!st   || a.status === st) &&
+           (!type || a.type   === type);
   });
   renderTracker(filtered);
 }
@@ -1305,15 +1318,13 @@ function filterTracker() {
 function openDetail(batchToken, docId, assignedTo, deadline) {
   var rows = ASSIGNMENT_DETAILS[batchToken] || [];
   document.getElementById('detailModalTitle').textContent = docId;
-  document.getElementById('detailModalSub').textContent = 'Assigned to: ' + assignedTo + '  ·  Deadline: ' + deadline;
+  document.getElementById('detailModalSub').textContent   = 'Assigned to: ' + assignedTo + '  ·  Deadline: ' + deadline;
 
   document.getElementById('detailBody').innerHTML = rows.map(function(r) {
     return '<tr>' +
       '<td class="fw-semibold" style="font-size:13px;">' + r.employee + '</td>' +
       '<td style="font-size:12px;color:#6b7280;">' + r.department + '</td>' +
-      '<td>' + (r.status === 'Confirmed'
-        ? '<span class="badge badge-soft-success">Confirmed</span>'
-        : '<span class="badge badge-soft-warning">Pending</span>') + '</td>' +
+      '<td>' + (r.status === 'Confirmed' ? '<span class="badge badge-soft-success">Confirmed</span>' : '<span class="badge badge-soft-warning">Pending</span>') + '</td>' +
       '<td style="font-size:12px;color:#6b7280;">' + r.confirmed_on + '</td>' +
       '<td style="font-size:12px;color:#6b7280;">' + r.ip + '</td>' +
     '</tr>';
@@ -1322,7 +1333,7 @@ function openDetail(batchToken, docId, assignedTo, deadline) {
   new bootstrap.Modal(document.getElementById('detailModal')).show();
 }
 
-function sendReminder(batchToken) {
+function sendReminder(id) {
   alert('Reminder email feature is not connected yet in this page.');
 }
 
