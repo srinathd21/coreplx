@@ -15,6 +15,25 @@ if (!function_exists('e')) {
     }
 }
 
+if (!function_exists('tableExists')) {
+    function tableExists(mysqli $conn, string $tableName): bool
+    {
+        $tableName = mysqli_real_escape_string($conn, $tableName);
+        $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
+        return ($res && mysqli_num_rows($res) > 0);
+    }
+}
+
+if (!function_exists('columnExists')) {
+    function columnExists(mysqli $conn, string $tableName, string $columnName): bool
+    {
+        $tableName = mysqli_real_escape_string($conn, $tableName);
+        $columnName = mysqli_real_escape_string($conn, $columnName);
+        $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$tableName}` LIKE '{$columnName}'");
+        return ($res && mysqli_num_rows($res) > 0);
+    }
+}
+
 $currentUserId = (int)($_SESSION['user_id'] ?? $_SESSION['admin_id'] ?? 0);
 $currentRoleCode = (string)($_SESSION['role_code'] ?? '');
 $currentRoleName = (string)($_SESSION['role_name'] ?? 'QA Admin');
@@ -105,6 +124,17 @@ function short_name(array $row): string
     return $name !== '' ? $name : (string)($row['email'] ?? 'User');
 }
 
+$hasDocumentsCreatedBy = tableExists($conn, 'documents') && columnExists($conn, 'documents', 'created_by');
+$hasDocumentsUpdatedBy = tableExists($conn, 'documents') && columnExists($conn, 'documents', 'updated_by');
+$hasDocumentsUpdatedAt = tableExists($conn, 'documents') && columnExists($conn, 'documents', 'updated_at');
+$hasDocumentsCreatedAt = tableExists($conn, 'documents') && columnExists($conn, 'documents', 'created_at');
+$hasWorkflowSteps = tableExists($conn, 'workflow_steps');
+$hasNotifications = tableExists($conn, 'notifications');
+$hasAuditLogs = tableExists($conn, 'audit_logs');
+$hasAckAssignments = tableExists($conn, 'acknowledgement_assignments');
+$hasDocVersions = tableExists($conn, 'document_versions');
+$hasDocTypes = tableExists($conn, 'document_types');
+
 $userRow = fetch_one($conn, "
     SELECT u.id, u.first_name, u.last_name, u.email, r.role_name
     FROM users u
@@ -116,56 +146,132 @@ $userRow = fetch_one($conn, "
 $welcomeName = $userRow ? short_name($userRow) : $currentDisplayName;
 $avatarLetter = strtoupper(substr($welcomeName, 0, 1));
 
-$documentsOwned = count_query($conn, "
+/* -----------------------------
+   Documents owned / created by me
+------------------------------ */
+$documentsOwnedSql = "
     SELECT COUNT(*) AS cnt
     FROM documents
     WHERE owner_user_id = ?
-", 'i', [$currentUserId]);
+";
+$documentsOwnedTypes = 'i';
+$documentsOwnedParams = [$currentUserId];
 
-$pendingApprovals = count_query($conn, "
-    SELECT COUNT(*) AS cnt
-    FROM workflow_steps
-    WHERE approver_user_id = ?
-      AND status = 'pending'
-", 'i', [$currentUserId]);
+if ($hasDocumentsCreatedBy) {
+    $documentsOwnedSql = "
+        SELECT COUNT(*) AS cnt
+        FROM documents
+        WHERE owner_user_id = ?
+           OR created_by = ?
+    ";
+    $documentsOwnedTypes = 'ii';
+    $documentsOwnedParams = [$currentUserId, $currentUserId];
+}
 
-$overdueReviews = count_query($conn, "
-    SELECT COUNT(*) AS cnt
-    FROM documents d
-    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-    WHERE dv.review_date IS NOT NULL
-      AND dv.review_date < CURDATE()
-      AND d.current_status IN ('effective', 'approved', 'published')
-", '', []);
+$documentsOwned = count_query($conn, $documentsOwnedSql, $documentsOwnedTypes, $documentsOwnedParams);
 
-$unreadAlerts = count_query($conn, "
-    SELECT COUNT(*) AS cnt
-    FROM notifications
-    WHERE user_id = ?
-      AND is_read = 0
-", 'i', [$currentUserId]);
+/* -----------------------------
+   Pending approvals
+------------------------------ */
+$pendingApprovals = 0;
+if ($hasWorkflowSteps) {
+    $pendingApprovals = count_query($conn, "
+        SELECT COUNT(*) AS cnt
+        FROM workflow_steps
+        WHERE approver_user_id = ?
+          AND status = 'pending'
+    ", 'i', [$currentUserId]);
+}
 
-$pendingApprovalRows = fetch_all($conn, "
-    SELECT
-        d.document_number,
-        d.title,
-        dt.type_name,
-        dv.submitted_at,
-        submitter.first_name,
-        submitter.last_name,
-        ws.document_version_id
-    FROM workflow_steps ws
-    INNER JOIN document_versions dv ON dv.id = ws.document_version_id
-    INNER JOIN documents d ON d.id = dv.document_id
-    LEFT JOIN document_types dt ON dt.id = d.document_type_id
-    LEFT JOIN users submitter ON submitter.id = dv.submitted_by
-    WHERE ws.approver_user_id = ?
-      AND ws.status = 'pending'
-    ORDER BY dv.submitted_at ASC, ws.id ASC
-    LIMIT 5
-", 'i', [$currentUserId]);
+/* -----------------------------
+   Overdue reviews
+------------------------------ */
+$overdueReviews = 0;
+if ($hasDocVersions) {
+    $overdueReviews = count_query($conn, "
+        SELECT COUNT(*) AS cnt
+        FROM documents d
+        LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+        WHERE dv.review_date IS NOT NULL
+          AND dv.review_date <> '0000-00-00'
+          AND dv.review_date < CURDATE()
+          AND d.current_status IN ('effective', 'approved', 'published')
+    ");
+}
 
-$workQueue = fetch_all($conn, "
+/* -----------------------------
+   Unread alerts
+------------------------------ */
+$unreadAlerts = 0;
+if ($hasNotifications) {
+    $unreadAlerts = count_query($conn, "
+        SELECT COUNT(*) AS cnt
+        FROM notifications
+        WHERE user_id = ?
+          AND is_read = 0
+    ", 'i', [$currentUserId]);
+}
+
+/* -----------------------------
+   Pending approval rows
+------------------------------ */
+$pendingApprovalRows = [];
+if ($hasWorkflowSteps && $hasDocVersions) {
+    $pendingApprovalRows = fetch_all($conn, "
+        SELECT
+            d.document_number,
+            d.title,
+            dt.type_name,
+            dv.submitted_at,
+            submitter.first_name,
+            submitter.last_name,
+            submitter.email,
+            ws.document_version_id
+        FROM workflow_steps ws
+        INNER JOIN document_versions dv ON dv.id = ws.document_version_id
+        INNER JOIN documents d ON d.id = dv.document_id
+        LEFT JOIN document_types dt ON dt.id = d.document_type_id
+        LEFT JOIN users submitter ON submitter.id = dv.submitted_by
+        WHERE ws.approver_user_id = ?
+          AND ws.status = 'pending'
+        ORDER BY dv.submitted_at ASC, ws.id ASC
+        LIMIT 5
+    ", 'i', [$currentUserId]);
+}
+
+/* -----------------------------
+   My work queue
+   FIX: include drafts created_by / updated_by / owner_user_id
+------------------------------ */
+$workQueueWhere = [];
+$workQueueParams = [];
+$workQueueTypes = '';
+
+$workQueueWhere[] = "d.owner_user_id = ?";
+$workQueueParams[] = $currentUserId;
+$workQueueTypes .= 'i';
+
+if ($hasDocumentsCreatedBy) {
+    $workQueueWhere[] = "d.created_by = ?";
+    $workQueueParams[] = $currentUserId;
+    $workQueueTypes .= 'i';
+}
+
+if ($hasDocumentsUpdatedBy) {
+    $workQueueWhere[] = "d.updated_by = ?";
+    $workQueueParams[] = $currentUserId;
+    $workQueueTypes .= 'i';
+}
+
+if ($hasWorkflowSteps) {
+    $workQueueWhere[] = "ws.approver_user_id = ?";
+    $workQueueParams[] = $currentUserId;
+    $workQueueTypes .= 'i';
+}
+
+$updatedAtOrderCol = $hasDocumentsUpdatedAt ? "d.updated_at" : ($hasDocumentsCreatedAt ? "d.created_at" : "d.id");
+
+$workQueueSql = "
     SELECT
         d.document_number,
         d.title,
@@ -174,34 +280,64 @@ $workQueue = fetch_all($conn, "
         ws.status AS workflow_status
     FROM documents d
     LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-    LEFT JOIN workflow_steps ws
-        ON ws.document_version_id = d.current_version_id
-       AND ws.approver_user_id = ?
-       AND ws.status = 'pending'
-    WHERE d.owner_user_id = ?
-       OR ws.approver_user_id = ?
-    ORDER BY d.updated_at DESC, d.id DESC
+";
+
+if ($hasWorkflowSteps) {
+    $workQueueSql .= "
+        LEFT JOIN workflow_steps ws
+            ON ws.document_version_id = d.current_version_id
+           AND ws.approver_user_id = ?
+           AND ws.status = 'pending'
+    ";
+    $workQueueSqlTypesPrefix = 'i';
+    $workQueueSqlParamsPrefix = [$currentUserId];
+} else {
+    $workQueueSqlTypesPrefix = '';
+    $workQueueSqlParamsPrefix = [];
+    $workQueueSql .= " LEFT JOIN document_versions ws_dummy ON 1=0 ";
+}
+
+$workQueueSql .= "
+    WHERE " . implode(' OR ', $workQueueWhere) . "
+    ORDER BY {$updatedAtOrderCol} DESC, d.id DESC
     LIMIT 6
-", 'iii', [$currentUserId, $currentUserId, $currentUserId]);
+";
 
-$recentActivity = fetch_all($conn, "
-    SELECT
-        al.performed_at,
-        al.action,
-        al.remarks,
-        al.entity_type,
-        actor.first_name,
-        actor.last_name,
-        actor.email
-    FROM audit_logs al
-    LEFT JOIN users actor ON actor.id = al.performed_by
-    WHERE al.performed_by = ?
-       OR al.entity_type IN ('document', 'user')
-    ORDER BY al.performed_at DESC, al.id DESC
-    LIMIT 8
-", 'i', [$currentUserId]);
+$workQueue = fetch_all(
+    $conn,
+    $workQueueSql,
+    $workQueueSqlTypesPrefix . $workQueueTypes,
+    array_merge($workQueueSqlParamsPrefix, $workQueueParams)
+);
 
-$recentDocuments = fetch_all($conn, "
+/* -----------------------------
+   Recent activity
+------------------------------ */
+$recentActivity = [];
+if ($hasAuditLogs) {
+    $recentActivity = fetch_all($conn, "
+        SELECT
+            al.performed_at,
+            al.action,
+            al.remarks,
+            al.entity_type,
+            actor.first_name,
+            actor.last_name,
+            actor.email
+        FROM audit_logs al
+        LEFT JOIN users actor ON actor.id = al.performed_by
+        WHERE al.performed_by = ?
+           OR al.entity_type IN ('document', 'user')
+        ORDER BY al.performed_at DESC, al.id DESC
+        LIMIT 8
+    ", 'i', [$currentUserId]);
+}
+
+/* -----------------------------
+   Recent documents
+   FIX: prioritize my drafts / created docs
+------------------------------ */
+$recentDocumentsSql = "
     SELECT
         d.document_number,
         d.title,
@@ -209,23 +345,74 @@ $recentDocuments = fetch_all($conn, "
         dt.type_name
     FROM documents d
     LEFT JOIN document_types dt ON dt.id = d.document_type_id
-    ORDER BY d.updated_at DESC, d.id DESC
-    LIMIT 6
-", '', []);
+    ORDER BY
+";
 
-$reviewQueueCount = count_query($conn, "
-    SELECT COUNT(*) AS cnt
-    FROM documents d
-    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-    WHERE dv.review_date IS NOT NULL
-      AND dv.review_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
-", '', []);
+if ($hasDocumentsCreatedBy || $hasDocumentsUpdatedBy) {
+    $priorityParts = [];
+    if ($hasDocumentsCreatedBy) {
+        $priorityParts[] = "CASE WHEN d.created_by = ? THEN 1 ELSE 0 END";
+    }
+    if ($hasDocumentsUpdatedBy) {
+        $priorityParts[] = "CASE WHEN d.updated_by = ? THEN 1 ELSE 0 END";
+    }
+    $priorityParts[] = "CASE WHEN d.owner_user_id = ? THEN 1 ELSE 0 END";
+    $recentDocumentsSql .= " (" . implode(' + ', $priorityParts) . ") DESC, ";
+    $recentDocumentsParams = [];
+    $recentDocumentsTypes = '';
+    if ($hasDocumentsCreatedBy) {
+        $recentDocumentsParams[] = $currentUserId;
+        $recentDocumentsTypes .= 'i';
+    }
+    if ($hasDocumentsUpdatedBy) {
+        $recentDocumentsParams[] = $currentUserId;
+        $recentDocumentsTypes .= 'i';
+    }
+    $recentDocumentsParams[] = $currentUserId;
+    $recentDocumentsTypes .= 'i';
+} else {
+    $recentDocumentsParams = [];
+    $recentDocumentsTypes = '';
+}
 
-$ackPending = count_query($conn, "
-    SELECT COUNT(*) AS cnt
-    FROM acknowledgement_assignments
-    WHERE status IN ('pending', 'overdue')
-", '', []);
+$recentDocumentsSql .= " CASE WHEN d.current_status = 'draft' THEN 0 ELSE 1 END ASC, {$updatedAtOrderCol} DESC, d.id DESC LIMIT 6";
+
+$recentDocuments = fetch_all($conn, $recentDocumentsSql, $recentDocumentsTypes, $recentDocumentsParams);
+
+/* -----------------------------
+   Review queue count
+------------------------------ */
+$reviewQueueCount = 0;
+if ($hasDocVersions) {
+    $reviewQueueCount = count_query($conn, "
+        SELECT COUNT(*) AS cnt
+        FROM documents d
+        LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+        WHERE dv.review_date IS NOT NULL
+          AND dv.review_date <> '0000-00-00'
+          AND dv.review_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+    ");
+}
+
+/* -----------------------------
+   Acknowledgement pending
+------------------------------ */
+$ackPending = 0;
+if ($hasAckAssignments) {
+    if (columnExists($conn, 'acknowledgement_assignments', 'assignment_status')) {
+        $ackPending = count_query($conn, "
+            SELECT COUNT(*) AS cnt
+            FROM acknowledgement_assignments
+            WHERE assignment_status IN ('assigned', 'pending', 'overdue')
+        ");
+    } elseif (columnExists($conn, 'acknowledgement_assignments', 'status')) {
+        $ackPending = count_query($conn, "
+            SELECT COUNT(*) AS cnt
+            FROM acknowledgement_assignments
+            WHERE status IN ('assigned', 'pending', 'overdue')
+        ");
+    }
+}
 ?>
 <!doctype html>
 <html lang="en">

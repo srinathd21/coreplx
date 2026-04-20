@@ -348,7 +348,6 @@ if ($currentUser) {
 }
 
 if ($currentUserId <= 0) {
-    // Production redirect
     header('Location: login-admin.php');
     exit;
 }
@@ -370,7 +369,6 @@ $limitEmployees = (int)(get_setting($conn, 'max_employees', '20') ?: 20);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string)($_POST['action'] ?? ''));
 
-    /* ---------------- SAVE USER ---------------- */
     if ($action === 'save_user') {
         $userId = (int)($_POST['user_id'] ?? 0);
         $firstName = trim((string)($_POST['first_name'] ?? ''));
@@ -379,6 +377,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $departmentId = (int)($_POST['department_id'] ?? 0);
         $designation = trim((string)($_POST['designation'] ?? ''));
         $roleName = trim((string)($_POST['role_name'] ?? 'Employee'));
+        $password = (string)($_POST['password'] ?? '');
+        $confirmPassword = (string)($_POST['confirm_password'] ?? '');
 
         if ($firstName === '' || $lastName === '' || $email === '' || $departmentId <= 0 || $roleName === '') {
             set_flash('danger', 'First name, last name, email, department, and role are required.');
@@ -388,6 +388,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             set_flash('danger', 'Please enter a valid email address.');
             redirect_self();
+        }
+
+        if ($userId === 0) {
+            if ($password === '' || $confirmPassword === '') {
+                set_flash('danger', 'Password and confirm password are required for new user.');
+                redirect_self();
+            }
+        }
+
+        if ($password !== '' || $confirmPassword !== '') {
+            if ($password !== $confirmPassword) {
+                set_flash('danger', 'Password and confirm password do not match.');
+                redirect_self();
+            }
+            if (strlen($password) < 6) {
+                set_flash('danger', 'Password must be at least 6 characters.');
+                redirect_self();
+            }
         }
 
         $department = get_department_by_id($conn, $departmentId);
@@ -480,47 +498,98 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($hasDesignationColumn) {
-                $stmt = $conn->prepare("
-                    UPDATE users
-                    SET first_name = ?, last_name = ?, email = ?, department_id = ?, designation = ?, current_role_id = ?, full_name = ?, updated_by = ?, updated_at = NOW()
-                    WHERE id = ?
-                ");
-                if ($stmt) {
-                    $stmt->bind_param(
-                        'sssisisii',
-                        $firstName,
-                        $lastName,
-                        $email,
-                        $departmentId,
-                        $designation,
-                        $roleId,
-                        $fullName,
-                        $currentUserId,
-                        $userId
-                    );
-                    $stmt->execute();
-                    $stmt->close();
+                if ($password !== '') {
+                    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+                    $stmt = $conn->prepare("
+                        UPDATE users
+                        SET first_name = ?, last_name = ?, email = ?, department_id = ?, designation = ?, current_role_id = ?, full_name = ?, password_hash = ?, must_change_password = 0, updated_by = ?, updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    if ($stmt) {
+                        $stmt->bind_param(
+                            'sssisisisii',
+                            $firstName,
+                            $lastName,
+                            $email,
+                            $departmentId,
+                            $designation,
+                            $roleId,
+                            $fullName,
+                            $passwordHash,
+                            $currentUserId,
+                            $userId
+                        );
+                        $stmt->execute();
+                        $stmt->close();
+                    }
+                } else {
+                    $stmt = $conn->prepare("
+                        UPDATE users
+                        SET first_name = ?, last_name = ?, email = ?, department_id = ?, designation = ?, current_role_id = ?, full_name = ?, updated_by = ?, updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    if ($stmt) {
+                        $stmt->bind_param(
+                            'sssisisii',
+                            $firstName,
+                            $lastName,
+                            $email,
+                            $departmentId,
+                            $designation,
+                            $roleId,
+                            $fullName,
+                            $currentUserId,
+                            $userId
+                        );
+                        $stmt->execute();
+                        $stmt->close();
+                    }
                 }
             } else {
-                $stmt = $conn->prepare("
-                    UPDATE users
-                    SET first_name = ?, last_name = ?, email = ?, department_id = ?, current_role_id = ?, full_name = ?, updated_by = ?, updated_at = NOW()
-                    WHERE id = ?
-                ");
-                if ($stmt) {
-                    $stmt->bind_param(
-                        'sssisiii',
-                        $firstName,
-                        $lastName,
-                        $email,
-                        $departmentId,
-                        $roleId,
-                        $fullName,
-                        $currentUserId,
-                        $userId
-                    );
-                    $stmt->execute();
-                    $stmt->close();
+                if ($password !== '') {
+                    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+                    $stmt = $conn->prepare("
+                        UPDATE users
+                        SET first_name = ?, last_name = ?, email = ?, department_id = ?, current_role_id = ?, full_name = ?, password_hash = ?, must_change_password = 0, updated_by = ?, updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    if ($stmt) {
+                        $stmt->bind_param(
+                            'sssisisii',
+                            $firstName,
+                            $lastName,
+                            $email,
+                            $departmentId,
+                            $roleId,
+                            $fullName,
+                            $passwordHash,
+                            $currentUserId,
+                            $userId
+                        );
+                        $stmt->execute();
+                        $stmt->close();
+                    }
+                } else {
+                    $stmt = $conn->prepare("
+                        UPDATE users
+                        SET first_name = ?, last_name = ?, email = ?, department_id = ?, current_role_id = ?, full_name = ?, updated_by = ?, updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    if ($stmt) {
+                        $stmt->bind_param(
+                            'sssisiii',
+                            $firstName,
+                            $lastName,
+                            $email,
+                            $departmentId,
+                            $roleId,
+                            $fullName,
+                            $currentUserId,
+                            $userId
+                        );
+                        $stmt->execute();
+                        $stmt->close();
+                    }
                 }
             }
 
@@ -548,10 +617,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $oldUser,
                 $newUser,
                 $currentUserId,
-                "User '{$fullName}' updated from User Management."
+                $password !== '' ? "User '{$fullName}' updated and password changed from User Management." : "User '{$fullName}' updated from User Management."
             );
 
-            set_flash('success', 'User updated successfully.');
+            set_flash('success', $password !== '' ? 'User and password updated successfully.' : 'User updated successfully.');
             redirect_self();
         } else {
             $activeCount = count_active_users($conn);
@@ -585,14 +654,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            $defaultPasswordPlain = 'ChangeMe@123';
-            $passwordHash = password_hash($defaultPasswordPlain, PASSWORD_DEFAULT);
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
             if ($hasDesignationColumn) {
                 $stmt = $conn->prepare("
                     INSERT INTO users
                     (first_name, last_name, email, password_hash, current_role_id, department_id, designation, status, must_change_password, timezone, created_by, updated_by, full_name, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 1, 'Asia/Kolkata', ?, ?, ?, NOW(), NOW())
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, 'Asia/Kolkata', ?, ?, ?, NOW(), NOW())
                 ");
                 if ($stmt) {
                     $stmt->bind_param(
@@ -616,7 +684,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $conn->prepare("
                     INSERT INTO users
                     (first_name, last_name, email, password_hash, current_role_id, department_id, status, must_change_password, timezone, created_by, updated_by, full_name, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, 'active', 1, 'Asia/Kolkata', ?, ?, ?, NOW(), NOW())
+                    VALUES (?, ?, ?, ?, ?, ?, 'active', 0, 'Asia/Kolkata', ?, ?, ?, NOW(), NOW())
                 ");
                 if ($stmt) {
                     $stmt->bind_param(
@@ -670,7 +738,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     "User '{$fullName}' created from User Management."
                 );
 
-                set_flash('success', "User created successfully. Default password: {$defaultPasswordPlain}");
+                set_flash('success', 'User created successfully.');
             } else {
                 set_flash('danger', 'Unable to create user.');
             }
@@ -679,7 +747,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    /* ---------------- TOGGLE USER STATUS ---------------- */
     if ($action === 'toggle_user_status') {
         $userId = (int)($_POST['user_id'] ?? 0);
         $user = get_user_by_id($conn, $userId, $hasDesignationColumn);
@@ -760,7 +827,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect_self();
     }
 
-    /* ---------------- SAVE DEPARTMENT ---------------- */
     if ($action === 'save_department') {
         $deptId = (int)($_POST['department_id'] ?? 0);
         $deptName = trim((string)($_POST['department_name'] ?? ''));
@@ -861,7 +927,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    /* ---------------- TOGGLE DEPARTMENT ---------------- */
     if ($action === 'toggle_department_status') {
         $deptId = (int)($_POST['department_id'] ?? 0);
         $dept = get_department_by_id($conn, $deptId);
@@ -898,7 +963,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect_self();
     }
 
-    /* ---------------- SAVE LIMITS ---------------- */
     if ($action === 'save_limits') {
         $newTotal = (int)($_POST['limit_total'] ?? 0);
         $newAdmins = (int)($_POST['limit_admins'] ?? 0);
@@ -928,7 +992,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect_self();
     }
 
-    /* ---------------- SAVE DEPARTMENT CAPS ---------------- */
     if ($action === 'save_department_caps') {
         $deptCaps = $_POST['dept_caps'] ?? [];
         if (!is_array($deptCaps)) {
@@ -1175,7 +1238,6 @@ $currentDisplayName = get_user_display_name($currentUser);
     <button class="mgmt-tab" id="tabLimits" onclick="switchTab('limits')">System Limits</button>
   </div>
 
-  <!-- USERS -->
   <div id="panelUsers">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
       <div class="d-flex gap-2 flex-wrap">
@@ -1299,7 +1361,6 @@ $currentDisplayName = get_user_display_name($currentUser);
     </div>
   </div>
 
-  <!-- DEPARTMENTS -->
   <div id="panelDepts" class="d-none">
     <div class="row g-3">
       <div class="col-lg-8">
@@ -1391,7 +1452,6 @@ $currentDisplayName = get_user_display_name($currentUser);
     </div>
   </div>
 
-  <!-- LIMITS -->
   <div id="panelLimits" class="d-none">
 
     <div class="row g-3 mb-4">
@@ -1502,7 +1562,6 @@ $currentDisplayName = get_user_display_name($currentUser);
 </div>
 </main>
 
-<!-- USER MODAL -->
 <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <form method="post" class="modal-content">
@@ -1550,6 +1609,17 @@ $currentDisplayName = get_user_display_name($currentUser);
             </select>
             <div class="form-text">Super Admin role can only be assigned by another Super Admin.</div>
           </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Password <span class="text-danger" id="passwordRequiredMark">*</span></label>
+            <input class="form-control" id="uPassword" name="password" type="password" placeholder="Enter password">
+            <div class="form-text" id="uPasswordHelp">Required for new user.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Confirm Password <span class="text-danger" id="confirmPasswordRequiredMark">*</span></label>
+            <input class="form-control" id="uConfirmPassword" name="confirm_password" type="password" placeholder="Confirm password">
+            <div class="form-text" id="uConfirmPasswordHelp">Must match password.</div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -1560,7 +1630,6 @@ $currentDisplayName = get_user_display_name($currentUser);
   </div>
 </div>
 
-<!-- DEPARTMENT MODAL -->
 <div class="modal fade" id="deptModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-sm">
     <form method="post" class="modal-content">
@@ -1636,6 +1705,25 @@ function filterUsers() {
     ' · ' + active + ' active · ' + (visible - active) + ' inactive';
 }
 
+function setPasswordMode(isEdit) {
+  const passwordRequiredMark = document.getElementById('passwordRequiredMark');
+  const confirmPasswordRequiredMark = document.getElementById('confirmPasswordRequiredMark');
+  const passwordHelp = document.getElementById('uPasswordHelp');
+  const confirmHelp = document.getElementById('uConfirmPasswordHelp');
+
+  if (isEdit) {
+    passwordRequiredMark.style.display = 'none';
+    confirmPasswordRequiredMark.style.display = 'none';
+    passwordHelp.textContent = 'Optional. Fill only if you want to change password.';
+    confirmHelp.textContent = 'Fill only when changing password.';
+  } else {
+    passwordRequiredMark.style.display = '';
+    confirmPasswordRequiredMark.style.display = '';
+    passwordHelp.textContent = 'Required for new user.';
+    confirmHelp.textContent = 'Must match password.';
+  }
+}
+
 function openAddUserModal() {
   document.getElementById('userModalTitle').textContent = 'Add User';
   document.getElementById('uId').value = '0';
@@ -1643,12 +1731,15 @@ function openAddUserModal() {
   document.getElementById('uLastName').value = '';
   document.getElementById('uEmail').value = '';
   document.getElementById('uDesignation').value = '';
+  document.getElementById('uPassword').value = '';
+  document.getElementById('uConfirmPassword').value = '';
   if (document.getElementById('uRole').options.length) {
     document.getElementById('uRole').selectedIndex = 0;
   }
   if (document.getElementById('uDept').options.length) {
     document.getElementById('uDept').selectedIndex = 0;
   }
+  setPasswordMode(false);
   new bootstrap.Modal(document.getElementById('userModal')).show();
 }
 
@@ -1662,8 +1753,11 @@ function editUser(id) {
   document.getElementById('uLastName').value = u.last_name || '';
   document.getElementById('uEmail').value = u.email || '';
   document.getElementById('uDesignation').value = u.designation || '';
+  document.getElementById('uPassword').value = '';
+  document.getElementById('uConfirmPassword').value = '';
   document.getElementById('uRole').value = u.role_name || 'Employee';
   document.getElementById('uDept').value = String(u.department_id || '');
+  setPasswordMode(true);
   new bootstrap.Modal(document.getElementById('userModal')).show();
 }
 
