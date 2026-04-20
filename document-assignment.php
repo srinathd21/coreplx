@@ -9,9 +9,9 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 mysqli_set_charset($conn, 'utf8mb4');
 
 if (!function_exists('e')) {
-    function e($value)
+    function e($value): string
     {
-        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+        return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
     }
 }
 
@@ -28,12 +28,18 @@ if (!function_exists('tableExists')) {
     }
 }
 
-if (!function_exists('columnExists')) {
-    function columnExists(mysqli $conn, string $tableName, string $columnName): bool
+if (!function_exists('viewExists')) {
+    function viewExists(mysqli $conn, string $viewName): bool
     {
-        $tableName = mysqli_real_escape_string($conn, $tableName);
-        $columnName = mysqli_real_escape_string($conn, $columnName);
-        $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$tableName}` LIKE '{$columnName}'");
+        $viewName = mysqli_real_escape_string($conn, $viewName);
+        $sql = "
+            SELECT 1
+            FROM information_schema.VIEWS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = '{$viewName}'
+            LIMIT 1
+        ";
+        $res = mysqli_query($conn, $sql);
         $ok = ($res && mysqli_num_rows($res) > 0);
         if ($res) {
             mysqli_free_result($res);
@@ -81,35 +87,6 @@ if (!function_exists('fetchAllAssoc')) {
     }
 }
 
-if (!function_exists('resolveAssignmentTable')) {
-    function resolveAssignmentTable(mysqli $conn): ?string
-    {
-        $candidates = [
-            'acknowledgement_assignments',
-            'document_assignments',
-            'document_acknowledgements'
-        ];
-
-        foreach ($candidates as $table) {
-            if (tableExists($conn, $table)) {
-                return $table;
-            }
-        }
-        return null;
-    }
-}
-
-if (!function_exists('resolveDocumentTypeMap')) {
-    function resolveDocumentTypeMap(array $documentTypes): array
-    {
-        $map = [];
-        foreach ($documentTypes as $type) {
-            $map[(int)$type['id']] = (string)$type['type_name'];
-        }
-        return $map;
-    }
-}
-
 if (!function_exists('resolveUserDisplayName')) {
     function resolveUserDisplayName(array $row): string
     {
@@ -120,58 +97,10 @@ if (!function_exists('resolveUserDisplayName')) {
         if (!empty($row['full_name'])) {
             return trim((string)$row['full_name']);
         }
-        if (!empty($row['name'])) {
-            return trim((string)$row['name']);
-        }
         if (!empty($row['email'])) {
             return (string)$row['email'];
         }
         return 'User #' . (int)($row['id'] ?? 0);
-    }
-}
-
-if (!function_exists('buildDynamicInsert')) {
-    function buildDynamicInsert(mysqli $conn, string $table, array $data): bool
-    {
-        $columns = [];
-        $placeholders = [];
-        $types = '';
-        $values = [];
-
-        foreach ($data as $col => $val) {
-            if (!columnExists($conn, $table, $col)) {
-                continue;
-            }
-
-            $columns[] = "`{$col}`";
-            $placeholders[] = '?';
-
-            if (is_int($val)) {
-                $types .= 'i';
-            } elseif (is_float($val)) {
-                $types .= 'd';
-            } else {
-                $types .= 's';
-            }
-
-            $values[] = $val;
-        }
-
-        if (empty($columns)) {
-            return false;
-        }
-
-        $sql = "INSERT INTO `{$table}` (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
-        $stmt = mysqli_prepare($conn, $sql);
-        if (!$stmt) {
-            return false;
-        }
-
-        mysqli_stmt_bind_param($stmt, $types, ...$values);
-        $ok = mysqli_stmt_execute($stmt);
-        mysqli_stmt_close($stmt);
-
-        return $ok;
     }
 }
 
@@ -214,6 +143,18 @@ if (!function_exists('writeAuditLog')) {
     }
 }
 
+if (!function_exists('formatDateTimeDisplay')) {
+    function formatDateTimeDisplay($date): string
+    {
+        $date = trim((string)($date ?? ''));
+        if ($date === '' || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
+            return '—';
+        }
+        $ts = strtotime($date);
+        return $ts ? date('d M Y H:i', $ts) : '—';
+    }
+}
+
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login-admin.php');
     exit;
@@ -227,7 +168,7 @@ if ($userId <= 0) {
 }
 
 $currentUser = null;
-$userSql = "
+$userStmt = mysqli_prepare($conn, "
     SELECT
         u.id,
         u.first_name,
@@ -238,8 +179,7 @@ $userSql = "
     LEFT JOIN roles r ON r.id = u.current_role_id
     WHERE u.id = ?
     LIMIT 1
-";
-$userStmt = mysqli_prepare($conn, $userSql);
+");
 if ($userStmt) {
     mysqli_stmt_bind_param($userStmt, "i", $userId);
     mysqli_stmt_execute($userStmt);
@@ -263,15 +203,12 @@ $roleName = trim((string)($currentUser['role_name'] ?? 'QA Admin'));
 $successMessage = '';
 $errorMessage = '';
 
-$assignmentTable = resolveAssignmentTable($conn);
-
 $documentTypes = fetchAllAssoc($conn, "
     SELECT id, type_name, prefix
     FROM document_types
     WHERE status = 'active'
     ORDER BY type_name ASC
 ");
-$documentTypeIdToName = resolveDocumentTypeMap($documentTypes);
 
 $departments = fetchAllAssoc($conn, "
     SELECT id, department_name, department_code
@@ -281,153 +218,114 @@ $departments = fetchAllAssoc($conn, "
 ");
 
 $employees = [];
-$employeeQueries = [
-    "
+$empRes = mysqli_query($conn, "
     SELECT
         u.id,
         u.first_name,
         u.last_name,
-        u.email,
         u.full_name,
-        d.department_name,
-        r.role_name,
-        r.role_code
+        u.email,
+        d.department_name
     FROM users u
     LEFT JOIN roles r ON r.id = u.current_role_id
     LEFT JOIN departments d ON d.id = u.department_id
     WHERE u.status = 'active'
-      AND (LOWER(COALESCE(r.role_code,'')) = 'employee' OR LOWER(COALESCE(r.role_name,'')) = 'employee')
+      AND LOWER(COALESCE(r.role_code,'')) = 'employee'
     ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
-    ",
-    "
-    SELECT
-        u.id,
-        u.first_name,
-        u.last_name,
-        u.email,
-        u.full_name,
-        d.department_name
-    FROM users u
-    LEFT JOIN departments d ON d.id = u.department_id
-    WHERE u.status = 'active'
-    ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
-    "
-];
-
-foreach ($employeeQueries as $qry) {
-    $res = mysqli_query($conn, $qry);
-    if ($res) {
-        $temp = [];
-        while ($row = mysqli_fetch_assoc($res)) {
-            $name = resolveUserDisplayName($row);
-            $first = (string)($row['first_name'] ?? '');
-            $last = (string)($row['last_name'] ?? '');
-            $initials = strtoupper(substr($first !== '' ? $first : $name, 0, 1) . substr($last, 0, 1));
-            if ($initials === '') {
-                $initials = strtoupper(substr($name, 0, 2));
-            }
-
-            $temp[] = [
-                'id' => (int)$row['id'],
-                'name' => $name,
-                'dept' => (string)($row['department_name'] ?? 'No Department'),
-                'initials' => $initials !== '' ? $initials : 'U'
-            ];
+");
+if ($empRes) {
+    while ($row = mysqli_fetch_assoc($empRes)) {
+        $name = resolveUserDisplayName($row);
+        $first = trim((string)($row['first_name'] ?? ''));
+        $last = trim((string)($row['last_name'] ?? ''));
+        $initials = strtoupper(substr($first !== '' ? $first : $name, 0, 1) . substr($last, 0, 1));
+        if ($initials === '') {
+            $initials = strtoupper(substr($name, 0, 2));
         }
-        mysqli_free_result($res);
-        if (!empty($temp)) {
-            $employees = $temp;
-            break;
-        }
+
+        $employees[] = [
+            'id' => (int)$row['id'],
+            'name' => $name,
+            'dept' => (string)($row['department_name'] ?? 'No Department'),
+            'initials' => $initials !== '' ? $initials : 'U'
+        ];
     }
+    mysqli_free_result($empRes);
 }
 
 $approvers = [];
-$approverQueries = [
-    "
+$appRes = mysqli_query($conn, "
     SELECT
         u.id,
         u.first_name,
         u.last_name,
-        u.email,
         u.full_name,
-        r.role_name,
-        r.role_code
-    FROM users u
-    LEFT JOIN roles r ON r.id = u.current_role_id
-    WHERE u.status = 'active'
-      AND (LOWER(COALESCE(r.role_code,'')) IN ('qa_admin','super_admin') OR LOWER(COALESCE(r.role_name,'')) IN ('qa admin','super admin'))
-    ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
-    ",
-    "
-    SELECT
-        u.id,
-        u.first_name,
-        u.last_name,
         u.email,
-        u.full_name,
         r.role_name
     FROM users u
     LEFT JOIN roles r ON r.id = u.current_role_id
     WHERE u.status = 'active'
+      AND LOWER(COALESCE(r.role_code,'')) IN ('qa_admin','super_admin')
     ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
-    "
-];
-
-foreach ($approverQueries as $qry) {
-    $res = mysqli_query($conn, $qry);
-    if ($res) {
-        $temp = [];
-        while ($row = mysqli_fetch_assoc($res)) {
-            if ((int)$row['id'] === $userId) {
-                continue;
-            }
-            $name = resolveUserDisplayName($row);
-            $label = $name . (!empty($row['role_name']) ? ' — ' . $row['role_name'] : '');
-            $temp[] = [
-                'id' => (int)$row['id'],
-                'name' => $name,
-                'label' => $label
-            ];
+");
+if ($appRes) {
+    while ($row = mysqli_fetch_assoc($appRes)) {
+        if ((int)$row['id'] === $userId) {
+            continue;
         }
-        mysqli_free_result($res);
-        if (!empty($temp)) {
-            $approvers = $temp;
-            break;
-        }
+        $name = resolveUserDisplayName($row);
+        $approvers[] = [
+            'id' => (int)$row['id'],
+            'label' => $name . (!empty($row['role_name']) ? ' — ' . $row['role_name'] : '')
+        ];
     }
+    mysqli_free_result($appRes);
 }
 
+/* EFFECTIVE DOCUMENTS ONLY */
 $effectiveDocs = [];
-$docsSql = "
-    SELECT
-        d.id,
-        d.document_number,
-        d.title,
-        d.topic,
-        d.current_status,
-        d.document_type_id,
-        dt.type_name,
-        dv.version_label,
-        dv.effective_date,
-        dv.review_date,
-        CONCAT(COALESCE(owner.first_name,''), ' ', COALESCE(owner.last_name,'')) AS owner_name
-    FROM documents d
-    LEFT JOIN document_types dt ON dt.id = d.document_type_id
-    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-    LEFT JOIN users owner ON owner.id = d.owner_user_id
-    WHERE LOWER(COALESCE(d.current_status,'')) IN ('effective','approved','published','active')
-       OR d.current_status IS NULL
-       OR d.current_status = ''
-    ORDER BY dt.type_name ASC, d.document_number ASC, d.id DESC
-";
+
+if (viewExists($conn, 'vw_repository_effective')) {
+    $docsSql = "
+        SELECT
+            vre.document_id AS id,
+            vre.document_version_id AS version_id,
+            vre.document_number,
+            vre.title,
+            vre.document_type AS type_name,
+            vre.version_label,
+            vre.effective_date,
+            CONCAT(COALESCE(owner.first_name,''), ' ', COALESCE(owner.last_name,'')) AS owner_name
+        FROM vw_repository_effective vre
+        LEFT JOIN documents d ON d.id = vre.document_id
+        LEFT JOIN users owner ON owner.id = d.owner_user_id
+        ORDER BY vre.document_type ASC, vre.document_number ASC, vre.document_id DESC
+    ";
+} else {
+    $docsSql = "
+        SELECT
+            d.id,
+            dv.id AS version_id,
+            d.document_number,
+            d.title,
+            dt.type_name,
+            dv.version_label,
+            dv.effective_date,
+            CONCAT(COALESCE(owner.first_name,''), ' ', COALESCE(owner.last_name,'')) AS owner_name
+        FROM documents d
+        INNER JOIN document_versions dv ON dv.id = d.current_version_id
+        LEFT JOIN document_types dt ON dt.id = d.document_type_id
+        LEFT JOIN users owner ON owner.id = d.owner_user_id
+        WHERE d.current_status = 'effective'
+          AND dv.status = 'effective'
+        ORDER BY dt.type_name ASC, d.document_number ASC, d.id DESC
+    ";
+}
+
 $docsRes = mysqli_query($conn, $docsSql);
 if ($docsRes) {
     while ($row = mysqli_fetch_assoc($docsRes)) {
-        $type = trim((string)($row['type_name'] ?? ''));
-        if ($type === '' && !empty($documentTypeIdToName[(int)($row['document_type_id'] ?? 0)])) {
-            $type = $documentTypeIdToName[(int)$row['document_type_id']];
-        }
+        $type = trim((string)($row['type_name'] ?? 'Other'));
         if ($type === '') {
             $type = 'Other';
         }
@@ -436,23 +334,20 @@ if ($docsRes) {
             $effectiveDocs[$type] = [];
         }
 
-        $title = trim((string)($row['title'] ?? ''));
-        $topic = trim((string)($row['topic'] ?? ''));
-        $ownerName = trim((string)($row['owner_name'] ?? ''));
-
         $effectiveDocs[$type][] = [
             'id' => (int)$row['id'],
-            'docId' => (string)($row['document_number'] ?: ('DOC-' . (int)$row['id'])),
-            'topic' => $title !== '' ? $title : ($topic !== '' ? $topic : 'Untitled'),
+            'versionId' => (int)$row['version_id'],
+            'docId' => (string)$row['document_number'],
+            'topic' => (string)($row['title'] ?? 'Untitled'),
             'version' => (string)($row['version_label'] ?? '01'),
-            'owner' => $ownerName !== '' ? $ownerName : '—',
+            'owner' => trim((string)($row['owner_name'] ?? '')) !== '' ? (string)$row['owner_name'] : '—',
             'effectiveDate' => (string)($row['effective_date'] ?? '')
         ];
     }
     mysqli_free_result($docsRes);
 }
 
-/* ---------- SAVE ASSIGNMENT ---------- */
+/* SAVE ASSIGNMENT */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create_assignment') {
     $documentId = (int)($_POST['document_id'] ?? 0);
     $documentType = trim((string)($_POST['document_type'] ?? ''));
@@ -467,7 +362,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     if (!is_array($selectedEmployees)) {
         $selectedEmployees = [];
     }
-    $selectedEmployees = array_values(array_unique(array_map('intval', $selectedEmployees)));
+    $selectedEmployees = array_values(array_unique(array_filter(array_map('intval', $selectedEmployees))));
 
     if ($documentId <= 0) {
         $errorMessage = 'Please select a document.';
@@ -479,8 +374,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $errorMessage = 'Please select a department.';
     } elseif ($assignMode === 'individual' && empty($selectedEmployees)) {
         $errorMessage = 'Please select at least one employee.';
-    } elseif ($assignmentTable === null) {
-        $errorMessage = 'Assignment table not found in the database.';
     } else {
         $assignedUserIds = [];
 
@@ -503,277 +396,277 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         if (empty($assignedUserIds)) {
             $errorMessage = 'No active employees found for the selected assignment mode.';
         } else {
-            mysqli_begin_transaction($conn);
+            $docStmt = mysqli_prepare($conn, "
+                SELECT
+                    d.id,
+                    d.document_number,
+                    d.title,
+                    d.topic,
+                    dv.id AS document_version_id,
+                    dv.version_label
+                FROM documents d
+                INNER JOIN document_versions dv ON dv.id = d.current_version_id
+                WHERE d.id = ?
+                  AND d.current_status = 'effective'
+                  AND dv.status = 'effective'
+                LIMIT 1
+            ");
 
-            try {
-                $documentNumber = 'DOC-' . $documentId;
-                $documentTitle = 'Untitled Document';
+            $documentRow = null;
+            if ($docStmt) {
+                mysqli_stmt_bind_param($docStmt, "i", $documentId);
+                mysqli_stmt_execute($docStmt);
+                $docRes = mysqli_stmt_get_result($docStmt);
+                $documentRow = ($docRes && mysqli_num_rows($docRes) > 0) ? mysqli_fetch_assoc($docRes) : null;
+                mysqli_stmt_close($docStmt);
+            }
 
-                $docLookupStmt = mysqli_prepare($conn, "
-                    SELECT document_number, title, topic
-                    FROM documents
-                    WHERE id = ?
-                    LIMIT 1
-                ");
-                if ($docLookupStmt) {
-                    mysqli_stmt_bind_param($docLookupStmt, "i", $documentId);
-                    mysqli_stmt_execute($docLookupStmt);
-                    $docLookupRes = mysqli_stmt_get_result($docLookupStmt);
-                    if ($docLookupRes && mysqli_num_rows($docLookupRes) > 0) {
-                        $docRow = mysqli_fetch_assoc($docLookupRes);
-                        $documentNumber = (string)($docRow['document_number'] ?: ('DOC-' . $documentId));
-                        $documentTitle = trim((string)($docRow['title'] ?: $docRow['topic'] ?: 'Untitled Document'));
-                    }
-                    mysqli_stmt_close($docLookupStmt);
-                }
+            if (!$documentRow) {
+                $errorMessage = 'Only effective documents can be assigned for acknowledgement.';
+            } else {
+                mysqli_begin_transaction($conn);
 
-                $batchToken = generate_uuid_v4();
+                try {
+                    $documentVersionId = (int)$documentRow['document_version_id'];
+                    $documentNumber = (string)$documentRow['document_number'];
+                    $documentTitle = trim((string)($documentRow['title'] ?: $documentRow['topic'] ?: 'Untitled Document'));
+                    $assignedAt = date('Y-m-d H:i:s');
 
-                foreach ($assignedUserIds as $employeeId) {
-                    $assignmentData = [
-                        'batch_token' => $batchToken,
-                        'document_id' => $documentId,
-                        'document_number' => $documentNumber,
-                        'document_type' => $documentType,
-                        'document_title' => $documentTitle,
-                        'assigned_to_user_id' => $employeeId,
-                        'user_id' => $employeeId,
-                        'employee_id' => $employeeId,
-                        'assigned_by' => $userId,
-                        'assigned_by_user_id' => $userId,
-                        'approver_user_id' => $approverUserId,
-                        'department_name' => $departmentName !== '' ? $departmentName : null,
-                        'assignment_mode' => $assignMode,
-                        'due_date' => $deadline,
-                        'deadline_date' => $deadline,
-                        'priority' => $priority,
-                        'message' => $note,
-                        'instructions' => $note,
-                        'status' => 'pending',
-                        'assignment_status' => 'pending',
-                        'acknowledgement_status' => 'pending',
-                        'created_at' => date('Y-m-d H:i:s'),
-                        'updated_at' => date('Y-m-d H:i:s')
-                    ];
-
-                    if (!buildDynamicInsert($conn, $assignmentTable, $assignmentData)) {
-                        throw new RuntimeException('Failed to save assignment row.');
+                    $insertStmt = mysqli_prepare($conn, "
+                        INSERT INTO acknowledgement_assignments
+                        (document_version_id, assigned_user_id, assigned_by, assigned_at, due_at, status, reminder_count, last_reminder_at)
+                        VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL)
+                    ");
+                    if (!$insertStmt) {
+                        throw new RuntimeException('Unable to prepare assignment insert.');
                     }
 
+                    $notifStmt = null;
                     if (tableExists($conn, 'notifications')) {
                         $notifStmt = mysqli_prepare($conn, "
                             INSERT INTO notifications
                             (user_id, notification_type, reference_type, reference_id, title, message, is_read, created_at)
-                            VALUES (?, 'assignment', 'document', ?, ?, ?, 0, NOW())
+                            VALUES (?, 'ack_assignment', 'acknowledgement', ?, ?, ?, 0, NOW())
                         ");
+                    }
+
+                    foreach ($assignedUserIds as $employeeId) {
+                        mysqli_stmt_bind_param(
+                            $insertStmt,
+                            "iiiss",
+                            $documentVersionId,
+                            $employeeId,
+                            $userId,
+                            $assignedAt,
+                            $deadline
+                        );
+
+                        if (!mysqli_stmt_execute($insertStmt)) {
+                            throw new RuntimeException('Failed to save assignment row.');
+                        }
+
+                        $assignmentId = (int)mysqli_insert_id($conn);
+
                         if ($notifStmt) {
                             $notifTitle = 'Document Assignment';
                             $notifMessage = 'You have been assigned to read and acknowledge document "' . $documentTitle . '".';
-                            mysqli_stmt_bind_param($notifStmt, "iiss", $employeeId, $documentId, $notifTitle, $notifMessage);
+                            mysqli_stmt_bind_param($notifStmt, "iiss", $employeeId, $assignmentId, $notifTitle, $notifMessage);
                             mysqli_stmt_execute($notifStmt);
-                            mysqli_stmt_close($notifStmt);
                         }
                     }
+
+                    mysqli_stmt_close($insertStmt);
+                    if ($notifStmt) {
+                        mysqli_stmt_close($notifStmt);
+                    }
+
+                    writeAuditLog(
+                        $conn,
+                        'document_assignment',
+                        $documentId,
+                        'create',
+                        null,
+                        [
+                            'document_id' => $documentId,
+                            'document_version_id' => $documentVersionId,
+                            'document_number' => $documentNumber,
+                            'document_type' => $documentType,
+                            'assigned_user_ids' => $assignedUserIds,
+                            'assigned_count' => count($assignedUserIds),
+                            'assign_mode' => $assignMode,
+                            'department_name' => $departmentName,
+                            'deadline' => $deadline,
+                            'priority' => $priority,
+                            'message' => $note
+                        ],
+                        $userId,
+                        'Document assigned to employees for acknowledgement.'
+                    );
+
+                    mysqli_commit($conn);
+                    $successMessage = 'Assignment created successfully and employees have been notified.';
+                } catch (Throwable $e) {
+                    mysqli_rollback($conn);
+                    $errorMessage = $e->getMessage();
                 }
-
-                writeAuditLog(
-                    $conn,
-                    'document_assignment',
-                    $documentId,
-                    'create',
-                    null,
-                    [
-                        'batch_token' => $batchToken,
-                        'document_id' => $documentId,
-                        'document_type' => $documentType,
-                        'assigned_count' => count($assignedUserIds),
-                        'assign_mode' => $assignMode,
-                        'department_name' => $departmentName,
-                        'deadline' => $deadline,
-                        'priority' => $priority
-                    ],
-                    $userId,
-                    'Document assigned to employees for acknowledgement.'
-                );
-
-                mysqli_commit($conn);
-                $successMessage = 'Assignment created successfully and employees have been notified.';
-            } catch (Throwable $e) {
-                mysqli_rollback($conn);
-                $errorMessage = $e->getMessage();
             }
         }
     }
 }
 
-/* ---------- TRACKER ---------- */
+/* TRACKER */
 $trackerRows = [];
 $detailMap = [];
 
-if ($assignmentTable !== null) {
-    $selectParts = [];
-    $selectParts[] = columnExists($conn, $assignmentTable, 'id') ? "a.id AS row_id" : "0 AS row_id";
-    $selectParts[] = columnExists($conn, $assignmentTable, 'batch_token')
-        ? "a.batch_token"
-        : (columnExists($conn, $assignmentTable, 'document_id')
-            ? "CONCAT('grp_', a.document_id, '_', COALESCE(a.due_date, a.deadline_date, '')) AS batch_token"
-            : "'grp_unknown' AS batch_token");
+$trackerRes = mysqli_query($conn, "
+    SELECT
+        aa.id,
+        aa.document_version_id,
+        aa.assigned_user_id,
+        aa.assigned_by,
+        aa.assigned_at,
+        aa.due_at,
+        aa.status,
+        d.id AS document_id,
+        d.document_number,
+        dt.type_name,
+        dv.version_label,
+        dv.title_snapshot,
+        u.first_name,
+        u.last_name,
+        u.full_name,
+        u.email,
+        dept.department_name,
+        ae.acknowledged_at,
+        ae.ip_address
+    FROM acknowledgement_assignments aa
+    INNER JOIN document_versions dv ON dv.id = aa.document_version_id
+    INNER JOIN documents d ON d.id = dv.document_id
+    LEFT JOIN document_types dt ON dt.id = d.document_type_id
+    LEFT JOIN users u ON u.id = aa.assigned_user_id
+    LEFT JOIN departments dept ON dept.id = u.department_id
+    LEFT JOIN acknowledgement_events ae ON ae.acknowledgement_assignment_id = aa.id
+    ORDER BY aa.assigned_at DESC, aa.id DESC
+");
 
-    $selectParts[] = columnExists($conn, $assignmentTable, 'document_id') ? "a.document_id" : "0 AS document_id";
-    $selectParts[] = columnExists($conn, $assignmentTable, 'document_type') ? "a.document_type" : "COALESCE(dt.type_name, '') AS document_type";
-    $selectParts[] = columnExists($conn, $assignmentTable, 'document_number') ? "a.document_number" : "COALESCE(d.document_number, '') AS document_number";
-    $selectParts[] = columnExists($conn, $assignmentTable, 'document_title') ? "a.document_title" : "COALESCE(d.title, d.topic, '') AS document_title";
-    $selectParts[] = columnExists($conn, $assignmentTable, 'department_name') ? "a.department_name" : "'' AS department_name";
-    $selectParts[] = columnExists($conn, $assignmentTable, 'assignment_mode') ? "a.assignment_mode" : "'' AS assignment_mode";
-
-    if (columnExists($conn, $assignmentTable, 'due_date')) {
-        $selectParts[] = "a.due_date";
-    } elseif (columnExists($conn, $assignmentTable, 'deadline_date')) {
-        $selectParts[] = "a.deadline_date AS due_date";
-    } else {
-        $selectParts[] = "NULL AS due_date";
+$rawAssignments = [];
+if ($trackerRes) {
+    while ($row = mysqli_fetch_assoc($trackerRes)) {
+        $rawAssignments[] = $row;
     }
+    mysqli_free_result($trackerRes);
+}
 
-    if (columnExists($conn, $assignmentTable, 'status')) {
-        $selectParts[] = "a.status";
-    } elseif (columnExists($conn, $assignmentTable, 'assignment_status')) {
-        $selectParts[] = "a.assignment_status AS status";
-    } elseif (columnExists($conn, $assignmentTable, 'acknowledgement_status')) {
-        $selectParts[] = "a.acknowledgement_status AS status";
-    } else {
-        $selectParts[] = "'pending' AS status";
-    }
+$grouped = [];
+foreach ($rawAssignments as $row) {
+    $groupKey = implode('|', [
+        (int)$row['document_version_id'],
+        (int)$row['assigned_by'],
+        (string)$row['assigned_at'],
+        (string)$row['due_at']
+    ]);
 
-    if (columnExists($conn, $assignmentTable, 'assigned_to_user_id')) {
-        $selectParts[] = "a.assigned_to_user_id";
-    } elseif (columnExists($conn, $assignmentTable, 'user_id')) {
-        $selectParts[] = "a.user_id AS assigned_to_user_id";
-    } elseif (columnExists($conn, $assignmentTable, 'employee_id')) {
-        $selectParts[] = "a.employee_id AS assigned_to_user_id";
-    } else {
-        $selectParts[] = "0 AS assigned_to_user_id";
-    }
+    $status = strtolower(trim((string)($row['status'] ?? 'pending')));
+    $isConfirmed = ($status === 'acknowledged');
 
-    if (columnExists($conn, $assignmentTable, 'acknowledged_at')) {
-        $selectParts[] = "a.acknowledged_at";
-    } elseif (columnExists($conn, $assignmentTable, 'confirmed_at')) {
-        $selectParts[] = "a.confirmed_at AS acknowledged_at";
-    } elseif (columnExists($conn, $assignmentTable, 'read_at')) {
-        $selectParts[] = "a.read_at AS acknowledged_at";
-    } else {
-        $selectParts[] = "NULL AS acknowledged_at";
-    }
+    if (!isset($grouped[$groupKey])) {
+        $assignedTo = 'Selected Employees';
 
-    if (columnExists($conn, $assignmentTable, 'confirmed_ip')) {
-        $selectParts[] = "a.confirmed_ip";
-    } elseif (columnExists($conn, $assignmentTable, 'ip_address')) {
-        $selectParts[] = "a.ip_address AS confirmed_ip";
-    } else {
-        $selectParts[] = "NULL AS confirmed_ip";
-    }
-
-    $userJoinField = columnExists($conn, $assignmentTable, 'assigned_to_user_id')
-        ? "a.assigned_to_user_id"
-        : (columnExists($conn, $assignmentTable, 'user_id')
-            ? "a.user_id"
-            : (columnExists($conn, $assignmentTable, 'employee_id') ? "a.employee_id" : "0"));
-
-    $docJoinField = columnExists($conn, $assignmentTable, 'document_id') ? "a.document_id" : "0";
-
-    $trackerSql = "
-        SELECT
-            " . implode(",\n            ", $selectParts) . ",
-            CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')) AS employee_name,
-            u.email AS employee_email,
-            dept.department_name AS employee_department
-        FROM `{$assignmentTable}` a
-        LEFT JOIN documents d ON d.id = {$docJoinField}
-        LEFT JOIN document_types dt ON dt.id = d.document_type_id
-        LEFT JOIN users u ON u.id = {$userJoinField}
-        LEFT JOIN departments dept ON dept.id = u.department_id
-        ORDER BY a.id DESC
-    ";
-
-    $trackerRes = mysqli_query($conn, $trackerSql);
-    $rawAssignments = [];
-    if ($trackerRes) {
-        while ($row = mysqli_fetch_assoc($trackerRes)) {
-            $rawAssignments[] = $row;
-        }
-        mysqli_free_result($trackerRes);
-    }
-
-    $grouped = [];
-    foreach ($rawAssignments as $row) {
-        $groupKey = (string)($row['batch_token'] ?? '');
-        if ($groupKey === '') {
-            $groupKey = 'doc_' . (int)($row['document_id'] ?? 0) . '_' . (string)($row['due_date'] ?? '');
-        }
-
-        $status = strtolower(trim((string)($row['status'] ?? 'pending')));
-        $isConfirmed = in_array($status, ['confirmed', 'completed', 'acknowledged', 'read'], true);
-
-        if (!isset($grouped[$groupKey])) {
-            $assignedTo = 'Employees';
-            if (!empty($row['department_name'])) {
-                $assignedTo = (string)$row['department_name'];
-            } elseif (($row['assignment_mode'] ?? '') === 'all') {
-                $assignedTo = 'All Employees';
-            } elseif (($row['assignment_mode'] ?? '') === 'individual') {
-                $assignedTo = 'Selected Employees';
+        $userIdsInGroup = [];
+        foreach ($rawAssignments as $tmp) {
+            $tmpKey = implode('|', [
+                (int)$tmp['document_version_id'],
+                (int)$tmp['assigned_by'],
+                (string)$tmp['assigned_at'],
+                (string)$tmp['due_at']
+            ]);
+            if ($tmpKey === $groupKey) {
+                $userIdsInGroup[] = (int)$tmp['assigned_user_id'];
             }
-
-            $grouped[$groupKey] = [
-                'id' => count($grouped) + 1,
-                'batch_token' => $groupKey,
-                'document_id' => (int)($row['document_id'] ?? 0),
-                'docId' => (string)($row['document_number'] ?: ('DOC-' . (int)($row['document_id'] ?? 0))),
-                'type' => (string)($row['document_type'] ?: 'Document'),
-                'assignedTo' => $assignedTo,
-                'deadline' => (string)($row['due_date'] ?? ''),
-                'confirmed' => 0,
-                'total' => 0,
-                'status' => 'In Progress'
-            ];
         }
 
-        $grouped[$groupKey]['total']++;
-        if ($isConfirmed) {
-            $grouped[$groupKey]['confirmed']++;
+        $uniqueUsers = array_values(array_unique($userIdsInGroup));
+
+        if (count($employees) > 0 && count($uniqueUsers) === count($employees)) {
+            $assignedTo = 'All Employees';
+        } else {
+            $deptNames = [];
+            foreach ($rawAssignments as $tmp) {
+                $tmpKey = implode('|', [
+                    (int)$tmp['document_version_id'],
+                    (int)$tmp['assigned_by'],
+                    (string)$tmp['assigned_at'],
+                    (string)$tmp['due_at']
+                ]);
+                if ($tmpKey === $groupKey) {
+                    $deptName = trim((string)($tmp['department_name'] ?? ''));
+                    if ($deptName !== '') {
+                        $deptNames[] = $deptName;
+                    }
+                }
+            }
+            $deptNames = array_values(array_unique($deptNames));
+
+            if (count($deptNames) === 1 && count($uniqueUsers) > 1) {
+                $sameDeptCount = 0;
+                foreach ($employees as $emp) {
+                    if ($emp['dept'] === $deptNames[0]) {
+                        $sameDeptCount++;
+                    }
+                }
+                if ($sameDeptCount > 0 && $sameDeptCount === count($uniqueUsers)) {
+                    $assignedTo = $deptNames[0];
+                }
+            }
         }
 
-        if (!isset($detailMap[$groupKey])) {
-            $detailMap[$groupKey] = [];
-        }
-
-        $employeeName = trim((string)($row['employee_name'] ?? ''));
-        if ($employeeName === '') {
-            $employeeName = (string)($row['employee_email'] ?? ('User #' . (int)($row['assigned_to_user_id'] ?? 0)));
-        }
-
-        $detailMap[$groupKey][] = [
-            'employee' => $employeeName,
-            'department' => (string)($row['employee_department'] ?? '—'),
-            'status' => $isConfirmed ? 'Confirmed' : 'Pending',
-            'confirmed_on' => $isConfirmed && !empty($row['acknowledged_at']) ? date('d M Y H:i', strtotime($row['acknowledged_at'])) : '—',
-            'ip' => $isConfirmed && !empty($row['confirmed_ip']) ? (string)$row['confirmed_ip'] : '—'
+        $grouped[$groupKey] = [
+            'id' => count($grouped) + 1,
+            'batch_token' => $groupKey,
+            'document_id' => (int)$row['document_id'],
+            'docId' => (string)$row['document_number'],
+            'type' => (string)($row['type_name'] ?: 'Document'),
+            'assignedTo' => $assignedTo,
+            'deadline' => (string)($row['due_at'] ?? ''),
+            'confirmed' => 0,
+            'total' => 0,
+            'status' => 'In Progress'
         ];
     }
 
-    foreach ($grouped as $g) {
-        $deadlineTs = !empty($g['deadline']) ? strtotime($g['deadline']) : false;
-        $todayTs = strtotime(date('Y-m-d'));
-
-        if ($g['total'] > 0 && $g['confirmed'] >= $g['total']) {
-            $g['status'] = 'Completed';
-        } elseif ($deadlineTs && $deadlineTs < $todayTs) {
-            $g['status'] = 'Overdue';
-        } else {
-            $g['status'] = 'In Progress';
-        }
-
-        $trackerRows[] = $g;
+    $grouped[$groupKey]['total']++;
+    if ($isConfirmed) {
+        $grouped[$groupKey]['confirmed']++;
     }
+
+    if (!isset($detailMap[$groupKey])) {
+        $detailMap[$groupKey] = [];
+    }
+
+    $employeeName = resolveUserDisplayName($row);
+
+    $detailMap[$groupKey][] = [
+        'employee' => $employeeName,
+        'department' => (string)($row['department_name'] ?? '—'),
+        'status' => $isConfirmed ? 'Confirmed' : 'Pending',
+        'confirmed_on' => $isConfirmed ? formatDateTimeDisplay($row['acknowledged_at'] ?? '') : '—',
+        'ip' => $isConfirmed ? ((string)($row['ip_address'] ?? '') !== '' ? (string)$row['ip_address'] : '—') : '—'
+    ];
+}
+
+foreach ($grouped as $g) {
+    $deadlineTs = !empty($g['deadline']) ? strtotime($g['deadline']) : false;
+    $todayTs = strtotime(date('Y-m-d H:i:s'));
+
+    if ($g['total'] > 0 && $g['confirmed'] >= $g['total']) {
+        $g['status'] = 'Completed';
+    } elseif ($deadlineTs && $deadlineTs < $todayTs) {
+        $g['status'] = 'Overdue';
+    } else {
+        $g['status'] = 'In Progress';
+    }
+
+    $trackerRows[] = $g;
 }
 
 $effectiveDocsJson = json_encode($effectiveDocs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1404,7 +1297,7 @@ function openDetail(batchToken, docId, assignedTo, deadline) {
 }
 
 function sendReminder(batchToken) {
-  alert('Reminder email sent to all pending employees for this assignment.');
+  alert('Reminder email sending is not yet connected in this page.');
 }
 
 function toInputDate(d) {
