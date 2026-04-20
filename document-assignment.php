@@ -72,21 +72,6 @@ if (!function_exists('get_client_ip')) {
     }
 }
 
-if (!function_exists('fetchAllAssoc')) {
-    function fetchAllAssoc(mysqli $conn, string $sql): array
-    {
-        $rows = [];
-        $res = mysqli_query($conn, $sql);
-        if ($res) {
-            while ($row = mysqli_fetch_assoc($res)) {
-                $rows[] = $row;
-            }
-            mysqli_free_result($res);
-        }
-        return $rows;
-    }
-}
-
 if (!function_exists('resolveUserDisplayName')) {
     function resolveUserDisplayName(array $row): string
     {
@@ -94,7 +79,7 @@ if (!function_exists('resolveUserDisplayName')) {
         if ($name !== '') {
             return $name;
         }
-        if (!empty($row['full_name'])) {
+        if (!empty($row['full_name']) && trim((string)$row['full_name']) !== '' && (string)$row['full_name'] !== '0') {
             return trim((string)$row['full_name']);
         }
         if (!empty($row['email'])) {
@@ -105,8 +90,16 @@ if (!function_exists('resolveUserDisplayName')) {
 }
 
 if (!function_exists('writeAuditLog')) {
-    function writeAuditLog(mysqli $conn, string $entityType, int $entityId, string $action, $oldValue, $newValue, int $performedBy, string $remarks = ''): void
-    {
+    function writeAuditLog(
+        mysqli $conn,
+        string $entityType,
+        int $entityId,
+        string $action,
+        $oldValue,
+        $newValue,
+        int $performedBy,
+        string $remarks = ''
+    ): void {
         if (!tableExists($conn, 'audit_logs')) {
             return;
         }
@@ -155,7 +148,23 @@ if (!function_exists('formatDateTimeDisplay')) {
     }
 }
 
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+if (!function_exists('formatDateDisplay')) {
+    function formatDateDisplay($date): string
+    {
+        $date = trim((string)($date ?? ''));
+        if ($date === '' || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
+            return '—';
+        }
+        $ts = strtotime($date);
+        return $ts ? date('d M Y', $ts) : '—';
+    }
+}
+
+/* ---------------- AUTH ---------------- */
+if (
+    (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) &&
+    (int)($_SESSION['user_id'] ?? 0) <= 0
+) {
     header('Location: login-admin.php');
     exit;
 }
@@ -173,8 +182,10 @@ $userStmt = mysqli_prepare($conn, "
         u.id,
         u.first_name,
         u.last_name,
+        u.full_name,
         u.email,
-        r.role_name
+        r.role_name,
+        r.role_code
     FROM users u
     LEFT JOIN roles r ON r.id = u.current_role_id
     WHERE u.id = ?
@@ -194,28 +205,44 @@ if (!$currentUser) {
     exit;
 }
 
-$displayName = trim((string)($currentUser['first_name'] ?? '') . ' ' . (string)($currentUser['last_name'] ?? ''));
-if ($displayName === '') {
-    $displayName = (string)($currentUser['email'] ?? 'QA Admin');
+$roleCode = strtolower(trim((string)($currentUser['role_code'] ?? '')));
+if (!in_array($roleCode, ['qa_admin', 'super_admin'], true)) {
+    die('Access denied.');
 }
-$roleName = trim((string)($currentUser['role_name'] ?? 'QA Admin'));
 
+$displayName = resolveUserDisplayName($currentUser);
+$roleName = trim((string)($currentUser['role_name'] ?? 'QA Admin'));
 $successMessage = '';
 $errorMessage = '';
 
-$documentTypes = fetchAllAssoc($conn, "
+/* ---------------- MASTER DATA ---------------- */
+$documentTypes = [];
+$typesRes = mysqli_query($conn, "
     SELECT id, type_name, prefix
     FROM document_types
     WHERE status = 'active'
     ORDER BY type_name ASC
 ");
+if ($typesRes) {
+    while ($row = mysqli_fetch_assoc($typesRes)) {
+        $documentTypes[] = $row;
+    }
+    mysqli_free_result($typesRes);
+}
 
-$departments = fetchAllAssoc($conn, "
+$departments = [];
+$deptRes = mysqli_query($conn, "
     SELECT id, department_name, department_code
     FROM departments
     WHERE is_active = 1
     ORDER BY department_name ASC
 ");
+if ($deptRes) {
+    while ($row = mysqli_fetch_assoc($deptRes)) {
+        $departments[] = $row;
+    }
+    mysqli_free_result($deptRes);
+}
 
 $employees = [];
 $empRes = mysqli_query($conn, "
@@ -253,43 +280,14 @@ if ($empRes) {
     mysqli_free_result($empRes);
 }
 
-$approvers = [];
-$appRes = mysqli_query($conn, "
-    SELECT
-        u.id,
-        u.first_name,
-        u.last_name,
-        u.full_name,
-        u.email,
-        r.role_name
-    FROM users u
-    LEFT JOIN roles r ON r.id = u.current_role_id
-    WHERE u.status = 'active'
-      AND LOWER(COALESCE(r.role_code,'')) IN ('qa_admin','super_admin')
-    ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
-");
-if ($appRes) {
-    while ($row = mysqli_fetch_assoc($appRes)) {
-        if ((int)$row['id'] === $userId) {
-            continue;
-        }
-        $name = resolveUserDisplayName($row);
-        $approvers[] = [
-            'id' => (int)$row['id'],
-            'label' => $name . (!empty($row['role_name']) ? ' — ' . $row['role_name'] : '')
-        ];
-    }
-    mysqli_free_result($appRes);
-}
-
-/* EFFECTIVE DOCUMENTS ONLY */
+/* ---------------- EFFECTIVE DOCUMENTS ---------------- */
 $effectiveDocs = [];
 
 if (viewExists($conn, 'vw_repository_effective')) {
     $docsSql = "
         SELECT
             vre.document_id AS id,
-            vre.document_version_id AS version_id,
+            vre.document_version_id,
             vre.document_number,
             vre.title,
             vre.document_type AS type_name,
@@ -305,7 +303,7 @@ if (viewExists($conn, 'vw_repository_effective')) {
     $docsSql = "
         SELECT
             d.id,
-            dv.id AS version_id,
+            dv.id AS document_version_id,
             d.document_number,
             d.title,
             dt.type_name,
@@ -329,15 +327,14 @@ if ($docsRes) {
         if ($type === '') {
             $type = 'Other';
         }
-
         if (!isset($effectiveDocs[$type])) {
             $effectiveDocs[$type] = [];
         }
 
         $effectiveDocs[$type][] = [
             'id' => (int)$row['id'],
-            'versionId' => (int)$row['version_id'],
-            'docId' => (string)$row['document_number'],
+            'document_version_id' => (int)$row['document_version_id'],
+            'docId' => (string)($row['document_number'] ?? ''),
             'topic' => (string)($row['title'] ?? 'Untitled'),
             'version' => (string)($row['version_label'] ?? '01'),
             'owner' => trim((string)($row['owner_name'] ?? '')) !== '' ? (string)$row['owner_name'] : '—',
@@ -347,7 +344,7 @@ if ($docsRes) {
     mysqli_free_result($docsRes);
 }
 
-/* SAVE ASSIGNMENT */
+/* ---------------- SAVE ASSIGNMENT ---------------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create_assignment') {
     $documentId = (int)($_POST['document_id'] ?? 0);
     $documentType = trim((string)($_POST['document_type'] ?? ''));
@@ -356,7 +353,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     $deadline = trim((string)($_POST['deadline'] ?? ''));
     $priority = trim((string)($_POST['priority'] ?? 'normal'));
     $note = trim((string)($_POST['note'] ?? ''));
-    $approverUserId = (int)($_POST['approver_user_id'] ?? 0);
     $selectedEmployees = $_POST['employee_ids'] ?? [];
 
     if (!is_array($selectedEmployees)) {
@@ -368,12 +364,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $errorMessage = 'Please select a document.';
     } elseif ($deadline === '') {
         $errorMessage = 'Please select a read-by deadline.';
-    } elseif ($approverUserId <= 0) {
-        $errorMessage = 'Please select an approver.';
     } elseif ($assignMode === 'dept' && $departmentName === '') {
         $errorMessage = 'Please select a department.';
     } elseif ($assignMode === 'individual' && empty($selectedEmployees)) {
         $errorMessage = 'Please select at least one employee.';
+    } elseif (!tableExists($conn, 'acknowledgement_assignments')) {
+        $errorMessage = 'acknowledgement_assignments table not found in database.';
     } else {
         $assignedUserIds = [];
 
@@ -462,7 +458,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                         );
 
                         if (!mysqli_stmt_execute($insertStmt)) {
-                            throw new RuntimeException('Failed to save assignment row.');
+                            $sqlState = mysqli_sqlstate($conn);
+                            $sqlError = mysqli_error($conn);
+
+                            if ($sqlState === '23000') {
+                                continue; // already assigned for this version/user
+                            }
+                            throw new RuntimeException('Failed to save assignment row. ' . $sqlError);
                         }
 
                         $assignmentId = (int)mysqli_insert_id($conn);
@@ -514,159 +516,151 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     }
 }
 
-/* TRACKER */
+/* ---------------- TRACKER ---------------- */
 $trackerRows = [];
 $detailMap = [];
 
-$trackerRes = mysqli_query($conn, "
-    SELECT
-        aa.id,
-        aa.document_version_id,
-        aa.assigned_user_id,
-        aa.assigned_by,
-        aa.assigned_at,
-        aa.due_at,
-        aa.status,
-        d.id AS document_id,
-        d.document_number,
-        dt.type_name,
-        dv.version_label,
-        dv.title_snapshot,
-        u.first_name,
-        u.last_name,
-        u.full_name,
-        u.email,
-        dept.department_name,
-        ae.acknowledged_at,
-        ae.ip_address
-    FROM acknowledgement_assignments aa
-    INNER JOIN document_versions dv ON dv.id = aa.document_version_id
-    INNER JOIN documents d ON d.id = dv.document_id
-    LEFT JOIN document_types dt ON dt.id = d.document_type_id
-    LEFT JOIN users u ON u.id = aa.assigned_user_id
-    LEFT JOIN departments dept ON dept.id = u.department_id
-    LEFT JOIN acknowledgement_events ae ON ae.acknowledgement_assignment_id = aa.id
-    ORDER BY aa.assigned_at DESC, aa.id DESC
-");
+if (tableExists($conn, 'acknowledgement_assignments')) {
+    $trackerSql = "
+        SELECT
+            aa.id,
+            aa.document_version_id,
+            aa.assigned_user_id,
+            aa.assigned_by,
+            aa.assigned_at,
+            aa.due_at,
+            aa.status,
+            d.id AS document_id,
+            d.document_number,
+            dt.type_name,
+            dv.version_label,
+            dv.title_snapshot,
+            u.id AS employee_id,
+            u.first_name,
+            u.last_name,
+            u.full_name,
+            u.email,
+            dept.department_name,
+            ae.acknowledged_at,
+            ae.ip_address
+        FROM acknowledgement_assignments aa
+        INNER JOIN document_versions dv ON dv.id = aa.document_version_id
+        INNER JOIN documents d ON d.id = dv.document_id
+        LEFT JOIN document_types dt ON dt.id = d.document_type_id
+        LEFT JOIN users u ON u.id = aa.assigned_user_id
+        LEFT JOIN departments dept ON dept.id = u.department_id
+        LEFT JOIN acknowledgement_events ae ON ae.acknowledgement_assignment_id = aa.id
+        ORDER BY aa.assigned_at DESC, aa.id DESC
+    ";
 
-$rawAssignments = [];
-if ($trackerRes) {
-    while ($row = mysqli_fetch_assoc($trackerRes)) {
-        $rawAssignments[] = $row;
+    $trackerRes = mysqli_query($conn, $trackerSql);
+    $rawAssignments = [];
+    if ($trackerRes) {
+        while ($row = mysqli_fetch_assoc($trackerRes)) {
+            $rawAssignments[] = $row;
+        }
+        mysqli_free_result($trackerRes);
     }
-    mysqli_free_result($trackerRes);
-}
 
-$grouped = [];
-foreach ($rawAssignments as $row) {
-    $groupKey = implode('|', [
-        (int)$row['document_version_id'],
-        (int)$row['assigned_by'],
-        (string)$row['assigned_at'],
-        (string)$row['due_at']
-    ]);
+    $grouped = [];
+    $groupMembers = [];
 
-    $status = strtolower(trim((string)($row['status'] ?? 'pending')));
-    $isConfirmed = ($status === 'acknowledged');
+    foreach ($rawAssignments as $row) {
+        $groupKey = implode('|', [
+            (int)$row['document_version_id'],
+            (int)$row['assigned_by'],
+            (string)$row['assigned_at'],
+            (string)$row['due_at']
+        ]);
 
-    if (!isset($grouped[$groupKey])) {
-        $assignedTo = 'Selected Employees';
-
-        $userIdsInGroup = [];
-        foreach ($rawAssignments as $tmp) {
-            $tmpKey = implode('|', [
-                (int)$tmp['document_version_id'],
-                (int)$tmp['assigned_by'],
-                (string)$tmp['assigned_at'],
-                (string)$tmp['due_at']
-            ]);
-            if ($tmpKey === $groupKey) {
-                $userIdsInGroup[] = (int)$tmp['assigned_user_id'];
-            }
+        if (!isset($grouped[$groupKey])) {
+            $grouped[$groupKey] = [
+                'id' => count($grouped) + 1,
+                'batch_token' => $groupKey,
+                'document_id' => (int)$row['document_id'],
+                'docId' => (string)$row['document_number'],
+                'type' => (string)($row['type_name'] ?: 'Document'),
+                'assignedTo' => 'Selected Employees',
+                'deadline' => (string)($row['due_at'] ?? ''),
+                'confirmed' => 0,
+                'total' => 0,
+                'status' => 'In Progress'
+            ];
+            $groupMembers[$groupKey] = [];
+            $detailMap[$groupKey] = [];
         }
 
-        $uniqueUsers = array_values(array_unique($userIdsInGroup));
+        $grouped[$groupKey]['total']++;
 
-        if (count($employees) > 0 && count($uniqueUsers) === count($employees)) {
-            $assignedTo = 'All Employees';
-        } else {
-            $deptNames = [];
-            foreach ($rawAssignments as $tmp) {
-                $tmpKey = implode('|', [
-                    (int)$tmp['document_version_id'],
-                    (int)$tmp['assigned_by'],
-                    (string)$tmp['assigned_at'],
-                    (string)$tmp['due_at']
-                ]);
-                if ($tmpKey === $groupKey) {
-                    $deptName = trim((string)($tmp['department_name'] ?? ''));
-                    if ($deptName !== '') {
-                        $deptNames[] = $deptName;
-                    }
-                }
-            }
-            $deptNames = array_values(array_unique($deptNames));
+        $status = strtolower(trim((string)($row['status'] ?? 'pending')));
+        $isConfirmed = ($status === 'acknowledged');
 
-            if (count($deptNames) === 1 && count($uniqueUsers) > 1) {
-                $sameDeptCount = 0;
-                foreach ($employees as $emp) {
-                    if ($emp['dept'] === $deptNames[0]) {
-                        $sameDeptCount++;
-                    }
-                }
-                if ($sameDeptCount > 0 && $sameDeptCount === count($uniqueUsers)) {
-                    $assignedTo = $deptNames[0];
-                }
-            }
+        if ($isConfirmed) {
+            $grouped[$groupKey]['confirmed']++;
         }
 
-        $grouped[$groupKey] = [
-            'id' => count($grouped) + 1,
-            'batch_token' => $groupKey,
-            'document_id' => (int)$row['document_id'],
-            'docId' => (string)$row['document_number'],
-            'type' => (string)($row['type_name'] ?: 'Document'),
-            'assignedTo' => $assignedTo,
-            'deadline' => (string)($row['due_at'] ?? ''),
-            'confirmed' => 0,
-            'total' => 0,
-            'status' => 'In Progress'
+        $employeeName = resolveUserDisplayName($row);
+        $department = (string)($row['department_name'] ?? '—');
+        $groupMembers[$groupKey][] = [
+            'user_id' => (int)$row['employee_id'],
+            'dept' => $department
+        ];
+
+        $detailMap[$groupKey][] = [
+            'employee' => $employeeName,
+            'department' => $department,
+            'status' => $isConfirmed ? 'Confirmed' : (($status === 'overdue') ? 'Pending' : 'Pending'),
+            'confirmed_on' => $isConfirmed ? formatDateTimeDisplay($row['acknowledged_at'] ?? '') : '—',
+            'ip' => $isConfirmed ? ((string)($row['ip_address'] ?? '') !== '' ? (string)$row['ip_address'] : '—') : '—'
         ];
     }
 
-    $grouped[$groupKey]['total']++;
-    if ($isConfirmed) {
-        $grouped[$groupKey]['confirmed']++;
+    foreach ($grouped as $groupKey => &$g) {
+        $uniqueUsers = [];
+        $deptNames = [];
+
+        foreach ($groupMembers[$groupKey] as $member) {
+            $uniqueUsers[] = (int)$member['user_id'];
+            if (trim((string)$member['dept']) !== '' && (string)$member['dept'] !== '—') {
+                $deptNames[] = (string)$member['dept'];
+            }
+        }
+
+        $uniqueUsers = array_values(array_unique($uniqueUsers));
+        $deptNames = array_values(array_unique($deptNames));
+
+        if (count($employees) > 0 && count($uniqueUsers) === count($employees)) {
+            $g['assignedTo'] = 'All Employees';
+        } elseif (count($deptNames) === 1 && count($uniqueUsers) > 1) {
+            $deptEmployeeCount = 0;
+            foreach ($employees as $emp) {
+                if ($emp['dept'] === $deptNames[0]) {
+                    $deptEmployeeCount++;
+                }
+            }
+            if ($deptEmployeeCount > 0 && $deptEmployeeCount === count($uniqueUsers)) {
+                $g['assignedTo'] = $deptNames[0];
+            } else {
+                $g['assignedTo'] = count($uniqueUsers) . ' employee' . (count($uniqueUsers) !== 1 ? 's' : '');
+            }
+        } else {
+            $g['assignedTo'] = count($uniqueUsers) . ' employee' . (count($uniqueUsers) !== 1 ? 's' : '');
+        }
+
+        $deadlineTs = !empty($g['deadline']) ? strtotime($g['deadline']) : false;
+        $nowTs = time();
+
+        if ($g['total'] > 0 && $g['confirmed'] >= $g['total']) {
+            $g['status'] = 'Completed';
+        } elseif ($deadlineTs && $deadlineTs < $nowTs) {
+            $g['status'] = 'Overdue';
+        } else {
+            $g['status'] = 'In Progress';
+        }
+
+        $trackerRows[] = $g;
     }
-
-    if (!isset($detailMap[$groupKey])) {
-        $detailMap[$groupKey] = [];
-    }
-
-    $employeeName = resolveUserDisplayName($row);
-
-    $detailMap[$groupKey][] = [
-        'employee' => $employeeName,
-        'department' => (string)($row['department_name'] ?? '—'),
-        'status' => $isConfirmed ? 'Confirmed' : 'Pending',
-        'confirmed_on' => $isConfirmed ? formatDateTimeDisplay($row['acknowledged_at'] ?? '') : '—',
-        'ip' => $isConfirmed ? ((string)($row['ip_address'] ?? '') !== '' ? (string)$row['ip_address'] : '—') : '—'
-    ];
-}
-
-foreach ($grouped as $g) {
-    $deadlineTs = !empty($g['deadline']) ? strtotime($g['deadline']) : false;
-    $todayTs = strtotime(date('Y-m-d H:i:s'));
-
-    if ($g['total'] > 0 && $g['confirmed'] >= $g['total']) {
-        $g['status'] = 'Completed';
-    } elseif ($deadlineTs && $deadlineTs < $todayTs) {
-        $g['status'] = 'Overdue';
-    } else {
-        $g['status'] = 'In Progress';
-    }
-
-    $trackerRows[] = $g;
+    unset($g);
 }
 
 $effectiveDocsJson = json_encode($effectiveDocs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -689,6 +683,7 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
     }
     select:disabled { background: #f5f7fa; color: #aaa; cursor: not-allowed; }
 
+    /* Employee selection checkboxes */
     .emp-check-list {
       max-height: 220px;
       overflow-y: auto;
@@ -718,6 +713,7 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
       font-size: 12px; font-weight: 700; flex-shrink: 0;
     }
 
+    /* Assignment tracker table */
     .progress-thin {
       height: 6px;
       border-radius: 3px;
@@ -733,6 +729,21 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
     }
     .progress-thin .bar.warn { background: #f59e0b; }
     .progress-thin .bar.danger { background: #dc2626; }
+
+    /* Tab strip for existing assignments */
+    .assign-tab {
+      display: inline-block;
+      padding: 7px 18px;
+      border-radius: 6px 6px 0 0;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #e0e7ef;
+      border-bottom: none;
+      margin-right: 4px;
+    }
+    .assign-tab.active { background: #fff; color: #1a3a6e; }
+    .assign-tab.inactive { background: #f3f4f6; color: #6b7280; }
 
     .selected-count {
       display: inline-block;
@@ -767,7 +778,7 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
           </ul>
         </li>
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="audit-trail.php">Audit Trail</a></li>
             <li><a class="dropdown-item active" href="document-assignment.php">Document Assignment</a></li>
@@ -809,14 +820,18 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
 
   <div class="row g-3">
 
+    <!-- ── Left: New Assignment Form ── -->
     <div class="col-lg-8">
+
       <form method="post" id="assignmentForm">
         <input type="hidden" name="action" value="create_assignment">
         <input type="hidden" name="document_id" id="document_id">
         <input type="hidden" name="document_type" id="document_type">
         <input type="hidden" name="assign_mode" id="assign_mode" value="dept">
         <input type="hidden" name="department_name" id="department_name">
+        <div id="selectedEmployeeInputs"></div>
 
+        <!-- Step 1 & 2 — Document selection -->
         <div class="card cp-card mb-3">
           <div class="card-body">
             <h2 class="card-title mb-1">Select Document</h2>
@@ -841,24 +856,29 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
               </div>
             </div>
 
+            <!-- Doc info strip -->
             <div id="docInfoPanel" class="d-none mt-3 p-3 rounded-3" style="background:#f0f4ff;border:1px solid #c7d7f8;font-size:13px;">
               <div class="fw-bold text-primary" id="diId">—</div>
               <div class="text-secondary mt-1" id="diMeta">—</div>
             </div>
+
           </div>
         </div>
 
+        <!-- Step 3 — Assign to -->
         <div class="card cp-card mb-3 d-none" id="assignCard">
           <div class="card-body">
             <h2 class="card-title mb-1">Assign To</h2>
             <p class="card-subtitle mb-3">Choose to assign by department (all employees in that dept) or select individual employees.</p>
 
+            <!-- Assign mode toggle -->
             <div class="d-flex gap-2 mb-3" id="assignModeBtns">
               <button type="button" class="btn btn-primary btn-sm" id="btnDept" onclick="setAssignMode('dept')">By Department</button>
               <button type="button" class="btn btn-outline-secondary btn-sm" id="btnIndividual" onclick="setAssignMode('individual')">Individual Employees</button>
               <button type="button" class="btn btn-outline-secondary btn-sm" id="btnAll" onclick="setAssignMode('all')">All Employees</button>
             </div>
 
+            <!-- Department mode -->
             <div id="deptMode">
               <label class="form-label">Select Department <span class="text-danger">*</span></label>
               <select class="form-select" id="deptSelect" onchange="onDeptChange(this.value)">
@@ -870,6 +890,7 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
               <div class="form-text" id="deptHint">&nbsp;</div>
             </div>
 
+            <!-- Individual mode -->
             <div id="individualMode" class="d-none">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <label class="form-label mb-0">
@@ -884,19 +905,22 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
                   <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearAll()">Clear</button>
                 </div>
               </div>
-              <div class="emp-check-list" id="empCheckList"></div>
+              <div class="emp-check-list" id="empCheckList">
+                <!-- Populated by JS -->
+              </div>
             </div>
 
+            <!-- All employees mode -->
             <div id="allMode" class="d-none">
               <div class="p-3 rounded-3" style="background:#f0fdf4;border:1px solid #bbf7d0;font-size:13px;">
                 ✓ &nbsp;This document will be assigned to <strong>all active employees</strong> in the system.
               </div>
             </div>
 
-            <div id="selectedEmployeeInputs"></div>
           </div>
         </div>
 
+        <!-- Step 4 — Deadline & note -->
         <div class="card cp-card mb-3 d-none" id="deadlineCard">
           <div class="card-body">
             <h2 class="card-title mb-1">Deadline &amp; Instructions</h2>
@@ -916,15 +940,6 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
                   <option value="urgent">Urgent — email sent immediately</option>
                 </select>
               </div>
-              <div class="col-md-6">
-                <label class="form-label">Approver <span class="text-danger">*</span></label>
-                <select class="form-select" name="approver_user_id" id="fApprover">
-                  <option value="">-- Select Approver --</option>
-                  <?php foreach ($approvers as $approver): ?>
-                    <option value="<?php echo (int)$approver['id']; ?>"><?php echo e($approver['label']); ?></option>
-                  <?php endforeach; ?>
-                </select>
-              </div>
               <div class="col-12">
                 <label class="form-label">Message to Employees <span class="text-secondary fw-normal">(optional)</span></label>
                 <textarea class="form-control" id="fNote" name="note" rows="2"
@@ -938,11 +953,14 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
                 ✓ Assign &amp; Notify Employees
               </button>
             </div>
+
           </div>
         </div>
       </form>
+
     </div>
 
+    <!-- ── Right: summary card ── -->
     <div class="col-lg-4">
       <div class="card cp-card mb-3">
         <div class="card-body">
@@ -970,8 +988,10 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
         </div>
       </div>
     </div>
-  </div>
 
+  </div><!-- /row -->
+
+  <!-- ── Acknowledgement Tracker ── -->
   <div class="mt-4">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
       <div>
@@ -991,7 +1011,7 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
             <option value="<?php echo e($type['type_name']); ?>"><?php echo e($type['type_name']); ?></option>
           <?php endforeach; ?>
         </select>
-        <button class="btn btn-sm btn-outline-secondary" type="button">↓ Export</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary">&#11015; Export</button>
       </div>
     </div>
 
@@ -1008,7 +1028,9 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
             <th>Actions</th>
           </tr>
         </thead>
-        <tbody id="trackerBody"></tbody>
+        <tbody id="trackerBody">
+          <!-- Populated by JS -->
+        </tbody>
       </table>
       <div id="trackerEmpty" class="text-center text-secondary py-4 small d-none">No assignments found.</div>
     </div>
@@ -1017,6 +1039,7 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
 </div>
 </main>
 
+<!-- ── Detail Modal ── -->
 <div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1042,9 +1065,9 @@ $detailMapJson = json_encode($detailMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED
         </table>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline-secondary btn-sm" type="button">↓ Export this list</button>
-        <button class="btn btn-primary btn-sm" id="sendReminderBtn" type="button">Send Reminder to Pending</button>
-        <button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button">Close</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm">&#11015; Export this list</button>
+        <button type="button" class="btn btn-primary btn-sm" id="sendReminderBtn">Send Reminder to Pending</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -1060,9 +1083,10 @@ var ASSIGNMENT_DETAILS = <?php echo $detailMapJson ?: '{}'; ?>;
 var assignMode = 'dept';
 var selectedEmployeeIds = [];
 
+// ── Type → Document cascade ──────────────────────────────────────────────
 function onTypeChange(type) {
   var docSel = document.getElementById('docSelect');
-  var hint = document.getElementById('docSelectHint');
+  var hint   = document.getElementById('docSelectHint');
   resetBelowDoc();
 
   if (!type) {
@@ -1091,8 +1115,7 @@ function onDocSelect(docId) {
   if (!docId) return;
 
   var type = document.getElementById('docTypeSelect').value;
-  var docs = EFFECTIVE_DOCS[type] || [];
-  var doc = docs.find(function(d){ return String(d.id) === String(docId); });
+  var doc = (EFFECTIVE_DOCS[type] || []).find(function(d){ return String(d.id) === String(docId); });
   if (!doc) return;
 
   document.getElementById('document_id').value = doc.id;
@@ -1117,45 +1140,47 @@ function resetBelowDoc() {
   document.getElementById('deadlineCard').classList.add('d-none');
   document.getElementById('document_id').value = '';
   document.getElementById('document_type').value = '';
-  document.getElementById('deptSelect').value = '';
   document.getElementById('department_name').value = '';
-  document.getElementById('deptHint').textContent = '';
+  var deptEl = document.getElementById('deptSelect');
+  if (deptEl) deptEl.value = '';
+  document.getElementById('deptHint').textContent = '\u00A0';
   selectedEmployeeIds = [];
   updateSelectedCount();
   syncSelectedEmployeeInputs();
 }
 
+// ── Assign mode ──────────────────────────────────────────────────────────
 function setAssignMode(mode) {
   assignMode = mode;
   document.getElementById('assign_mode').value = mode;
-
   document.getElementById('deptMode').classList.toggle('d-none', mode !== 'dept');
   document.getElementById('individualMode').classList.toggle('d-none', mode !== 'individual');
   document.getElementById('allMode').classList.toggle('d-none', mode !== 'all');
 
-  document.getElementById('btnDept').className = mode === 'dept' ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('btnDept').className       = mode === 'dept' ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm';
   document.getElementById('btnIndividual').className = mode === 'individual' ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm';
-  document.getElementById('btnAll').className = mode === 'all' ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('btnAll').className        = mode === 'all' ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm';
 }
 
 function onDeptChange(dept) {
   document.getElementById('department_name').value = dept;
   var hint = document.getElementById('deptHint');
-
   if (dept) {
-    var count = ALL_EMPLOYEES.filter(function(e){ return e.dept === dept; }).length;
-    hint.textContent = count + ' active employee' + (count !== 1 ? 's' : '') + ' in this department will be assigned.';
+    var n = ALL_EMPLOYEES.filter(function(e){ return e.dept === dept; }).length;
+    hint.textContent = n + ' active employee' + (n !== 1 ? 's' : '') + ' in this department will be assigned.';
     hint.className = 'form-text text-success';
   } else {
-    hint.textContent = '';
+    hint.textContent = '\u00A0';
     hint.className = 'form-text';
   }
 }
 
+// ── Employee list ────────────────────────────────────────────────────────
 function renderEmployeeList(filter) {
   var list = document.getElementById('empCheckList');
+  var q = String(filter || '').toLowerCase();
+
   var filtered = ALL_EMPLOYEES.filter(function(e) {
-    var q = String(filter || '').toLowerCase();
     return !q || e.name.toLowerCase().includes(q) || e.dept.toLowerCase().includes(q);
   });
 
@@ -1214,18 +1239,22 @@ function syncSelectedEmployeeInputs() {
   });
 }
 
+// ── Reset ────────────────────────────────────────────────────────────────
 function resetForm() {
   document.getElementById('assignmentForm').reset();
+  document.getElementById('docTypeSelect').value = '';
   document.getElementById('docSelect').innerHTML = '<option value="">-- Select Type first --</option>';
   document.getElementById('docSelect').disabled = true;
   document.getElementById('docSelectHint').textContent = 'Choose a type above to load effective documents.';
   document.getElementById('fNote').value = '';
   setAssignMode('dept');
   resetBelowDoc();
+  renderEmployeeList('');
 }
 
+// ── Tracker ──────────────────────────────────────────────────────────────
 function renderTracker(data) {
-  var body = document.getElementById('trackerBody');
+  var body  = document.getElementById('trackerBody');
   var empty = document.getElementById('trackerEmpty');
 
   if (!data.length) {
@@ -1236,7 +1265,7 @@ function renderTracker(data) {
   empty.classList.add('d-none');
 
   body.innerHTML = data.map(function(a) {
-    var pct = a.total ? Math.round(a.confirmed / a.total * 100) : 0;
+    var pct      = a.total ? Math.round((a.confirmed / a.total) * 100) : 0;
     var barClass = pct === 100 ? '' : (a.status === 'Overdue' ? 'danger' : pct > 50 ? '' : 'warn');
     var statusBadge = a.status === 'Completed'
       ? '<span class="badge badge-soft-success">Completed</span>'
@@ -1267,12 +1296,9 @@ function renderTracker(data) {
 function filterTracker() {
   var st = document.getElementById('filterStatus').value;
   var type = document.getElementById('filterType').value;
-
   var filtered = ASSIGNMENTS.filter(function(a) {
-    return (!st || a.status === st) &&
-           (!type || a.type === type);
+    return (!st || a.status === st) && (!type || a.type === type);
   });
-
   renderTracker(filtered);
 }
 
@@ -1297,24 +1323,24 @@ function openDetail(batchToken, docId, assignedTo, deadline) {
 }
 
 function sendReminder(batchToken) {
-  alert('Reminder email sending is not yet connected in this page.');
+  alert('Reminder email feature is not connected yet in this page.');
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────
 function toInputDate(d) {
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
-
 function formatDate(str) {
   if (!str) return '—';
   var d = new Date(str);
   if (isNaN(d.getTime())) return str;
-  return d.toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'});
+  return d.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
 }
-
 function escapeJs(str) {
   return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+// Initial render
 renderTracker(ASSIGNMENTS);
 renderEmployeeList('');
 syncSelectedEmployeeInputs();
