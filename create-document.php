@@ -183,9 +183,87 @@ if (!function_exists('write_audit_log')) {
     }
 }
 
+if (!function_exists('ensure_upload_dir')) {
+    function ensure_upload_dir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+    }
+}
+
+if (!function_exists('save_document_upload')) {
+    function save_document_upload(array $file): array
+    {
+        if (!isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) {
+            throw new Exception('Please choose a file to upload.');
+        }
+
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            throw new Exception('File upload failed. Error code: ' . (int)$file['error']);
+        }
+
+        if (!isset($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
+            throw new Exception('Invalid uploaded file.');
+        }
+
+        $maxSize = 25 * 1024 * 1024;
+        if ((int)$file['size'] <= 0) {
+            throw new Exception('Uploaded file is empty.');
+        }
+        if ((int)$file['size'] > $maxSize) {
+            throw new Exception('Maximum allowed file size is 25 MB.');
+        }
+
+        $originalName = trim((string)($file['name'] ?? ''));
+        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+        $allowedExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx'];
+        if (!in_array($extension, $allowedExtensions, true)) {
+            throw new Exception('Only PDF, DOC, DOCX, XLS, XLSX files are allowed.');
+        }
+
+        $uploadDir = __DIR__ . '/uploads/documents';
+        ensure_upload_dir($uploadDir);
+
+        $storedName = 'doc_' . uniqid('', true) . '.' . $extension;
+        $absolutePath = $uploadDir . '/' . $storedName;
+        $relativePath = 'uploads/documents/' . $storedName;
+
+        if (!move_uploaded_file($file['tmp_name'], $absolutePath)) {
+            throw new Exception('Failed to save uploaded file.');
+        }
+
+        $mimeType = function_exists('mime_content_type') ? mime_content_type($absolutePath) : ($file['type'] ?? 'application/octet-stream');
+        $checksum = hash_file('sha256', $absolutePath);
+
+        return [
+            'original_name' => $originalName,
+            'stored_name'   => $storedName,
+            'relative_path' => $relativePath,
+            'mime_type'     => $mimeType ?: 'application/octet-stream',
+            'file_size'     => (int)filesize($absolutePath),
+            'checksum'      => $checksum,
+        ];
+    }
+}
+
+if (!function_exists('build_auto_topic')) {
+    function build_auto_topic(string $typeName, string $documentNumber): string
+    {
+        $typeName = trim($typeName);
+        $documentNumber = trim($documentNumber);
+
+        if ($documentNumber !== '') {
+            return $typeName . ' ' . $documentNumber;
+        }
+
+        return $typeName . ' Draft';
+    }
+}
+
 $currentUserId = (int)($_SESSION['user_id'] ?? $_SESSION['admin_id'] ?? 0);
 $currentRoleCode = (string)($_SESSION['role_code'] ?? '');
-$currentRoleName = (string)($_SESSION['role_name'] ?? 'QA Admin');
 $currentDisplayName = (string)($_SESSION['full_name'] ?? $_SESSION['admin_name'] ?? 'Profile');
 
 if ($currentUserId <= 0) {
@@ -239,30 +317,8 @@ $approvers = fetch_all_assoc($conn, "
     ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
 ");
 
-$ownerOptions = fetch_all_assoc($conn, "
-    SELECT id, first_name, last_name, email
-    FROM users
-    WHERE status = 'active'
-    ORDER BY first_name ASC, last_name ASC, email ASC
-");
-
-$ownerFound = false;
-foreach ($ownerOptions as $opt) {
-    if ((int)$opt['id'] === $currentUserId) {
-        $ownerFound = true;
-        break;
-    }
-}
-if (!$ownerFound) {
-    $ownerOptions[] = [
-        'id' => $currentUserId,
-        'first_name' => $currentUser['first_name'] ?? '',
-        'last_name' => $currentUser['last_name'] ?? '',
-        'email' => $currentUser['email'] ?? ''
-    ];
-}
-
 $defaultTypeId = (int)($documentTypes[0]['id'] ?? 0);
+$defaultTypeName = (string)($documentTypes[0]['type_name'] ?? 'SOP');
 $defaultReviewCycle = (int)($documentTypes[0]['review_cycle_days'] ?? 365);
 
 $old = $_SESSION['create_document_old'] ?? [];
@@ -273,23 +329,32 @@ if ($queryDraftId !== '') {
     $old['draft_id'] = $queryDraftId;
 }
 
+$creatorName = trim((string)($currentUser['first_name'] ?? '') . ' ' . (string)($currentUser['last_name'] ?? ''));
+if ($creatorName === '') {
+    $creatorName = (string)($currentUser['email'] ?? $currentDisplayName);
+}
+
 $formData = [
-    'document_type_id'   => (string)($old['document_type_id'] ?? $defaultTypeId),
-    'document_topic'     => (string)($old['document_topic'] ?? 'CAPA'),
-    'document_number'    => (string)($old['document_number'] ?? ''),
-    'department_id'      => (string)($old['department_id'] ?? ''),
-    'owner_user_id'      => (string)($old['owner_user_id'] ?? $currentUserId),
-    'approver_user_id'   => (string)($old['approver_user_id'] ?? ''),
-    'effective_date'     => (string)($old['effective_date'] ?? ''),
-    'review_date'        => (string)($old['review_date'] ?? ''),
-    'purpose_scope'      => (string)($old['purpose_scope'] ?? ''),
-    'content_mode'       => (string)($old['content_mode'] ?? 'rich_text'),
-    'content_text'       => (string)($old['content_text'] ?? ''),
-    'draft_id'           => (string)($old['draft_id'] ?? ''),
-    'form_name'          => (string)($old['form_name'] ?? ''),
-    'form_type'          => (string)($old['form_type'] ?? ''),
-    'form_desc'          => (string)($old['form_desc'] ?? ''),
-    'form_builder_json'  => (string)($old['form_builder_json'] ?? ''),
+    'document_type_id'     => (string)($old['document_type_id'] ?? $defaultTypeId),
+    'document_topic'       => (string)($old['document_topic'] ?? build_auto_topic($defaultTypeName, (string)($old['document_number'] ?? ''))),
+    'document_number'      => (string)($old['document_number'] ?? ''),
+    'department_id'        => (string)($old['department_id'] ?? ''),
+    'owner_user_id'        => (string)$currentUserId,
+    'approver_user_id'     => (string)($old['approver_user_id'] ?? ''),
+    'effective_date'       => (string)($old['effective_date'] ?? ''),
+    'review_date'          => (string)($old['review_date'] ?? ''),
+    'purpose_scope'        => (string)($old['purpose_scope'] ?? ''),
+    'content_mode'         => (string)($old['content_mode'] ?? 'file'),
+    'content_text'         => (string)($old['content_text'] ?? ''),
+    'draft_id'             => (string)($old['draft_id'] ?? ''),
+    'form_name'            => (string)($old['form_name'] ?? ''),
+    'form_type'            => (string)($old['form_type'] ?? ''),
+    'form_desc'            => (string)($old['form_desc'] ?? ''),
+    'form_builder_json'    => (string)($old['form_builder_json'] ?? ''),
+    'existing_file_name'   => (string)($old['existing_file_name'] ?? ''),
+    'existing_file_path'   => (string)($old['existing_file_path'] ?? ''),
+    'existing_file_mime'   => (string)($old['existing_file_mime'] ?? ''),
+    'existing_file_size'   => (string)($old['existing_file_size'] ?? ''),
 ];
 
 if ($formData['effective_date'] === '') {
@@ -303,29 +368,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string)($_POST['action'] ?? 'save_draft'));
 
     $formData = [
-        'document_type_id'   => trim((string)($_POST['document_type_id'] ?? '')),
-        'document_topic'     => trim((string)($_POST['document_topic'] ?? '')),
-        'document_number'    => trim((string)($_POST['document_number'] ?? '')),
-        'department_id'      => trim((string)($_POST['department_id'] ?? '')),
-        'owner_user_id'      => trim((string)($_POST['owner_user_id'] ?? '')),
-        'approver_user_id'   => trim((string)($_POST['approver_user_id'] ?? '')),
-        'effective_date'     => trim((string)($_POST['effective_date'] ?? '')),
-        'review_date'        => trim((string)($_POST['review_date'] ?? '')),
-        'purpose_scope'      => trim((string)($_POST['purpose_scope'] ?? '')),
-        'content_mode'       => trim((string)($_POST['content_mode'] ?? 'rich_text')),
-        'content_text'       => trim((string)($_POST['content_text'] ?? '')),
-        'draft_id'           => trim((string)($_POST['draft_id'] ?? '')),
-        'form_name'          => trim((string)($_POST['form_name'] ?? '')),
-        'form_type'          => trim((string)($_POST['form_type'] ?? '')),
-        'form_desc'          => trim((string)($_POST['form_desc'] ?? '')),
-        'form_builder_json'  => trim((string)($_POST['form_builder_json'] ?? '')),
+        'document_type_id'     => trim((string)($_POST['document_type_id'] ?? '')),
+        'document_topic'       => '',
+        'document_number'      => trim((string)($_POST['document_number'] ?? '')),
+        'department_id'        => trim((string)($_POST['department_id'] ?? '')),
+        'owner_user_id'        => (string)$currentUserId,
+        'approver_user_id'     => trim((string)($_POST['approver_user_id'] ?? '')),
+        'effective_date'       => trim((string)($_POST['effective_date'] ?? '')),
+        'review_date'          => trim((string)($_POST['review_date'] ?? '')),
+        'purpose_scope'        => trim((string)($_POST['purpose_scope'] ?? '')),
+        'content_mode'         => trim((string)($_POST['content_mode'] ?? 'file')),
+        'content_text'         => trim((string)($_POST['content_text'] ?? '')),
+        'draft_id'             => trim((string)($_POST['draft_id'] ?? '')),
+        'form_name'            => trim((string)($_POST['form_name'] ?? '')),
+        'form_type'            => trim((string)($_POST['form_type'] ?? '')),
+        'form_desc'            => trim((string)($_POST['form_desc'] ?? '')),
+        'form_builder_json'    => trim((string)($_POST['form_builder_json'] ?? '')),
+        'existing_file_name'   => trim((string)($_POST['existing_file_name'] ?? '')),
+        'existing_file_path'   => trim((string)($_POST['existing_file_path'] ?? '')),
+        'existing_file_mime'   => trim((string)($_POST['existing_file_mime'] ?? '')),
+        'existing_file_size'   => trim((string)($_POST['existing_file_size'] ?? '')),
     ];
 
     if ($formData['document_type_id'] === '' && $defaultTypeId > 0) {
         $formData['document_type_id'] = (string)$defaultTypeId;
-    }
-    if ($formData['owner_user_id'] === '') {
-        $formData['owner_user_id'] = (string)$currentUserId;
     }
     if ($formData['effective_date'] === '') {
         $formData['effective_date'] = date('Y-m-d');
@@ -334,11 +400,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $formData['review_date'] = date('Y-m-d', strtotime('+' . max(1, $defaultReviewCycle) . ' days'));
     }
 
-    $_SESSION['create_document_old'] = $formData;
-
     $documentTypeId = (int)$formData['document_type_id'];
     $departmentId = $formData['department_id'] !== '' ? (int)$formData['department_id'] : null;
-    $ownerUserId = (int)$formData['owner_user_id'];
+    $ownerUserId = $currentUserId;
     $approverUserId = (int)$formData['approver_user_id'];
     $draftId = (int)$formData['draft_id'];
 
@@ -352,6 +416,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$docType) {
         $_SESSION['flash_error'] = 'Please select a valid document type.';
+        $_SESSION['create_document_old'] = $formData;
         redirect_back();
     }
 
@@ -359,18 +424,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $docPrefix = (string)$docType['prefix'];
     $isFormDocument = strtolower($docTypeName) === 'form';
 
-    if ($formData['document_topic'] === '') {
-        $_SESSION['flash_error'] = 'Document topic is required.';
-        redirect_back();
-    }
+    $formData['document_topic'] = build_auto_topic($docTypeName, $formData['document_number']);
+    $_SESSION['create_document_old'] = $formData;
 
     if ($formData['document_number'] === '') {
         $_SESSION['flash_error'] = 'Document number is required.';
-        redirect_back();
-    }
-
-    if ($ownerUserId <= 0) {
-        $_SESSION['flash_error'] = 'Owner is required.';
         redirect_back();
     }
 
@@ -387,26 +445,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_error'] = 'Document Purpose & Scope is required before submission.';
             redirect_back();
         }
-        if (!$isFormDocument && $formData['content_text'] === '') {
-            $_SESSION['flash_error'] = 'Document content is required before submission.';
-            redirect_back();
+
+        if (!$isFormDocument) {
+            $hasNewFile = isset($_FILES['document_file']) && ($_FILES['document_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+            $hasExistingFile = $formData['existing_file_path'] !== '';
+
+            if ($formData['content_mode'] === 'file') {
+                if (!$hasNewFile && !$hasExistingFile) {
+                    $_SESSION['flash_error'] = 'Please upload a file before submission.';
+                    redirect_back();
+                }
+            } else {
+                if ($formData['content_text'] === '') {
+                    $_SESSION['flash_error'] = 'Document content is required before submission.';
+                    redirect_back();
+                }
+            }
         }
+
         if ($isFormDocument && $formData['form_name'] === '' && $formData['form_builder_json'] === '') {
             $_SESSION['flash_error'] = 'Please build or attach a form before submission.';
             redirect_back();
         }
     }
-
-    $documentTitle = $formData['document_topic'];
-    $documentNumberFull = $docPrefix . '-' . $formData['document_number'] . '-' . $formData['document_topic'] . '-01';
-    $currentStatus = ($action === 'submit_review') ? 'pending_approval' : 'draft';
-    $versionStatus = ($action === 'submit_review') ? 'pending_approval' : 'draft';
-    $submittedBy = ($action === 'submit_review') ? $currentUserId : null;
-    $submittedAt = ($action === 'submit_review') ? date('Y-m-d H:i:s') : null;
-    $ackReq = (int)($docType['acknowledgement_required'] ?? 0);
-    $remarks = $formData['purpose_scope'];
-    $approverText = $approverUserId > 0 ? (string)$approverUserId : null;
-    $contentText = $isFormDocument ? $formData['purpose_scope'] : $formData['content_text'];
 
     mysqli_begin_transaction($conn);
 
@@ -415,7 +476,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($draftId > 0) {
             $checkSql = "
-                SELECT d.*, dv.id AS version_id" . ($hasFormDefinitionLink ? ", dv.form_definition_id" : "") . "
+                SELECT d.*, 
+                       dv.id AS version_id,
+                       dv.primary_file_name,
+                       dv.primary_file_path,
+                       dv.primary_file_mime,
+                       dv.primary_file_size,
+                       dv.checksum_sha256,
+                       dv.content_text
+                       " . ($hasFormDefinitionLink ? ", dv.form_definition_id" : "") . "
                 FROM documents d
                 LEFT JOIN document_versions dv ON dv.id = d.current_version_id
                 WHERE d.id = ?
@@ -423,14 +492,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ";
             $existingDoc = fetch_one_prepared($conn, $checkSql, [$draftId]);
         } else {
-            $dupStmt = exec_prepared($conn, "SELECT id FROM documents WHERE document_number = ? LIMIT 1", [$documentNumberFull]);
+            $newDocFullNumber = $docPrefix . '-' . $formData['document_number'] . '-' . $formData['document_topic'] . '-01';
+            $dupStmt = exec_prepared($conn, "SELECT id FROM documents WHERE document_number = ? LIMIT 1", [$newDocFullNumber]);
             $dupRes = mysqli_stmt_get_result($dupStmt);
             $dupRow = $dupRes ? mysqli_fetch_assoc($dupRes) : null;
             mysqli_stmt_close($dupStmt);
             if ($dupRow) {
-                throw new Exception('Document ID already exists. Please change the number/topic.');
+                throw new Exception('Document ID already exists. Please change the number.');
             }
         }
+
+        $documentTitle = $formData['document_topic'];
+        $documentNumberFull = $docPrefix . '-' . $formData['document_number'] . '-' . $formData['document_topic'] . '-01';
+        $currentStatus = ($action === 'submit_review') ? 'pending_approval' : 'draft';
+        $versionStatus = ($action === 'submit_review') ? 'pending_approval' : 'draft';
+        $submittedBy = ($action === 'submit_review') ? $currentUserId : null;
+        $submittedAt = ($action === 'submit_review') ? date('Y-m-d H:i:s') : null;
+        $ackReq = (int)($docType['acknowledgement_required'] ?? 0);
+        $remarks = $formData['purpose_scope'];
+        $approverText = $approverUserId > 0 ? (string)$approverUserId : null;
+
+        $existingFileName = $formData['existing_file_name'];
+        $existingFilePath = $formData['existing_file_path'];
+        $existingFileMime = $formData['existing_file_mime'];
+        $existingFileSize = (int)$formData['existing_file_size'];
+        $existingChecksum = '';
+
+        if ($existingDoc) {
+            $existingFileName = (string)($existingDoc['primary_file_name'] ?? '');
+            $existingFilePath = (string)($existingDoc['primary_file_path'] ?? '');
+            $existingFileMime = (string)($existingDoc['primary_file_mime'] ?? '');
+            $existingFileSize = (int)($existingDoc['primary_file_size'] ?? 0);
+            $existingChecksum = (string)($existingDoc['checksum_sha256'] ?? '');
+        }
+
+        $uploadedFileMeta = null;
+        if (isset($_FILES['document_file']) && ($_FILES['document_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            $uploadedFileMeta = save_document_upload($_FILES['document_file']);
+        }
+
+        $primaryFileName = $uploadedFileMeta['original_name'] ?? $existingFileName;
+        $primaryFilePath = $uploadedFileMeta['relative_path'] ?? $existingFilePath;
+        $primaryFileMime = $uploadedFileMeta['mime_type'] ?? $existingFileMime;
+        $primaryFileSize = $uploadedFileMeta['file_size'] ?? $existingFileSize;
+        $checksumSha256 = $uploadedFileMeta['checksum'] ?? $existingChecksum;
+
+        $finalContentFormat = $isFormDocument ? 'rich_text' : ($formData['content_mode'] === 'file' ? 'file' : 'rich_text');
+        $contentText = $isFormDocument
+            ? $formData['purpose_scope']
+            : ($finalContentFormat === 'rich_text' ? $formData['content_text'] : $formData['purpose_scope']);
 
         $formDefinitionId = null;
 
@@ -522,9 +632,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             effective_date = ?,
                             review_date = ?,
                             status = ?,
-                            content_format = 'rich_text',
+                            content_format = ?,
                             content_text = ?,
                             form_definition_id = ?,
+                            primary_file_name = ?,
+                            primary_file_path = ?,
+                            primary_file_mime = ?,
+                            primary_file_size = ?,
+                            checksum_sha256 = ?,
                             submitted_by = ?,
                             submitted_at = ?,
                             updated_at = NOW()
@@ -537,8 +652,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $formData['effective_date'],
                         $formData['review_date'],
                         $versionStatus,
+                        $finalContentFormat,
                         $contentText,
                         $formDefinitionId,
+                        $primaryFileName !== '' ? $primaryFileName : null,
+                        $primaryFilePath !== '' ? $primaryFilePath : null,
+                        $primaryFileMime !== '' ? $primaryFileMime : null,
+                        $primaryFileSize > 0 ? $primaryFileSize : null,
+                        $checksumSha256 !== '' ? $checksumSha256 : null,
                         $submittedBy,
                         $submittedAt,
                         $documentVersionId
@@ -554,8 +675,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             effective_date = ?,
                             review_date = ?,
                             status = ?,
-                            content_format = 'rich_text',
+                            content_format = ?,
                             content_text = ?,
+                            primary_file_name = ?,
+                            primary_file_path = ?,
+                            primary_file_mime = ?,
+                            primary_file_size = ?,
+                            checksum_sha256 = ?,
                             submitted_by = ?,
                             submitted_at = ?,
                             updated_at = NOW()
@@ -568,7 +694,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $formData['effective_date'],
                         $formData['review_date'],
                         $versionStatus,
+                        $finalContentFormat,
                         $contentText,
+                        $primaryFileName !== '' ? $primaryFileName : null,
+                        $primaryFilePath !== '' ? $primaryFilePath : null,
+                        $primaryFileMime !== '' ? $primaryFileMime : null,
+                        $primaryFileSize > 0 ? $primaryFileSize : null,
+                        $checksumSha256 !== '' ? $checksumSha256 : null,
                         $submittedBy,
                         $submittedAt,
                         $documentVersionId
@@ -581,8 +713,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($hasFormDefinitionLink) {
                     $stmt = exec_prepared($conn, "
                         INSERT INTO document_versions
-                        (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, form_definition_id, submitted_by, submitted_at, created_at, updated_at)
-                        VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, 'rich_text', ?, ?, ?, ?, NOW(), NOW())
+                        (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, form_definition_id, primary_file_name, primary_file_path, primary_file_mime, primary_file_size, checksum_sha256, submitted_by, submitted_at, created_at, updated_at)
+                        VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                     ", [
                         $documentId,
                         $documentTitle,
@@ -593,8 +725,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $formData['effective_date'],
                         $formData['review_date'],
                         $versionStatus,
+                        $finalContentFormat,
                         $contentText,
                         $formDefinitionId,
+                        $primaryFileName !== '' ? $primaryFileName : null,
+                        $primaryFilePath !== '' ? $primaryFilePath : null,
+                        $primaryFileMime !== '' ? $primaryFileMime : null,
+                        $primaryFileSize > 0 ? $primaryFileSize : null,
+                        $checksumSha256 !== '' ? $checksumSha256 : null,
                         $submittedBy,
                         $submittedAt
                     ]);
@@ -603,8 +741,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $stmt = exec_prepared($conn, "
                         INSERT INTO document_versions
-                        (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, submitted_by, submitted_at, created_at, updated_at)
-                        VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, 'rich_text', ?, ?, ?, NOW(), NOW())
+                        (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, primary_file_name, primary_file_path, primary_file_mime, primary_file_size, checksum_sha256, submitted_by, submitted_at, created_at, updated_at)
+                        VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                     ", [
                         $documentId,
                         $documentTitle,
@@ -615,7 +753,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $formData['effective_date'],
                         $formData['review_date'],
                         $versionStatus,
+                        $finalContentFormat,
                         $contentText,
+                        $primaryFileName !== '' ? $primaryFileName : null,
+                        $primaryFilePath !== '' ? $primaryFilePath : null,
+                        $primaryFileMime !== '' ? $primaryFileMime : null,
+                        $primaryFileSize > 0 ? $primaryFileSize : null,
+                        $checksumSha256 !== '' ? $checksumSha256 : null,
                         $submittedBy,
                         $submittedAt
                     ]);
@@ -626,6 +770,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = exec_prepared($conn, "UPDATE documents SET current_version_id = ? WHERE id = ?", [
                     $documentVersionId,
                     $documentId
+                ]);
+                mysqli_stmt_close($stmt);
+            }
+
+            if ($uploadedFileMeta && table_exists($conn, 'document_version_attachments')) {
+                $stmt = exec_prepared($conn, "
+                    INSERT INTO document_version_attachments
+                    (document_version_id, attachment_type, original_file_name, stored_file_name, file_path, mime_type, file_size, checksum_sha256, uploaded_by, uploaded_at)
+                    VALUES (?, 'primary', ?, ?, ?, ?, ?, ?, ?, NOW())
+                ", [
+                    $documentVersionId,
+                    $uploadedFileMeta['original_name'],
+                    $uploadedFileMeta['stored_name'],
+                    $uploadedFileMeta['relative_path'],
+                    $uploadedFileMeta['mime_type'],
+                    $uploadedFileMeta['file_size'],
+                    $uploadedFileMeta['checksum'],
+                    $currentUserId
                 ]);
                 mysqli_stmt_close($stmt);
             }
@@ -686,6 +848,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'status' => $currentStatus,
                 'version_label' => '01',
                 'approver_user_id' => $approverUserId,
+                'owner_user_id' => $ownerUserId,
             ];
 
             write_audit_log(
@@ -711,6 +874,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_success'] = 'Draft saved successfully.';
             $_SESSION['create_document_old'] = $formData;
             $_SESSION['create_document_old']['draft_id'] = (string)$documentId;
+            $_SESSION['create_document_old']['existing_file_name'] = $primaryFileName;
+            $_SESSION['create_document_old']['existing_file_path'] = $primaryFilePath;
+            $_SESSION['create_document_old']['existing_file_mime'] = $primaryFileMime;
+            $_SESSION['create_document_old']['existing_file_size'] = (string)$primaryFileSize;
             redirect_back();
         } else {
             $stmt = exec_prepared($conn, "
@@ -738,8 +905,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($hasFormDefinitionLink) {
                 $stmt = exec_prepared($conn, "
                     INSERT INTO document_versions
-                    (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, form_definition_id, submitted_by, submitted_at, created_at, updated_at)
-                    VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, 'rich_text', ?, ?, ?, ?, NOW(), NOW())
+                    (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, form_definition_id, primary_file_name, primary_file_path, primary_file_mime, primary_file_size, checksum_sha256, submitted_by, submitted_at, created_at, updated_at)
+                    VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                 ", [
                     $documentId,
                     $documentTitle,
@@ -750,8 +917,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $formData['effective_date'],
                     $formData['review_date'],
                     $versionStatus,
+                    $finalContentFormat,
                     $contentText,
                     $formDefinitionId,
+                    $primaryFileName !== '' ? $primaryFileName : null,
+                    $primaryFilePath !== '' ? $primaryFilePath : null,
+                    $primaryFileMime !== '' ? $primaryFileMime : null,
+                    $primaryFileSize > 0 ? $primaryFileSize : null,
+                    $checksumSha256 !== '' ? $checksumSha256 : null,
                     $submittedBy,
                     $submittedAt
                 ]);
@@ -760,8 +933,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $stmt = exec_prepared($conn, "
                     INSERT INTO document_versions
-                    (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, submitted_by, submitted_at, created_at, updated_at)
-                    VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, 'rich_text', ?, ?, ?, NOW(), NOW())
+                    (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, primary_file_name, primary_file_path, primary_file_mime, primary_file_size, checksum_sha256, submitted_by, submitted_at, created_at, updated_at)
+                    VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                 ", [
                     $documentId,
                     $documentTitle,
@@ -772,7 +945,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $formData['effective_date'],
                     $formData['review_date'],
                     $versionStatus,
+                    $finalContentFormat,
                     $contentText,
+                    $primaryFileName !== '' ? $primaryFileName : null,
+                    $primaryFilePath !== '' ? $primaryFilePath : null,
+                    $primaryFileMime !== '' ? $primaryFileMime : null,
+                    $primaryFileSize > 0 ? $primaryFileSize : null,
+                    $checksumSha256 !== '' ? $checksumSha256 : null,
                     $submittedBy,
                     $submittedAt
                 ]);
@@ -785,6 +964,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $documentId
             ]);
             mysqli_stmt_close($stmt);
+
+            if ($uploadedFileMeta && table_exists($conn, 'document_version_attachments')) {
+                $stmt = exec_prepared($conn, "
+                    INSERT INTO document_version_attachments
+                    (document_version_id, attachment_type, original_file_name, stored_file_name, file_path, mime_type, file_size, checksum_sha256, uploaded_by, uploaded_at)
+                    VALUES (?, 'primary', ?, ?, ?, ?, ?, ?, ?, NOW())
+                ", [
+                    $documentVersionId,
+                    $uploadedFileMeta['original_name'],
+                    $uploadedFileMeta['stored_name'],
+                    $uploadedFileMeta['relative_path'],
+                    $uploadedFileMeta['mime_type'],
+                    $uploadedFileMeta['file_size'],
+                    $uploadedFileMeta['checksum'],
+                    $currentUserId
+                ]);
+                mysqli_stmt_close($stmt);
+            }
 
             if ($action === 'submit_review' && $approverUserId > 0) {
                 $stmt = exec_prepared($conn, "
@@ -833,6 +1030,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'status' => $currentStatus,
                 'version_label' => '01',
                 'approver_user_id' => $approverUserId,
+                'owner_user_id' => $ownerUserId,
             ];
 
             write_audit_log(
@@ -858,6 +1056,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_success'] = 'Draft created successfully.';
             $_SESSION['create_document_old'] = $formData;
             $_SESSION['create_document_old']['draft_id'] = (string)$documentId;
+            $_SESSION['create_document_old']['existing_file_name'] = $primaryFileName;
+            $_SESSION['create_document_old']['existing_file_path'] = $primaryFilePath;
+            $_SESSION['create_document_old']['existing_file_mime'] = $primaryFileMime;
+            $_SESSION['create_document_old']['existing_file_size'] = (string)$primaryFileSize;
             redirect_back();
         }
     } catch (Throwable $e) {
@@ -868,18 +1070,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $currentTypePrefix = 'SOP';
+$currentTypeName = 'SOP';
 $currentTypeReviewCycle = 365;
 foreach ($documentTypes as $row) {
     if ((string)$row['id'] === (string)$formData['document_type_id']) {
         $currentTypePrefix = (string)$row['prefix'];
+        $currentTypeName = (string)$row['type_name'];
         $currentTypeReviewCycle = (int)$row['review_cycle_days'];
         break;
     }
 }
 
+$formData['document_topic'] = build_auto_topic($currentTypeName, $formData['document_number']);
+
 $docIdPreview = $currentTypePrefix . '-' .
     ($formData['document_number'] !== '' ? $formData['document_number'] : '104') . '-' .
-    ($formData['document_topic'] !== '' ? $formData['document_topic'] : 'CAPA') . '-01';
+    ($formData['document_topic'] !== '' ? $formData['document_topic'] : $currentTypeName . ' Draft') . '-01';
 
 $builderDraftId = $formData['draft_id'] !== '' ? $formData['draft_id'] : 'new';
 $builderUrl = 'form-builder.php?' . http_build_query([
@@ -888,6 +1094,9 @@ $builderUrl = 'form-builder.php?' . http_build_query([
     'document_topic' => $formData['document_topic'],
     'document_number' => $formData['document_number'],
 ]);
+
+$existingFileDisplay = $formData['existing_file_name'] !== '' ? $formData['existing_file_name'] : '';
+$existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0) ? round(((int)$formData['existing_file_size']) / 1024, 2) . ' KB' : '';
 ?>
 <!doctype html>
 <html lang="en">
@@ -896,6 +1105,24 @@ $builderUrl = 'form-builder.php?' . http_build_query([
   <title>CorePlx Quality DMS - Create Document</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    .upload-box.drag-over {
+      border-color: #0d6efd !important;
+      background: #eef5ff !important;
+    }
+    .file-selected-box {
+      background: #f8f9fb;
+      border: 1px solid #dde3ec;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13px;
+    }
+    .readonly-field {
+      background: #f5f7fa !important;
+      color: #6b7280 !important;
+      cursor: not-allowed;
+    }
+  </style>
 </head>
 <body>
 <?php include('includes/navbar.php'); ?>
@@ -915,7 +1142,7 @@ $builderUrl = 'form-builder.php?' . http_build_query([
     <div class="alert alert-danger"><?php echo e($flashError); ?></div>
   <?php endif; ?>
 
-  <form method="post" id="docForm">
+  <form method="post" id="docForm" enctype="multipart/form-data">
     <input type="hidden" name="draft_id" id="draft_id" value="<?php echo e($formData['draft_id']); ?>">
     <input type="hidden" name="action" id="form_action" value="save_draft">
     <input type="hidden" name="content_mode" id="content_mode" value="<?php echo e($formData['content_mode']); ?>">
@@ -923,6 +1150,12 @@ $builderUrl = 'form-builder.php?' . http_build_query([
     <input type="hidden" name="form_type" id="form_type_hidden" value="<?php echo e($formData['form_type']); ?>">
     <input type="hidden" name="form_desc" id="form_desc_hidden" value="<?php echo e($formData['form_desc']); ?>">
     <input type="hidden" name="form_builder_json" id="form_builder_json_hidden" value="<?php echo e($formData['form_builder_json']); ?>">
+    <input type="hidden" name="owner_user_id" value="<?php echo (int)$currentUserId; ?>">
+    <input type="hidden" name="document_topic" id="document_topic_hidden" value="<?php echo e($formData['document_topic']); ?>">
+    <input type="hidden" name="existing_file_name" value="<?php echo e($formData['existing_file_name']); ?>">
+    <input type="hidden" name="existing_file_path" value="<?php echo e($formData['existing_file_path']); ?>">
+    <input type="hidden" name="existing_file_mime" value="<?php echo e($formData['existing_file_mime']); ?>">
+    <input type="hidden" name="existing_file_size" value="<?php echo e($formData['existing_file_size']); ?>">
 
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
       <span class="badge badge-soft-secondary"><?php echo $formData['draft_id'] !== '' ? 'Draft Saved' : 'Draft'; ?></span>
@@ -962,8 +1195,9 @@ $builderUrl = 'form-builder.php?' . http_build_query([
               </div>
 
               <div class="col-md-6">
-                <label class="form-label">Document Topic</label>
-                <input class="form-control" id="docTopic" name="document_topic" value="<?php echo e($formData['document_topic']); ?>"/>
+                <label class="form-label">Document Title / Topic</label>
+                <input class="form-control readonly-field" id="document_topic_preview" type="text" readonly value="<?php echo e($formData['document_topic']); ?>">
+                <div class="form-text">This field is auto generated and cannot be edited.</div>
               </div>
 
               <div class="col-md-6">
@@ -990,14 +1224,8 @@ $builderUrl = 'form-builder.php?' . http_build_query([
 
               <div class="col-md-6">
                 <label class="form-label">Owner</label>
-                <select class="form-select" name="owner_user_id">
-                  <?php foreach ($ownerOptions as $owner): ?>
-                    <?php $ownerName = trim(($owner['first_name'] ?? '') . ' ' . ($owner['last_name'] ?? '')); ?>
-                    <option value="<?php echo (int)$owner['id']; ?>" <?php echo (string)$formData['owner_user_id'] === (string)$owner['id'] ? 'selected' : ''; ?>>
-                      <?php echo e($ownerName !== '' ? $ownerName : $owner['email']); ?>
-                    </option>
-                  <?php endforeach; ?>
-                </select>
+                <input class="form-control readonly-field" type="text" readonly value="<?php echo e($creatorName); ?>">
+                <div class="form-text">Owner is automatically set as the document creator.</div>
               </div>
 
               <div class="col-md-6">
@@ -1048,18 +1276,33 @@ $builderUrl = 'form-builder.php?' . http_build_query([
             <p class="card-subtitle mb-3">Add document content using rich text or controlled file upload.</p>
 
             <ul class="nav nav-pills gap-2 mb-3">
-              <li class="nav-item"><a class="nav-link active tab-pill" href="#" onclick="setContentMode('rich_text'); return false;">Rich Text Editor</a></li>
-              <li class="nav-item"><a class="nav-link tab-pill" href="#" onclick="setContentMode('file'); return false;">File Upload</a></li>
+              <li class="nav-item">
+                <a class="nav-link tab-pill <?php echo $formData['content_mode'] === 'file' ? 'active' : ''; ?>" href="#" id="tabFileUpload" onclick="setContentMode('file'); return false;">File Upload</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link tab-pill <?php echo $formData['content_mode'] === 'rich_text' ? 'active' : ''; ?>" href="#" id="tabRichText" onclick="setContentMode('rich_text'); return false;">Rich Text Editor</a>
+              </li>
             </ul>
 
-            <div class="mb-3">
-              <label class="form-label">Document Body</label>
-              <textarea class="form-control" name="content_text" id="content_text" placeholder="Enter document content here" rows="9"><?php echo e($formData['content_text']); ?></textarea>
+            <div id="fileUploadPanel" class="<?php echo $formData['content_mode'] === 'file' ? '' : 'd-none'; ?>">
+              <input type="file" name="document_file" id="document_file" accept=".pdf,.doc,.docx,.xls,.xlsx" style="display:none;">
+
+              <div class="upload-box p-4 text-center small text-secondary mb-3" id="documentUploadBox" style="cursor:pointer;">
+                Drag and drop file here or click to browse.<br/>
+                Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
+              </div>
+
+              <div id="selectedFileInfo" class="file-selected-box <?php echo $existingFileDisplay !== '' ? '' : 'd-none'; ?>">
+                <div class="fw-semibold text-primary" id="selectedFileName"><?php echo e($existingFileDisplay); ?></div>
+                <div class="small text-secondary" id="selectedFileMeta"><?php echo e($existingFileSizeDisplay); ?></div>
+              </div>
             </div>
 
-            <div class="upload-box p-4 text-center small text-secondary">
-              Drag and drop file here or click to browse.<br/>
-              Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
+            <div id="richTextPanel" class="<?php echo $formData['content_mode'] === 'rich_text' ? '' : 'd-none'; ?>">
+              <div class="mb-3">
+                <label class="form-label">Document Body</label>
+                <textarea class="form-control" name="content_text" id="content_text" placeholder="Enter document content here" rows="9"><?php echo e($formData['content_text']); ?></textarea>
+              </div>
             </div>
           </div>
         </div>
@@ -1163,6 +1406,18 @@ function getSelectedTypeOption() {
   return document.getElementById('docTypeSelect').selectedOptions[0];
 }
 
+function buildAutoTopicJs() {
+  const opt = getSelectedTypeOption();
+  const typeName = opt ? (opt.dataset.name || 'SOP') : 'SOP';
+  const docNumber = (document.getElementById('docNumber').value || '').trim();
+
+  if (docNumber !== '') {
+    return typeName + ' ' + docNumber;
+  }
+
+  return typeName + ' Draft';
+}
+
 function handleDocTypeChange(selectEl) {
   const opt = selectEl.selectedOptions[0];
   const typeName = (opt.dataset.name || '').toLowerCase();
@@ -1184,6 +1439,10 @@ function handleDocTypeChange(selectEl) {
 
 function setContentMode(mode) {
   document.getElementById('content_mode').value = mode;
+  document.getElementById('tabFileUpload').classList.toggle('active', mode === 'file');
+  document.getElementById('tabRichText').classList.toggle('active', mode === 'rich_text');
+  document.getElementById('fileUploadPanel').classList.toggle('d-none', mode !== 'file');
+  document.getElementById('richTextPanel').classList.toggle('d-none', mode !== 'rich_text');
 }
 
 function switchFormMode(mode) {
@@ -1218,12 +1477,14 @@ function detachForm() {
 function updateDocIdPreview() {
   const opt = getSelectedTypeOption();
   const prefix = opt ? (opt.dataset.prefix || 'SOP') : 'SOP';
+  const topic = buildAutoTopicJs();
   const number = document.getElementById('docNumber').value || '104';
-  const topic = document.getElementById('docTopic').value || 'CAPA';
+
+  document.getElementById('document_topic_hidden').value = topic;
+  document.getElementById('document_topic_preview').value = topic;
   document.getElementById('docIdPreview').textContent = prefix + '-' + number + '-' + topic + '-01';
 }
 
-document.getElementById('docTopic').addEventListener('input', updateDocIdPreview);
 document.getElementById('docNumber').addEventListener('input', updateDocIdPreview);
 
 document.getElementById('effective_date').addEventListener('change', function() {
@@ -1238,7 +1499,7 @@ document.getElementById('openBuilderBtn').addEventListener('click', function() {
     docTypeId: document.getElementById('docTypeSelect').value,
     docType: getSelectedTypeOption() ? getSelectedTypeOption().dataset.name : '',
     docNumber: document.getElementById('docNumber').value,
-    docTopic: document.getElementById('docTopic').value,
+    docTopic: document.getElementById('document_topic_hidden').value,
     returnUrl: 'create-document.php?draft_id=' + encodeURIComponent(draftId)
   };
 
@@ -1251,6 +1512,7 @@ document.getElementById('openBuilderBtn').addEventListener('click', function() {
 
   if (!raw) {
     handleDocTypeChange(document.getElementById('docTypeSelect'));
+    setContentMode(document.getElementById('content_mode').value || 'file');
     return;
   }
 
@@ -1259,6 +1521,7 @@ document.getElementById('openBuilderBtn').addEventListener('click', function() {
 
     if ((data.draftId || 'new') !== draftId) {
       handleDocTypeChange(document.getElementById('docTypeSelect'));
+      setContentMode(document.getElementById('content_mode').value || 'file');
       return;
     }
 
@@ -1297,9 +1560,70 @@ document.getElementById('openBuilderBtn').addEventListener('click', function() {
     console.warn('Could not restore built form:', e);
     handleDocTypeChange(document.getElementById('docTypeSelect'));
   }
+
+  setContentMode(document.getElementById('content_mode').value || 'file');
 })();
 
+const fileInput = document.getElementById('document_file');
+const uploadBox = document.getElementById('documentUploadBox');
+const selectedFileInfo = document.getElementById('selectedFileInfo');
+const selectedFileName = document.getElementById('selectedFileName');
+const selectedFileMeta = document.getElementById('selectedFileMeta');
+
+function showSelectedFile(file) {
+  if (!file) return;
+  selectedFileName.textContent = file.name;
+  selectedFileMeta.textContent = (Math.round((file.size / 1024) * 100) / 100) + ' KB';
+  selectedFileInfo.classList.remove('d-none');
+}
+
+uploadBox.addEventListener('click', function(e) {
+  e.preventDefault();
+  fileInput.click();
+});
+
+fileInput.addEventListener('change', function() {
+  if (this.files && this.files.length > 0) {
+    showSelectedFile(this.files[0]);
+  }
+});
+
+uploadBox.addEventListener('dragenter', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadBox.classList.add('drag-over');
+});
+
+uploadBox.addEventListener('dragover', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadBox.classList.add('drag-over');
+});
+
+uploadBox.addEventListener('dragleave', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadBox.classList.remove('drag-over');
+});
+
+uploadBox.addEventListener('drop', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadBox.classList.remove('drag-over');
+
+  const files = e.dataTransfer.files;
+  if (files && files.length > 0) {
+    const dt = new DataTransfer();
+    for (let i = 0; i < files.length; i++) {
+      dt.items.add(files[i]);
+    }
+    fileInput.files = dt.files;
+    showSelectedFile(files[0]);
+  }
+});
+
 updateDocIdPreview();
+setContentMode(document.getElementById('content_mode').value || 'file');
 </script>
 </body>
 </html>

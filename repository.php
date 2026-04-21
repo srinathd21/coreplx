@@ -24,6 +24,16 @@ if (!function_exists('formatDateDisplay')) {
     }
 }
 
+if (!function_exists('formatDateExport')) {
+    function formatDateExport($date) {
+        if (empty($date) || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
+            return '-';
+        }
+        $ts = strtotime((string)$date);
+        return $ts ? date('d-m-Y', $ts) : (string)$date;
+    }
+}
+
 if (!function_exists('isOverdueDate')) {
     function isOverdueDate($date) {
         if (empty($date) || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
@@ -120,6 +130,7 @@ $typeFilter = trim((string)($_GET['type'] ?? ''));
 $deptFilter = trim((string)($_GET['department'] ?? ''));
 $reviewFilter = trim((string)($_GET['review'] ?? ''));
 $viewId = (int)($_GET['view_id'] ?? 0);
+$export = trim((string)($_GET['export'] ?? ''));
 
 $types = [];
 $typeRes = mysqli_query($conn, "SELECT DISTINCT type_name FROM document_types WHERE status='active' ORDER BY type_name ASC");
@@ -127,6 +138,7 @@ if ($typeRes) {
     while ($row = mysqli_fetch_assoc($typeRes)) {
         $types[] = $row['type_name'];
     }
+    mysqli_free_result($typeRes);
 }
 
 $departments = [];
@@ -135,10 +147,11 @@ if ($deptRes) {
     while ($row = mysqli_fetch_assoc($deptRes)) {
         $departments[] = $row['department_name'];
     }
+    mysqli_free_result($deptRes);
 }
 
 $viewDocument = null;
-if ($viewId > 0) {
+if ($viewId > 0 && $export === '') {
     $viewSql = "
         SELECT
             d.id,
@@ -248,8 +261,166 @@ if ($stmt) {
         while ($row = mysqli_fetch_assoc($res)) {
             $rows[] = $row;
         }
+        mysqli_free_result($res);
     }
     mysqli_stmt_close($stmt);
+}
+
+/* ------------------ EXPORT EXCEL ------------------ */
+if ($export === 'excel') {
+    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+    header('Content-Disposition: attachment; filename=repository-export-' . date('Y-m-d-H-i-s') . '.xls');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+
+    echo '<table border="1">';
+    echo '<tr>';
+    echo '<th>Document ID</th>';
+    echo '<th>Title</th>';
+    echo '<th>Type</th>';
+    echo '<th>Version</th>';
+    echo '<th>Department</th>';
+    echo '<th>Owner</th>';
+    echo '<th>Effective Date</th>';
+    echo '<th>Next Review</th>';
+    echo '<th>Status</th>';
+    echo '</tr>';
+
+    foreach ($rows as $row) {
+        $docId = $row['document_number'] ?: ('DOC-' . (int)$row['id']);
+        $title = $row['title'] ?: ($row['topic'] ?: 'Untitled');
+        $type = $row['type_name'] ?: '-';
+        $version = $row['version_label'] ?: '-';
+        $dept = $row['department_name'] ?: '-';
+        $owner = trim((string)$row['owner_name']) !== '' ? $row['owner_name'] : '-';
+        $effectiveDate = formatDateExport($row['effective_date'] ?? '');
+        $reviewDate = formatDateExport($row['review_date'] ?? '');
+        $statusLabel = displayStatusLabel($row['current_status'] ?? '', $row['review_date'] ?? '');
+
+        echo '<tr>';
+        echo '<td>' . e($docId) . '</td>';
+        echo '<td>' . e($title) . '</td>';
+        echo '<td>' . e($type) . '</td>';
+        echo '<td>' . e($version) . '</td>';
+        echo '<td>' . e($dept) . '</td>';
+        echo '<td>' . e($owner) . '</td>';
+        echo '<td>' . e($effectiveDate) . '</td>';
+        echo '<td>' . e($reviewDate) . '</td>';
+        echo '<td>' . e($statusLabel) . '</td>';
+        echo '</tr>';
+    }
+
+    echo '</table>';
+    exit;
+}
+
+/* ------------------ EXPORT PDF ------------------ */
+if ($export === 'pdf') {
+    $fpdfPath = '';
+    if (file_exists(__DIR__ . '/lib/fpdf.php')) {
+        $fpdfPath = __DIR__ . '/lib/fpdf.php';
+    } elseif (file_exists(__DIR__ . '/libs/fpdf.php')) {
+        $fpdfPath = __DIR__ . '/libs/fpdf.php';
+    }
+
+    if ($fpdfPath !== '') {
+        require_once $fpdfPath;
+
+        class RepositoryPDF extends FPDF
+        {
+            public function Header()
+            {
+                $this->SetFont('Arial', 'B', 12);
+                $this->Cell(0, 8, 'CorePlx Quality DMS - Repository Export', 0, 1, 'C');
+                $this->SetFont('Arial', '', 9);
+                $this->Cell(0, 6, 'Generated on ' . date('d-m-Y H:i'), 0, 1, 'C');
+                $this->Ln(2);
+            }
+
+            public function Footer()
+            {
+                $this->SetY(-12);
+                $this->SetFont('Arial', '', 8);
+                $this->Cell(0, 6, 'Page ' . $this->PageNo(), 0, 0, 'C');
+            }
+        }
+
+        $pdf = new RepositoryPDF('L', 'mm', 'A4');
+        $pdf->SetMargins(8, 8, 8);
+        $pdf->AddPage();
+        $pdf->SetFont('Arial', 'B', 8);
+
+        $widths = [30, 55, 22, 15, 30, 32, 24, 24, 28];
+        $headers = ['Document ID', 'Title', 'Type', 'Ver', 'Department', 'Owner', 'Effective', 'Review', 'Status'];
+
+        foreach ($headers as $i => $header) {
+            $pdf->Cell($widths[$i], 8, $header, 1, 0, 'C');
+        }
+        $pdf->Ln();
+
+        $pdf->SetFont('Arial', '', 7);
+
+        foreach ($rows as $row) {
+            $docId = $row['document_number'] ?: ('DOC-' . (int)$row['id']);
+            $title = $row['title'] ?: ($row['topic'] ?: 'Untitled');
+            $type = $row['type_name'] ?: '-';
+            $version = $row['version_label'] ?: '-';
+            $dept = $row['department_name'] ?: '-';
+            $owner = trim((string)$row['owner_name']) !== '' ? $row['owner_name'] : '-';
+            $effectiveDate = formatDateExport($row['effective_date'] ?? '');
+            $reviewDate = formatDateExport($row['review_date'] ?? '');
+            $statusLabel = displayStatusLabel($row['current_status'] ?? '', $row['review_date'] ?? '');
+
+            $pdf->Cell($widths[0], 7, substr($docId, 0, 22), 1);
+            $pdf->Cell($widths[1], 7, substr($title, 0, 38), 1);
+            $pdf->Cell($widths[2], 7, substr($type, 0, 14), 1);
+            $pdf->Cell($widths[3], 7, substr($version, 0, 8), 1, 0, 'C');
+            $pdf->Cell($widths[4], 7, substr($dept, 0, 18), 1);
+            $pdf->Cell($widths[5], 7, substr($owner, 0, 20), 1);
+            $pdf->Cell($widths[6], 7, $effectiveDate, 1, 0, 'C');
+            $pdf->Cell($widths[7], 7, $reviewDate, 1, 0, 'C');
+            $pdf->Cell($widths[8], 7, substr($statusLabel, 0, 18), 1, 0, 'C');
+            $pdf->Ln();
+        }
+
+        $pdf->Output('I', 'repository-export-' . date('Y-m-d-H-i-s') . '.pdf');
+        exit;
+    } else {
+        header('Content-Type: text/html; charset=utf-8');
+        echo '<!doctype html><html><head><meta charset="utf-8"><title>Repository Export</title></head><body onload="window.print()">';
+        echo '<h2>CorePlx Quality DMS - Repository Export</h2>';
+        echo '<p>Generated on ' . e(date('d-m-Y H:i')) . '</p>';
+        echo '<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;">';
+        echo '<tr><th>Document ID</th><th>Title</th><th>Type</th><th>Version</th><th>Department</th><th>Owner</th><th>Effective Date</th><th>Next Review</th><th>Status</th></tr>';
+
+        foreach ($rows as $row) {
+            $docId = $row['document_number'] ?: ('DOC-' . (int)$row['id']);
+            $title = $row['title'] ?: ($row['topic'] ?: 'Untitled');
+            $type = $row['type_name'] ?: '-';
+            $version = $row['version_label'] ?: '-';
+            $dept = $row['department_name'] ?: '-';
+            $owner = trim((string)$row['owner_name']) !== '' ? $row['owner_name'] : '-';
+            $effectiveDate = formatDateExport($row['effective_date'] ?? '');
+            $reviewDate = formatDateExport($row['review_date'] ?? '');
+            $statusLabel = displayStatusLabel($row['current_status'] ?? '', $row['review_date'] ?? '');
+
+            echo '<tr>';
+            echo '<td>' . e($docId) . '</td>';
+            echo '<td>' . e($title) . '</td>';
+            echo '<td>' . e($type) . '</td>';
+            echo '<td>' . e($version) . '</td>';
+            echo '<td>' . e($dept) . '</td>';
+            echo '<td>' . e($owner) . '</td>';
+            echo '<td>' . e($effectiveDate) . '</td>';
+            echo '<td>' . e($reviewDate) . '</td>';
+            echo '<td>' . e($statusLabel) . '</td>';
+            echo '</tr>';
+        }
+
+        echo '</table>';
+        echo '</body></html>';
+        exit;
+    }
 }
 
 $totalEffective = 0;
@@ -292,6 +463,7 @@ if ($summaryRes) {
             $pendingRetirement++;
         }
     }
+    mysqli_free_result($summaryRes);
 }
 
 $filteredCount = count($rows);
@@ -300,7 +472,18 @@ $totalCountSql = "SELECT COUNT(*) AS cnt FROM documents WHERE LOWER(COALESCE(cur
 $totalCountRes = mysqli_query($conn, $totalCountSql);
 if ($totalCountRes && ($cntRow = mysqli_fetch_assoc($totalCountRes))) {
     $totalRepoCount = (int)$cntRow['cnt'];
+    mysqli_free_result($totalCountRes);
 }
+
+$baseQuery = [
+    'search' => $search,
+    'type' => $typeFilter,
+    'department' => $deptFilter,
+    'review' => $reviewFilter
+];
+
+$pdfUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['export' => 'pdf']));
+$excelUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['export' => 'excel']));
 ?>
 <!doctype html>
 <html lang="en">
@@ -420,7 +603,7 @@ if ($totalCountRes && ($cntRow = mysqli_fetch_assoc($totalCountRes))) {
 
   <div class="card cp-card mb-3">
     <div class="card-body py-3">
-      <form method="get" class="d-flex gap-2 flex-wrap align-items-end">
+      <form method="get" class="d-flex gap-2 flex-wrap align-items-end" id="repoFilterForm">
         <div>
           <label class="form-label mb-1">Search</label>
           <input type="text" class="form-control form-control-sm" name="search" value="<?php echo e($search); ?>" placeholder="Search ID or title..." style="max-width:220px;">
@@ -428,7 +611,7 @@ if ($totalCountRes && ($cntRow = mysqli_fetch_assoc($totalCountRes))) {
 
         <div>
           <label class="form-label mb-1">Type</label>
-          <select class="form-select form-select-sm" name="type" style="max-width:140px;">
+          <select class="form-select form-select-sm auto-submit-filter" name="type" style="max-width:140px;">
             <option value="">All Types</option>
             <?php foreach ($types as $type): ?>
               <option value="<?php echo e($type); ?>" <?php echo $typeFilter === $type ? 'selected' : ''; ?>>
@@ -440,7 +623,7 @@ if ($totalCountRes && ($cntRow = mysqli_fetch_assoc($totalCountRes))) {
 
         <div>
           <label class="form-label mb-1">Department</label>
-          <select class="form-select form-select-sm" name="department" style="max-width:180px;">
+          <select class="form-select form-select-sm auto-submit-filter" name="department" style="max-width:180px;">
             <option value="">All Departments</option>
             <?php foreach ($departments as $department): ?>
               <option value="<?php echo e($department); ?>" <?php echo $deptFilter === $department ? 'selected' : ''; ?>>
@@ -452,7 +635,7 @@ if ($totalCountRes && ($cntRow = mysqli_fetch_assoc($totalCountRes))) {
 
         <div>
           <label class="form-label mb-1">Review Status</label>
-          <select class="form-select form-select-sm" name="review" style="max-width:160px;">
+          <select class="form-select form-select-sm auto-submit-filter" name="review" style="max-width:160px;">
             <option value="">All</option>
             <option value="overdue" <?php echo $reviewFilter === 'overdue' ? 'selected' : ''; ?>>Overdue</option>
             <option value="current" <?php echo $reviewFilter === 'current' ? 'selected' : ''; ?>>Current</option>
@@ -461,9 +644,9 @@ if ($totalCountRes && ($cntRow = mysqli_fetch_assoc($totalCountRes))) {
 
         <div class="d-flex gap-2 ms-auto">
           <a class="btn btn-sm btn-outline-secondary" href="repository.php">Reset</a>
-          <button class="btn btn-sm btn-outline-primary" type="submit">Filter</button>
-          <button class="btn btn-sm btn-outline-primary" type="button">↓ Export PDF</button>
-          <button class="btn btn-sm btn-outline-primary" type="button">↓ Export Excel</button>
+          <button class="btn btn-sm btn-primary" type="submit">Search</button>
+          <a class="btn btn-sm btn-outline-primary" href="<?php echo e($pdfUrl); ?>" target="_blank" rel="noopener">↓ Export PDF</a>
+          <a class="btn btn-sm btn-outline-primary" href="<?php echo e($excelUrl); ?>" target="_blank" rel="noopener">↓ Export Excel</a>
         </div>
       </form>
     </div>
@@ -579,5 +762,12 @@ if ($totalCountRes && ($cntRow = mysqli_fetch_assoc($totalCountRes))) {
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.querySelectorAll('.auto-submit-filter').forEach(function(el) {
+  el.addEventListener('change', function() {
+    document.getElementById('repoFilterForm').submit();
+  });
+});
+</script>
 </body>
 </html>
