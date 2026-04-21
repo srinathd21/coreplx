@@ -20,7 +20,11 @@ if (!function_exists('tableExists')) {
     {
         $tableName = mysqli_real_escape_string($conn, $tableName);
         $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
-        return ($res && mysqli_num_rows($res) > 0);
+        $ok = ($res && mysqli_num_rows($res) > 0);
+        if ($res) {
+            mysqli_free_result($res);
+        }
+        return $ok;
     }
 }
 
@@ -30,7 +34,11 @@ if (!function_exists('columnExists')) {
         $tableName = mysqli_real_escape_string($conn, $tableName);
         $columnName = mysqli_real_escape_string($conn, $columnName);
         $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$tableName}` LIKE '{$columnName}'");
-        return ($res && mysqli_num_rows($res) > 0);
+        $ok = ($res && mysqli_num_rows($res) > 0);
+        if ($res) {
+            mysqli_free_result($res);
+        }
+        return $ok;
     }
 }
 
@@ -121,7 +129,15 @@ function status_badge(string $status): string
 function short_name(array $row): string
 {
     $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
-    return $name !== '' ? $name : (string)($row['email'] ?? 'User');
+    if ($name !== '') {
+        return $name;
+    }
+
+    if (!empty($row['full_name']) && trim((string)$row['full_name']) !== '' && (string)$row['full_name'] !== '0') {
+        return trim((string)$row['full_name']);
+    }
+
+    return (string)($row['email'] ?? 'User');
 }
 
 $hasDocumentsCreatedBy = tableExists($conn, 'documents') && columnExists($conn, 'documents', 'created_by');
@@ -136,7 +152,7 @@ $hasDocVersions = tableExists($conn, 'document_versions');
 $hasDocTypes = tableExists($conn, 'document_types');
 
 $userRow = fetch_one($conn, "
-    SELECT u.id, u.first_name, u.last_name, u.email, r.role_name
+    SELECT u.id, u.first_name, u.last_name, u.full_name, u.email, r.role_name
     FROM users u
     LEFT JOIN roles r ON r.id = u.current_role_id
     WHERE u.id = ?
@@ -146,9 +162,6 @@ $userRow = fetch_one($conn, "
 $welcomeName = $userRow ? short_name($userRow) : $currentDisplayName;
 $avatarLetter = strtoupper(substr($welcomeName, 0, 1));
 
-/* -----------------------------
-   Documents owned / created by me
------------------------------- */
 $documentsOwnedSql = "
     SELECT COUNT(*) AS cnt
     FROM documents
@@ -170,9 +183,6 @@ if ($hasDocumentsCreatedBy) {
 
 $documentsOwned = count_query($conn, $documentsOwnedSql, $documentsOwnedTypes, $documentsOwnedParams);
 
-/* -----------------------------
-   Pending approvals
------------------------------- */
 $pendingApprovals = 0;
 if ($hasWorkflowSteps) {
     $pendingApprovals = count_query($conn, "
@@ -183,9 +193,6 @@ if ($hasWorkflowSteps) {
     ", 'i', [$currentUserId]);
 }
 
-/* -----------------------------
-   Overdue reviews
------------------------------- */
 $overdueReviews = 0;
 if ($hasDocVersions) {
     $overdueReviews = count_query($conn, "
@@ -199,9 +206,6 @@ if ($hasDocVersions) {
     ");
 }
 
-/* -----------------------------
-   Unread alerts
------------------------------- */
 $unreadAlerts = 0;
 if ($hasNotifications) {
     $unreadAlerts = count_query($conn, "
@@ -212,9 +216,6 @@ if ($hasNotifications) {
     ", 'i', [$currentUserId]);
 }
 
-/* -----------------------------
-   Pending approval rows
------------------------------- */
 $pendingApprovalRows = [];
 if ($hasWorkflowSteps && $hasDocVersions) {
     $pendingApprovalRows = fetch_all($conn, "
@@ -239,10 +240,6 @@ if ($hasWorkflowSteps && $hasDocVersions) {
     ", 'i', [$currentUserId]);
 }
 
-/* -----------------------------
-   My work queue
-   FIX: include drafts created_by / updated_by / owner_user_id
------------------------------- */
 $workQueueWhere = [];
 $workQueueParams = [];
 $workQueueTypes = '';
@@ -294,7 +291,6 @@ if ($hasWorkflowSteps) {
 } else {
     $workQueueSqlTypesPrefix = '';
     $workQueueSqlParamsPrefix = [];
-    $workQueueSql .= " LEFT JOIN document_versions ws_dummy ON 1=0 ";
 }
 
 $workQueueSql .= "
@@ -310,9 +306,6 @@ $workQueue = fetch_all(
     array_merge($workQueueSqlParamsPrefix, $workQueueParams)
 );
 
-/* -----------------------------
-   Recent activity
------------------------------- */
 $recentActivity = [];
 if ($hasAuditLogs) {
     $recentActivity = fetch_all($conn, "
@@ -329,14 +322,9 @@ if ($hasAuditLogs) {
         WHERE al.performed_by = ?
            OR al.entity_type IN ('document', 'user')
         ORDER BY al.performed_at DESC, al.id DESC
-        LIMIT 8
     ", 'i', [$currentUserId]);
 }
 
-/* -----------------------------
-   Recent documents
-   FIX: prioritize my drafts / created docs
------------------------------- */
 $recentDocumentsSql = "
     SELECT
         d.document_number,
@@ -376,12 +364,26 @@ if ($hasDocumentsCreatedBy || $hasDocumentsUpdatedBy) {
 }
 
 $recentDocumentsSql .= " CASE WHEN d.current_status = 'draft' THEN 0 ELSE 1 END ASC, {$updatedAtOrderCol} DESC, d.id DESC LIMIT 6";
-
 $recentDocuments = fetch_all($conn, $recentDocumentsSql, $recentDocumentsTypes, $recentDocumentsParams);
 
-/* -----------------------------
-   Review queue count
------------------------------- */
+$searchDocuments = fetch_all($conn, "
+    SELECT
+        d.id,
+        d.document_number,
+        d.title,
+        d.topic,
+        d.current_status,
+        d.created_at,
+        dt.type_name,
+        dv.version_label,
+        dv.effective_date,
+        dv.review_date
+    FROM documents d
+    LEFT JOIN document_types dt ON dt.id = d.document_type_id
+    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+    ORDER BY d.document_number ASC, d.id DESC
+");
+
 $reviewQueueCount = 0;
 if ($hasDocVersions) {
     $reviewQueueCount = count_query($conn, "
@@ -394,9 +396,6 @@ if ($hasDocVersions) {
     ");
 }
 
-/* -----------------------------
-   Acknowledgement pending
------------------------------- */
 $ackPending = 0;
 if ($hasAckAssignments) {
     if (columnExists($conn, 'acknowledgement_assignments', 'assignment_status')) {
@@ -413,6 +412,8 @@ if ($hasAckAssignments) {
         ");
     }
 }
+
+$searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 ?>
 <!doctype html>
 <html lang="en">
@@ -422,6 +423,135 @@ if ($hasAckAssignments) {
   <title>CorePlx Quality DMS - Admin Dashboard</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
+  <style>
+    .dashboard-top-row {
+      align-items: flex-start !important;
+    }
+    .dashboard-user-card {
+      height: auto !important;
+    }
+    .dashboard-user-card .card-body {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      padding-bottom: 1.25rem !important;
+    }
+    .user-meta-grid {
+      margin-bottom: 0 !important;
+    }
+    .dashboard-hero-stack {
+      height: auto !important;
+      gap: 1rem !important;
+    }
+    .search-card .card-body {
+      padding-bottom: 1rem !important;
+    }
+    .hero-carousel {
+      min-height: 265px;
+      height: 265px !important;
+      overflow: hidden;
+    }
+    .hero-carousel .carousel-item,
+    .hero-carousel .hero-banner {
+      min-height: 265px;
+      height: 265px !important;
+    }
+    .hero-banner {
+      padding: 1.5rem !important;
+    }
+
+    .dashboard-search-wrap {
+      position: relative;
+    }
+    .dashboard-search-results {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      z-index: 1050;
+      background: #fff;
+      border: 1px solid #dbe3ef;
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.10);
+      max-height: 360px;
+      overflow-y: auto;
+      display: none;
+    }
+    .dashboard-search-results.show {
+      display: block;
+    }
+    .dashboard-search-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid #eef2f7;
+    }
+    .dashboard-search-item:last-child {
+      border-bottom: none;
+    }
+    .dashboard-search-item:hover {
+      background: #f8fbff;
+    }
+    .dashboard-search-docid {
+      font-size: 13px;
+      font-weight: 700;
+      color: #2563eb;
+      margin-bottom: 4px;
+    }
+    .dashboard-search-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 4px;
+    }
+    .dashboard-search-meta {
+      font-size: 12px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+    .dashboard-search-actions {
+      margin-top: 8px;
+    }
+    .dashboard-search-empty {
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    .activity-scroll {
+      max-height: 248px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .recent-docs-row {
+      flex-wrap: nowrap !important;
+      overflow-x: auto;
+      margin-right: 0;
+      margin-left: 0;
+      padding-bottom: 4px;
+    }
+    .recent-docs-row > [class*="col-"] {
+      flex: 0 0 190px;
+      max-width: 190px;
+      padding-right: 8px;
+      padding-left: 8px;
+    }
+    .recent-doc-box {
+      min-height: 132px;
+      padding: 12px !important;
+    }
+    .recent-doc-box .small {
+      font-size: 11px;
+    }
+    .recent-doc-box .fw-semibold {
+      font-size: 13px;
+      line-height: 1.35;
+      min-height: 34px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  </style>
 </head>
 <body>
 
@@ -434,10 +564,10 @@ if ($hasAckAssignments) {
       <p class="page-subtitle mb-0">Manage document activity, pending actions, and repository access from your workspace.</p>
     </div>
 
-    <div class="row g-3 g-xxl-4 mb-4 align-items-stretch">
+    <div class="row g-3 g-xxl-4 mb-4 dashboard-top-row">
       <div class="col-xl-3">
-        <div class="card cp-card dashboard-user-card h-100">
-          <div class="card-body p-4 d-flex flex-column">
+        <div class="card cp-card dashboard-user-card">
+          <div class="card-body p-4">
             <div class="d-flex align-items-center gap-3 mb-4">
               <div class="user-avatar"><?php echo e($avatarLetter); ?></div>
               <div>
@@ -446,7 +576,7 @@ if ($hasAckAssignments) {
               </div>
             </div>
 
-            <div class="user-meta-grid mb-4">
+            <div class="user-meta-grid">
               <a href="repository.php?filter=owned" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View all your documents">
                 <div class="user-meta-value"><?php echo (int)$documentsOwned; ?></div>
                 <div class="user-meta-label">Documents Owned</div>
@@ -469,30 +599,37 @@ if ($hasAckAssignments) {
       </div>
 
       <div class="col-xl-9">
-        <div class="dashboard-hero-stack h-100 d-flex flex-column gap-3">
+        <div class="dashboard-hero-stack d-flex flex-column">
           <div class="card cp-card search-card">
             <div class="card-body p-4">
               <div class="search-label mb-2">Global Search</div>
-              <form action="repository.php" method="get">
-                <div class="input-group input-group-lg search-group">
-                  <span class="input-group-text bg-white border-end-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
-                  </span>
-                  <input type="text" name="q" class="form-control border-start-0 ps-0" placeholder="Search documents, IDs, owners, or keywords">
-                </div>
-              </form>
+              <div class="dashboard-search-wrap">
+                <form action="javascript:void(0);" method="get" id="dashboardSearchForm" autocomplete="off">
+                  <div class="input-group input-group-lg search-group">
+                    <span class="input-group-text bg-white border-end-0">
+                      <svg xmlns="https://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
+                    </span>
+                    <input
+                      type="text"
+                      id="dashboardSearchInput"
+                      class="form-control border-start-0 ps-0"
+                      placeholder="Search documents, IDs, owners, or keywords">
+                  </div>
+                </form>
+                <div class="dashboard-search-results" id="dashboardSearchResults"></div>
+              </div>
             </div>
           </div>
 
-          <div id="dashboardCarousel" class="carousel slide h-100" data-bs-ride="carousel">
+          <div id="dashboardCarousel" class="carousel slide" data-bs-ride="carousel">
             <div class="carousel-indicators dashboard-indicators">
               <button type="button" data-bs-target="#dashboardCarousel" data-bs-slide-to="0" class="active" aria-current="true" aria-label="Slide 1"></button>
               <button type="button" data-bs-target="#dashboardCarousel" data-bs-slide-to="1" aria-label="Slide 2"></button>
               <button type="button" data-bs-target="#dashboardCarousel" data-bs-slide-to="2" aria-label="Slide 3"></button>
             </div>
-            <div class="carousel-inner hero-carousel cp-card h-100">
-              <div class="carousel-item active h-100">
-                <div class="hero-banner hero-banner-review h-100">
+            <div class="carousel-inner hero-carousel cp-card">
+              <div class="carousel-item active">
+                <div class="hero-banner hero-banner-review">
                   <div>
                     <div class="hero-eyebrow">Attention Required</div>
                     <h2 class="hero-title"><?php echo (int)$reviewQueueCount; ?> documents are due for periodic review</h2>
@@ -501,8 +638,8 @@ if ($hasAckAssignments) {
                   <a href="repository.php?filter=review_due" class="btn btn-light hero-btn">Open Review Queue</a>
                 </div>
               </div>
-              <div class="carousel-item h-100">
-                <div class="hero-banner hero-banner-policy h-100">
+              <div class="carousel-item">
+                <div class="hero-banner hero-banner-policy">
                   <div>
                     <div class="hero-eyebrow">Repository Update</div>
                     <h2 class="hero-title"><?php echo (int)$ackPending; ?> acknowledgement assignments are still pending</h2>
@@ -511,8 +648,8 @@ if ($hasAckAssignments) {
                   <a href="notifications.php" class="btn btn-light hero-btn">View Notifications</a>
                 </div>
               </div>
-              <div class="carousel-item h-100">
-                <div class="hero-banner hero-banner-search h-100">
+              <div class="carousel-item">
+                <div class="hero-banner hero-banner-search">
                   <div>
                     <div class="hero-eyebrow">Search Tip</div>
                     <h2 class="hero-title">Find documents faster with ID, owner, or keyword search</h2>
@@ -636,11 +773,12 @@ if ($hasAckAssignments) {
           </div>
         </div></div>
       </div>
+
       <div class="col-xl-4">
         <div class="card cp-card h-100"><div class="card-body p-4">
           <h2 class="card-title mb-1">Recent Activity</h2>
           <p class="card-subtitle mb-3">Latest recorded actions in your workspace.</p>
-          <div class="activity-list small">
+          <div class="activity-list small activity-scroll">
             <?php if (!empty($recentActivity)): ?>
               <?php foreach ($recentActivity as $row): ?>
                 <?php
@@ -678,14 +816,15 @@ if ($hasAckAssignments) {
             </div>
             <a href="repository.php" class="btn btn-sm btn-outline-primary">Open Repository</a>
           </div>
-          <div class="row g-3">
+
+          <div class="row g-2 recent-docs-row">
             <?php if (!empty($recentDocuments)): ?>
               <?php foreach (array_slice($recentDocuments, 0, 6) as $row): ?>
-                <div class="col-md-4">
-                  <div class="repo-box h-100">
+                <div class="col-auto">
+                  <div class="repo-box recent-doc-box h-100">
                     <div class="small text-secondary mb-2"><?php echo e($row['type_name'] ?: 'Document'); ?></div>
                     <div class="fw-semibold mb-2"><?php echo e($row['title']); ?></div>
-                    <div class="small text-secondary mb-3"><?php echo e($row['document_number']); ?></div>
+                    <div class="small text-secondary mb-2"><?php echo e($row['document_number']); ?></div>
                     <?php echo status_badge((string)($row['current_status'] ?? 'draft')); ?>
                   </div>
                 </div>
@@ -698,6 +837,7 @@ if ($hasAckAssignments) {
           </div>
         </div></div>
       </div>
+
       <div class="col-xl-4">
         <div class="card cp-card"><div class="card-body p-4">
           <h2 class="card-title mb-1">Quick Actions</h2>
@@ -724,6 +864,106 @@ if (sessionStorage.getItem('actionPanelDismissed') === '1') {
   var p = document.getElementById('actionRequiredPanel');
   if (p) p.style.display = 'none';
 }
+
+const DASHBOARD_DOCUMENTS = <?php echo $searchDocumentsJson ?: '[]'; ?>;
+const dashboardSearchInput = document.getElementById('dashboardSearchInput');
+const dashboardSearchResults = document.getElementById('dashboardSearchResults');
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatDocDate(str) {
+  if (!str) return '—';
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return str;
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function renderSearchResults(query) {
+  const q = String(query || '').trim().toLowerCase();
+
+  if (q === '') {
+    dashboardSearchResults.innerHTML = '';
+    dashboardSearchResults.classList.remove('show');
+    return;
+  }
+
+  let exactMatches = [];
+  let partialMatches = [];
+
+  DASHBOARD_DOCUMENTS.forEach(function(doc) {
+    const docNo = String(doc.document_number || '').toLowerCase();
+    const title = String(doc.title || '').toLowerCase();
+    const topic = String(doc.topic || '').toLowerCase();
+    const type = String(doc.type_name || '').toLowerCase();
+
+    if (docNo === q) {
+      exactMatches.push(doc);
+    } else if (
+      docNo.indexOf(q) !== -1 ||
+      title.indexOf(q) !== -1 ||
+      topic.indexOf(q) !== -1 ||
+      type.indexOf(q) !== -1
+    ) {
+      partialMatches.push(doc);
+    }
+  });
+
+  const matches = exactMatches.length ? exactMatches : partialMatches;
+
+  if (!matches.length) {
+    dashboardSearchResults.innerHTML = '<div class="dashboard-search-empty">No matching document found.</div>';
+    dashboardSearchResults.classList.add('show');
+    return;
+  }
+
+  dashboardSearchResults.innerHTML = matches.slice(0, 8).map(function(doc) {
+    return '' +
+      '<div class="dashboard-search-item">' +
+        '<div class="dashboard-search-docid">' + escapeHtml(doc.document_number || '') + '</div>' +
+        '<div class="dashboard-search-title">' + escapeHtml(doc.title || 'Untitled Document') + '</div>' +
+        '<div class="dashboard-search-meta">' +
+          'Type: ' + escapeHtml(doc.type_name || 'Document') + '<br>' +
+          'Version: ' + escapeHtml(doc.version_label || '—') + ' &nbsp;|&nbsp; ' +
+          'Status: ' + escapeHtml(doc.current_status || '—') + '<br>' +
+          'Effective Date: ' + escapeHtml(formatDocDate(doc.effective_date)) + ' &nbsp;|&nbsp; ' +
+          'Review Date: ' + escapeHtml(formatDocDate(doc.review_date)) +
+        '</div>' +
+        '<div class="dashboard-search-actions">' +
+          '<a href="repository.php?q=' + encodeURIComponent(doc.document_number || '') + '" class="btn btn-sm btn-outline-primary">Open in Repository</a>' +
+        '</div>' +
+      '</div>';
+  }).join('');
+
+  dashboardSearchResults.classList.add('show');
+}
+
+dashboardSearchInput.addEventListener('input', function() {
+  renderSearchResults(this.value);
+});
+
+dashboardSearchInput.addEventListener('focus', function() {
+  renderSearchResults(this.value);
+});
+
+dashboardSearchInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    renderSearchResults(this.value);
+  }
+});
+
+document.addEventListener('click', function(e) {
+  if (!dashboardSearchResults.contains(e.target) && e.target !== dashboardSearchInput) {
+    dashboardSearchResults.classList.remove('show');
+  }
+});
 </script>
 </body>
 </html>
