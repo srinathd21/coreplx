@@ -248,6 +248,20 @@ if (!function_exists('save_document_upload')) {
     }
 }
 
+if (!function_exists('build_auto_topic')) {
+    function build_auto_topic(string $typeName, string $documentNumber): string
+    {
+        $typeName = trim($typeName);
+        $documentNumber = trim($documentNumber);
+
+        if ($documentNumber !== '') {
+            return $typeName . ' ' . $documentNumber;
+        }
+
+        return $typeName . ' Draft';
+    }
+}
+
 $currentUserId = (int)($_SESSION['user_id'] ?? $_SESSION['admin_id'] ?? 0);
 $currentRoleCode = (string)($_SESSION['role_code'] ?? '');
 $currentDisplayName = (string)($_SESSION['full_name'] ?? $_SESSION['admin_name'] ?? 'Profile');
@@ -304,6 +318,7 @@ $approvers = fetch_all_assoc($conn, "
 ");
 
 $defaultTypeId = (int)($documentTypes[0]['id'] ?? 0);
+$defaultTypeName = (string)($documentTypes[0]['type_name'] ?? 'SOP');
 $defaultReviewCycle = (int)($documentTypes[0]['review_cycle_days'] ?? 365);
 
 $old = $_SESSION['create_document_old'] ?? [];
@@ -321,7 +336,7 @@ if ($creatorName === '') {
 
 $formData = [
     'document_type_id'     => (string)($old['document_type_id'] ?? $defaultTypeId),
-    'document_topic'       => (string)($old['document_topic'] ?? 'CAPA'),
+    'document_topic'       => (string)($old['document_topic'] ?? build_auto_topic($defaultTypeName, (string)($old['document_number'] ?? ''))),
     'document_number'      => (string)($old['document_number'] ?? ''),
     'department_id'        => (string)($old['department_id'] ?? ''),
     'owner_user_id'        => (string)$currentUserId,
@@ -354,7 +369,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $formData = [
         'document_type_id'     => trim((string)($_POST['document_type_id'] ?? '')),
-        'document_topic'       => trim((string)($_POST['document_topic'] ?? '')),
+        'document_topic'       => '',
         'document_number'      => trim((string)($_POST['document_number'] ?? '')),
         'department_id'        => trim((string)($_POST['department_id'] ?? '')),
         'owner_user_id'        => (string)$currentUserId,
@@ -385,8 +400,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $formData['review_date'] = date('Y-m-d', strtotime('+' . max(1, $defaultReviewCycle) . ' days'));
     }
 
-    $_SESSION['create_document_old'] = $formData;
-
     $documentTypeId = (int)$formData['document_type_id'];
     $departmentId = $formData['department_id'] !== '' ? (int)$formData['department_id'] : null;
     $ownerUserId = $currentUserId;
@@ -403,6 +416,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$docType) {
         $_SESSION['flash_error'] = 'Please select a valid document type.';
+        $_SESSION['create_document_old'] = $formData;
         redirect_back();
     }
 
@@ -410,10 +424,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $docPrefix = (string)$docType['prefix'];
     $isFormDocument = strtolower($docTypeName) === 'form';
 
-    if ($formData['document_topic'] === '') {
-        $_SESSION['flash_error'] = 'Document topic is required.';
-        redirect_back();
-    }
+    $formData['document_topic'] = build_auto_topic($docTypeName, $formData['document_number']);
+    $_SESSION['create_document_old'] = $formData;
 
     if ($formData['document_number'] === '') {
         $_SESSION['flash_error'] = 'Document number is required.';
@@ -486,7 +498,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dupRow = $dupRes ? mysqli_fetch_assoc($dupRes) : null;
             mysqli_stmt_close($dupStmt);
             if ($dupRow) {
-                throw new Exception('Document ID already exists. Please change the number/topic.');
+                throw new Exception('Document ID already exists. Please change the number.');
             }
         }
 
@@ -1058,18 +1070,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $currentTypePrefix = 'SOP';
+$currentTypeName = 'SOP';
 $currentTypeReviewCycle = 365;
 foreach ($documentTypes as $row) {
     if ((string)$row['id'] === (string)$formData['document_type_id']) {
         $currentTypePrefix = (string)$row['prefix'];
+        $currentTypeName = (string)$row['type_name'];
         $currentTypeReviewCycle = (int)$row['review_cycle_days'];
         break;
     }
 }
 
+$formData['document_topic'] = build_auto_topic($currentTypeName, $formData['document_number']);
+
 $docIdPreview = $currentTypePrefix . '-' .
     ($formData['document_number'] !== '' ? $formData['document_number'] : '104') . '-' .
-    ($formData['document_topic'] !== '' ? $formData['document_topic'] : 'CAPA') . '-01';
+    ($formData['document_topic'] !== '' ? $formData['document_topic'] : $currentTypeName . ' Draft') . '-01';
 
 $builderDraftId = $formData['draft_id'] !== '' ? $formData['draft_id'] : 'new';
 $builderUrl = 'form-builder.php?' . http_build_query([
@@ -1135,6 +1151,7 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0) ? round(((
     <input type="hidden" name="form_desc" id="form_desc_hidden" value="<?php echo e($formData['form_desc']); ?>">
     <input type="hidden" name="form_builder_json" id="form_builder_json_hidden" value="<?php echo e($formData['form_builder_json']); ?>">
     <input type="hidden" name="owner_user_id" value="<?php echo (int)$currentUserId; ?>">
+    <input type="hidden" name="document_topic" id="document_topic_hidden" value="<?php echo e($formData['document_topic']); ?>">
     <input type="hidden" name="existing_file_name" value="<?php echo e($formData['existing_file_name']); ?>">
     <input type="hidden" name="existing_file_path" value="<?php echo e($formData['existing_file_path']); ?>">
     <input type="hidden" name="existing_file_mime" value="<?php echo e($formData['existing_file_mime']); ?>">
@@ -1178,8 +1195,9 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0) ? round(((
               </div>
 
               <div class="col-md-6">
-                <label class="form-label">Document Topic</label>
-                <input class="form-control" id="docTopic" name="document_topic" value="<?php echo e($formData['document_topic']); ?>"/>
+                <label class="form-label">Document Title / Topic</label>
+                <input class="form-control readonly-field" id="document_topic_preview" type="text" readonly value="<?php echo e($formData['document_topic']); ?>">
+                <div class="form-text">This field is auto generated and cannot be edited.</div>
               </div>
 
               <div class="col-md-6">
@@ -1388,6 +1406,18 @@ function getSelectedTypeOption() {
   return document.getElementById('docTypeSelect').selectedOptions[0];
 }
 
+function buildAutoTopicJs() {
+  const opt = getSelectedTypeOption();
+  const typeName = opt ? (opt.dataset.name || 'SOP') : 'SOP';
+  const docNumber = (document.getElementById('docNumber').value || '').trim();
+
+  if (docNumber !== '') {
+    return typeName + ' ' + docNumber;
+  }
+
+  return typeName + ' Draft';
+}
+
 function handleDocTypeChange(selectEl) {
   const opt = selectEl.selectedOptions[0];
   const typeName = (opt.dataset.name || '').toLowerCase();
@@ -1447,12 +1477,14 @@ function detachForm() {
 function updateDocIdPreview() {
   const opt = getSelectedTypeOption();
   const prefix = opt ? (opt.dataset.prefix || 'SOP') : 'SOP';
+  const topic = buildAutoTopicJs();
   const number = document.getElementById('docNumber').value || '104';
-  const topic = document.getElementById('docTopic').value || 'CAPA';
+
+  document.getElementById('document_topic_hidden').value = topic;
+  document.getElementById('document_topic_preview').value = topic;
   document.getElementById('docIdPreview').textContent = prefix + '-' + number + '-' + topic + '-01';
 }
 
-document.getElementById('docTopic').addEventListener('input', updateDocIdPreview);
 document.getElementById('docNumber').addEventListener('input', updateDocIdPreview);
 
 document.getElementById('effective_date').addEventListener('change', function() {
@@ -1467,7 +1499,7 @@ document.getElementById('openBuilderBtn').addEventListener('click', function() {
     docTypeId: document.getElementById('docTypeSelect').value,
     docType: getSelectedTypeOption() ? getSelectedTypeOption().dataset.name : '',
     docNumber: document.getElementById('docNumber').value,
-    docTopic: document.getElementById('docTopic').value,
+    docTopic: document.getElementById('document_topic_hidden').value,
     returnUrl: 'create-document.php?draft_id=' + encodeURIComponent(draftId)
   };
 
