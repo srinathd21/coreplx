@@ -20,6 +20,13 @@ if (isset($_SESSION['employee_logged_in']) && $_SESSION['employee_logged_in'] ==
     exit;
 }
 
+if (!empty($_SESSION['flash_success'])) {
+    $successMessage = (string)$_SESSION['flash_success'];
+    unset($_SESSION['flash_success']);
+} else {
+    $successMessage = '';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $password = trim($_POST['password'] ?? '');
@@ -187,6 +194,12 @@ body{
         <p class="text-muted mb-0">Access assigned documents and complete acknowledgements.</p>
     </div>
 
+    <?php if ($successMessage !== ''): ?>
+        <div class="alert alert-success py-2 mb-3">
+            <?php echo e($successMessage); ?>
+        </div>
+    <?php endif; ?>
+
     <?php if ($errorMessage !== ''): ?>
         <div class="alert alert-danger py-2 mb-3">
             <?php echo e($errorMessage); ?>
@@ -207,7 +220,7 @@ body{
         <button type="submit" class="btn btn-primary w-100 mb-3">Login</button>
 
         <div class="text-center footer-help">
-            <a href="#" class="d-block mb-2">Forgot Password?</a>
+            <a href="forgot-password-employee.php" class="d-block mb-2">Forgot Password?</a>
             <span>Need help? <a href="mailto:admin@company.com">Contact Admin</a></span>
         </div>
     </form>
