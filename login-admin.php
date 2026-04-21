@@ -9,13 +9,15 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 mysqli_set_charset($conn, 'utf8mb4');
 
 if (!function_exists('e')) {
-    function e($value) {
+    function e($value)
+    {
         return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
     }
 }
 
 if (!function_exists('generate_uuid_v4')) {
-    function generate_uuid_v4() {
+    function generate_uuid_v4()
+    {
         $data = random_bytes(16);
         $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
         $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
@@ -23,9 +25,26 @@ if (!function_exists('generate_uuid_v4')) {
     }
 }
 
+if (!function_exists('table_exists')) {
+    function table_exists(mysqli $conn, string $table): bool
+    {
+        $table = mysqli_real_escape_string($conn, $table);
+        $res = mysqli_query($conn, "SHOW TABLES LIKE '{$table}'");
+        $ok = ($res && mysqli_num_rows($res) > 0);
+        if ($res) {
+            mysqli_free_result($res);
+        }
+        return $ok;
+    }
+}
+
 if (!function_exists('write_audit_log')) {
     function write_audit_log(mysqli $conn, string $entityType, $entityId, string $action, $oldValue, $newValue, $performedBy, string $remarks = ''): void
     {
+        if (!table_exists($conn, 'audit_logs')) {
+            return;
+        }
+
         $eventId = generate_uuid_v4();
         $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
         $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
@@ -63,11 +82,16 @@ if (!function_exists('write_audit_log')) {
 if (!function_exists('write_login_attempt')) {
     function write_login_attempt(mysqli $conn, string $email, ?int $userId, string $status, string $ipAddress, string $userAgent, ?string $reason = null): void
     {
+        if (!table_exists($conn, 'login_attempts')) {
+            return;
+        }
+
         $stmt = mysqli_prepare($conn, "
             INSERT INTO login_attempts
             (email, portal_type, user_id, attempt_status, ip_address, user_agent, failure_reason)
             VALUES (?, 'admin', ?, ?, ?, ?, ?)
         ");
+
         if ($stmt) {
             mysqli_stmt_bind_param($stmt, "sissss", $email, $userId, $status, $ipAddress, $userAgent, $reason);
             mysqli_stmt_execute($stmt);
@@ -77,7 +101,13 @@ if (!function_exists('write_login_attempt')) {
 }
 
 $errorMessage = '';
+$successMessage = '';
 $email = '';
+
+if (!empty($_SESSION['flash_success'])) {
+    $successMessage = (string)$_SESSION['flash_success'];
+    unset($_SESSION['flash_success']);
+}
 
 if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
     header('Location: dashboard-admin.php');
@@ -85,8 +115,8 @@ if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = trim($_POST['email'] ?? '');
-    $password = trim($_POST['password'] ?? '');
+    $email = trim((string)($_POST['email'] ?? ''));
+    $password = trim((string)($_POST['password'] ?? ''));
 
     $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
     $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
@@ -173,7 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $userId,
                         'Admin login blocked because the account is locked.'
                     );
-                } elseif ($user['status'] !== 'active') {
+                } elseif ((string)$user['status'] !== 'active') {
                     $errorMessage = 'Your account is not active.';
 
                     write_login_attempt($conn, $email, $userId, 'blocked', $ipAddress, $userAgent, 'Account status is ' . $user['status']);
@@ -223,9 +253,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             mysqli_stmt_close($updateStmt);
                         }
 
-                        $displayName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+                        $displayName = trim((string)($user['first_name'] ?? '') . ' ' . (string)($user['last_name'] ?? ''));
                         if ($displayName === '') {
-                            $displayName = $user['email'];
+                            $displayName = (string)$user['email'];
                         }
 
                         $_SESSION['admin_logged_in'] = true;
@@ -243,16 +273,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $sessionToken = bin2hex(random_bytes(32));
                         $_SESSION['session_token'] = $sessionToken;
 
-                        $sessionSql = "
-                            INSERT INTO user_sessions
-                            (user_id, session_token, portal_type, ip_address, user_agent, expires_at, last_activity_at)
-                            VALUES (?, ?, 'admin', ?, ?, DATE_ADD(NOW(), INTERVAL 1 DAY), NOW())
-                        ";
-                        $sessionStmt = mysqli_prepare($conn, $sessionSql);
-                        if ($sessionStmt) {
-                            mysqli_stmt_bind_param($sessionStmt, "isss", $userId, $sessionToken, $ipAddress, $userAgent);
-                            mysqli_stmt_execute($sessionStmt);
-                            mysqli_stmt_close($sessionStmt);
+                        if (table_exists($conn, 'user_sessions')) {
+                            $sessionSql = "
+                                INSERT INTO user_sessions
+                                (user_id, session_token, portal_type, ip_address, user_agent, expires_at, last_activity_at)
+                                VALUES (?, ?, 'admin', ?, ?, DATE_ADD(NOW(), INTERVAL 1 DAY), NOW())
+                            ";
+                            $sessionStmt = mysqli_prepare($conn, $sessionSql);
+                            if ($sessionStmt) {
+                                mysqli_stmt_bind_param($sessionStmt, "isss", $userId, $sessionToken, $ipAddress, $userAgent);
+                                mysqli_stmt_execute($sessionStmt);
+                                mysqli_stmt_close($sessionStmt);
+                            }
                         }
 
                         write_login_attempt($conn, $email, $userId, 'success', $ipAddress, $userAgent, null);
@@ -333,7 +365,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ['failed_login_attempts' => $failedAttempts],
                                 ['failed_login_attempts' => $newFailedAttempts, 'portal' => 'admin'],
                                 $userId,
-                                'Admin login failed بسبب wrong password.'
+                                'Admin login failed because of wrong password.'
                             );
                         }
                     }
@@ -381,6 +413,12 @@ body{
         <p class="text-muted mb-0">Manage documents, workflow, and system access.</p>
     </div>
 
+    <?php if ($successMessage !== ''): ?>
+        <div class="alert alert-success py-2 mb-3">
+            <?php echo e($successMessage); ?>
+        </div>
+    <?php endif; ?>
+
     <?php if ($errorMessage !== ''): ?>
         <div class="alert alert-danger py-2 mb-3">
             <?php echo e($errorMessage); ?>
@@ -401,7 +439,7 @@ body{
         <button type="submit" class="btn btn-primary w-100 mb-3">Login</button>
 
         <div class="text-center footer-help">
-            <a href="#" class="d-block mb-2">Forgot Password?</a>
+            <a href="forgot-password.php" class="d-block mb-2">Forgot Password?</a>
             <span>Need help? <a href="mailto:support@coreplx.com">Contact Support</a></span>
         </div>
     </form>
