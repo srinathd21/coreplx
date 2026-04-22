@@ -849,42 +849,7 @@ $formResponsesJson = json_encode($parsedContent['form_responses'], JSON_UNESCAPE
 </head>
 <body>
 
-<nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
-  <div class="container-fluid px-4 px-xxl-5">
-    <a class="navbar-brand fw-bold" href="dashboard-admin.php">CorePlx Quality DMS</a>
-    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="topNav">
-      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
-        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.php">Dashboard</a></li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="create-document.php">Create Document</a></li>
-            <li><a class="dropdown-item active" href="update-document.php">Update Document</a></li>
-            <li><a class="dropdown-item" href="retire-document.php">Retire Document</a></li>
-            <li><a class="dropdown-item" href="repository.php">Repository</a></li>
-          </ul>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="audit-trail.php">Audit Trail</a></li>
-            <li><a class="dropdown-item" href="document-assignment.php">Document Assignment</a></li>
-            <li><a class="dropdown-item" href="user-management.php">User Management</a></li>
-          </ul>
-        </li>
-        <li class="nav-item"><a class="nav-link" href="portal-select.php">Switch to User</a></li>
-      </ul>
-      <div class="d-flex align-items-center gap-3 ms-xl-3">
-        <span class="navbar-text small"><?php echo e($roleName ?: 'QA Admin'); ?></span>
-        <a class="nav-link px-0" href="notifications.php">Notifications</a>
-        <span class="navbar-text small"><?php echo e($displayName ?: 'Profile'); ?></span>
-      </div>
-    </div>
-  </div>
-</nav>
+<?php include('includes/navbar.php'); ?>
 
 <main class="app-shell">
 <div class="content-wrap px-4 py-4 mx-auto">
