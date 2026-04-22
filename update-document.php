@@ -318,6 +318,7 @@ $listSql = "
         d.topic,
         d.current_status,
         d.owner_user_id,
+        d.created_by,
         d.current_version_id,
         d.document_type_id,
         d.department_id,
@@ -330,13 +331,14 @@ $listSql = "
     LEFT JOIN document_types dt ON dt.id = d.document_type_id
     LEFT JOIN document_versions dv ON dv.id = d.current_version_id
     WHERE d.current_status IN ('draft','pending_approval','effective')
+      AND d.created_by = ?
 ";
-$listTypes = '';
-$listParams = [];
+$listTypes = 'i';
+$listParams = [$userId];
 
 if ($filterId !== '') {
     $listSql .= " AND (d.document_number LIKE ? OR d.id = ?)";
-    $listTypes = 'si';
+    $listTypes .= 'si';
     $listParams[] = '%' . $filterId . '%';
     $listParams[] = (int)$filterId;
 }
@@ -345,9 +347,7 @@ $listSql .= " ORDER BY dt.type_name ASC, d.id DESC";
 
 $listStmt = mysqli_prepare($conn, $listSql);
 if ($listStmt) {
-    if ($listTypes !== '') {
-        mysqli_stmt_bind_param($listStmt, $listTypes, ...$listParams);
-    }
+    mysqli_stmt_bind_param($listStmt, $listTypes, ...$listParams);
     mysqli_stmt_execute($listStmt);
     $listRes = mysqli_stmt_get_result($listStmt);
     if ($listRes) {
@@ -357,7 +357,6 @@ if ($listStmt) {
     }
     mysqli_stmt_close($listStmt);
 }
-
 $documentsByType = [];
 foreach ($documentList as $doc) {
     $typeName = (string)($doc['type_name'] ?? 'Other');
@@ -423,41 +422,42 @@ $badgeLabel = 'Under Review';
 
 if ($selectedDocumentId > 0) {
     $detailSql = "
-        SELECT
-            d.*,
-            dt.type_name,
-            dt.prefix,
-            dv.id AS version_id,
-            dv.version_label,
-            dv.version_sequence,
-            dv.title_snapshot,
-            dv.topic_snapshot,
-            dv.owner_user_id AS version_owner_user_id,
-            dv.change_summary,
-            dv.effective_date,
-            dv.review_date,
-            dv.status AS version_status,
-            dv.content_text,
-            dv.content_format,
-            dv.primary_file_name,
-            dv.primary_file_path,
-            dv.primary_file_mime,
-            dv.primary_file_size,
-            dv.checksum_sha256
-        FROM documents d
-        LEFT JOIN document_types dt ON dt.id = d.document_type_id
-        LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-        WHERE d.id = ?
-        LIMIT 1
-    ";
-    $detailStmt = mysqli_prepare($conn, $detailSql);
-    if ($detailStmt) {
-        mysqli_stmt_bind_param($detailStmt, "i", $selectedDocumentId);
-        mysqli_stmt_execute($detailStmt);
-        $detailRes = mysqli_stmt_get_result($detailStmt);
-        $selectedDocument = ($detailRes && mysqli_num_rows($detailRes) > 0) ? mysqli_fetch_assoc($detailRes) : null;
-        mysqli_stmt_close($detailStmt);
-    }
+    SELECT
+        d.*,
+        dt.type_name,
+        dt.prefix,
+        dv.id AS version_id,
+        dv.version_label,
+        dv.version_sequence,
+        dv.title_snapshot,
+        dv.topic_snapshot,
+        dv.owner_user_id AS version_owner_user_id,
+        dv.change_summary,
+        dv.effective_date,
+        dv.review_date,
+        dv.status AS version_status,
+        dv.content_text,
+        dv.content_format,
+        dv.primary_file_name,
+        dv.primary_file_path,
+        dv.primary_file_mime,
+        dv.primary_file_size,
+        dv.checksum_sha256
+    FROM documents d
+    LEFT JOIN document_types dt ON dt.id = d.document_type_id
+    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+    WHERE d.id = ?
+      AND d.created_by = ?
+    LIMIT 1
+";
+$detailStmt = mysqli_prepare($conn, $detailSql);
+if ($detailStmt) {
+    mysqli_stmt_bind_param($detailStmt, "ii", $selectedDocumentId, $userId);
+    mysqli_stmt_execute($detailStmt);
+    $detailRes = mysqli_stmt_get_result($detailStmt);
+    $selectedDocument = ($detailRes && mysqli_num_rows($detailRes) > 0) ? mysqli_fetch_assoc($detailRes) : null;
+    mysqli_stmt_close($detailStmt);
+}
 
     if ($selectedDocument) {
         $currentVersionId = (int)($selectedDocument['version_id'] ?? 0);
