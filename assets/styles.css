@@ -397,18 +397,75 @@ body{
   background:#fff;
   transition:.2s ease;
 }
-.portal-option:hover{
-  transform:translateY(-2px);
-  background:#f9fbff;
-  border-color:#cbd7eb;
+/* Portal options base styles */
+.portal-option {
+  display: block;
+  text-decoration: none;
+  border: 1px solid var(--cp-line);
+  border-radius: 1.1rem;
+  padding: 1.5rem 1.3rem;
+  background: #fff;
+  transition: all 0.2s ease;
+  color: var(--cp-text);
 }
-.portal-option.primary{
-  background:var(--cp-navy);
-  border-color:var(--cp-navy);
-  color:#fff;
+
+/* Portal option text-muted */
+.portal-option .text-muted {
+  color: var(--cp-muted);
+  transition: color 0.2s ease;
 }
-.portal-option.primary small{
-  color:#d8e4ff !important;
+
+/* Admin portal - primary style (navy background) */
+.portal-option.primary {
+  background: var(--cp-navy);
+  border-color: var(--cp-navy);
+  color: #fff;
+}
+
+.portal-option.primary small {
+  color: #d8e4ff !important;
+}
+
+.portal-option.primary .text-muted {
+  color: #d8e4ff !important;
+}
+
+/* Admin - NO hover effect (stays the same) */
+.portal-option.primary:hover {
+  transform: none;
+  background: var(--cp-navy);
+  border-color: var(--cp-navy);
+  color: #fff;
+}
+
+.portal-option.primary:hover small,
+.portal-option.primary:hover .text-muted {
+  color: #d8e4ff !important;
+}
+
+/* Employee hover - becomes navy */
+.portal-option:not(.primary):hover {
+  transform: translateY(-2px);
+  background: var(--cp-navy);
+  border-color: var(--cp-navy);
+  color: white !important;
+}
+
+.portal-option:not(.primary):hover .text-muted,
+.portal-option:not(.primary):hover small {
+  color: #d8e4ff !important;
+}
+
+/* When hovering over Employee, change Admin's text to gray */
+.portal-card .row:hover .portal-option.primary small,
+.portal-card .row:hover .portal-option.primary .text-muted {
+  color: var(--cp-muted) !important;
+}
+
+/* But keep Admin's text color when hovering directly over Admin */
+.portal-option.primary:hover small,
+.portal-option.primary:hover .text-muted {
+  color: #d8e4ff !important;
 }
 .login-card{
   width:100%;

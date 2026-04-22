@@ -182,4 +182,62 @@ session_destroy();
     </div>
   </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const employeeOption = document.querySelector('.portal-option:not(.primary)');
+    const adminOption = document.querySelector('.portal-option.primary');
+    const container = document.querySelector('.portal-card .row');
+    
+    if (employeeOption && adminOption) {
+        // When hovering over Employee
+        employeeOption.addEventListener('mouseenter', function() {
+            adminOption.style.background = '#fff';
+            adminOption.style.borderColor = 'var(--cp-line)';
+            adminOption.style.color = 'var(--cp-text)';
+            const adminSmall = adminOption.querySelector('small, .text-muted');
+            if (adminSmall) adminSmall.style.color = 'var(--cp-muted)';
+            
+            this.style.background = 'var(--cp-navy)';
+            this.style.borderColor = 'var(--cp-navy)';
+            this.style.color = '#fff';
+            const empSmall = this.querySelector('small, .text-muted');
+            if (empSmall) empSmall.style.color = '#d8e4ff';
+        });
+        
+        // When hovering over Admin
+        adminOption.addEventListener('mouseenter', function() {
+            employeeOption.style.background = '#fff';
+            employeeOption.style.borderColor = 'var(--cp-line)';
+            employeeOption.style.color = 'var(--cp-text)';
+            const empSmall = employeeOption.querySelector('small, .text-muted');
+            if (empSmall) empSmall.style.color = 'var(--cp-muted)';
+            
+            this.style.background = 'var(--cp-navy)';
+            this.style.borderColor = 'var(--cp-navy)';
+            this.style.color = '#fff';
+            const adminSmall = this.querySelector('small, .text-muted');
+            if (adminSmall) adminSmall.style.color = '#d8e4ff';
+        });
+        
+        // Reset on mouse leave
+        const resetStyles = function() {
+            // Reset Employee
+            employeeOption.style.background = '';
+            employeeOption.style.borderColor = '';
+            employeeOption.style.color = '';
+            const empSmall = employeeOption.querySelector('small, .text-muted');
+            if (empSmall) empSmall.style.color = '';
+            
+            // Reset Admin to primary
+            adminOption.style.background = '';
+            adminOption.style.borderColor = '';
+            adminOption.style.color = '';
+            const adminSmall = adminOption.querySelector('small, .text-muted');
+            if (adminSmall) adminSmall.style.color = '';
+        };
+        
+        container.addEventListener('mouseleave', resetStyles);
+    }
+});
+</script>
 </body></html>
