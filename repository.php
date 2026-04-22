@@ -118,6 +118,28 @@ if (!function_exists('formatFormResponseLabel')) {
     }
 }
 
+if (!function_exists('getFileExtensionSafe')) {
+    function getFileExtensionSafe($path) {
+        $path = (string)$path;
+        $cleanPath = strtok($path, '?');
+        return strtolower(pathinfo($cleanPath, PATHINFO_EXTENSION));
+    }
+}
+
+if (!function_exists('canPreviewInline')) {
+    function canPreviewInline($path) {
+        $ext = getFileExtensionSafe($path);
+        return in_array($ext, ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true);
+    }
+}
+
+if (!function_exists('isImageFile')) {
+    function isImageFile($path) {
+        $ext = getFileExtensionSafe($path);
+        return in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true);
+    }
+}
+
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login-admin.php');
     exit;
@@ -592,6 +614,27 @@ $excelUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['expor
       font-size: 14px;
       color: #1f2937;
     }
+    .repo-file-preview-wrap {
+      background: #f8f9fb;
+      border: 1px solid #dde3ec;
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .repo-file-preview-frame {
+      width: 100%;
+      height: 560px;
+      border: 1px solid #dde3ec;
+      border-radius: 10px;
+      background: #fff;
+    }
+    .repo-file-preview-image {
+      width: 100%;
+      max-height: 560px;
+      object-fit: contain;
+      border: 1px solid #dde3ec;
+      border-radius: 10px;
+      background: #fff;
+    }
     .modal-lg-custom {
       max-width: 950px;
     }
@@ -822,6 +865,11 @@ $excelUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['expor
     $modalStatusLabel = displayStatusLabel($viewDocument['current_status'] ?? '', $viewDocument['review_date'] ?? '');
     $modalStatusClass = statusBadgeClass($viewDocument['current_status'] ?? '', $viewDocument['review_date'] ?? '');
     $modalOwner = trim((string)$viewDocument['owner_name']) !== '' ? $viewDocument['owner_name'] : '—';
+    $filePath = trim((string)($viewDocument['primary_file_path'] ?? ''));
+    $fileName = trim((string)($viewDocument['primary_file_name'] ?? ''));
+    $fileExt = getFileExtensionSafe($filePath);
+    $canInlinePreview = $filePath !== '' && canPreviewInline($filePath);
+    $isImagePreview = $filePath !== '' && isImageFile($filePath);
 ?>
 <div class="modal fade" id="documentViewModal" tabindex="-1" aria-labelledby="documentViewModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg-custom">
@@ -938,17 +986,40 @@ $excelUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['expor
               <pre class="repo-json-pre"><?php echo e($viewDocument['content_text']); ?></pre>
             </div>
           </div>
-        <?php elseif (!empty($viewDocument['primary_file_name'])): ?>
+        <?php endif; ?>
+
+        <?php if ($filePath !== ''): ?>
           <div class="mb-3">
             <label class="form-label fw-semibold">Attached File</label>
-            <div class="repo-purpose-box">
-              <div class="mb-2"><strong><?php echo e($viewDocument['primary_file_name']); ?></strong></div>
-              <?php if (!empty($viewDocument['primary_file_path'])): ?>
-                <a class="btn btn-sm btn-outline-primary" href="<?php echo e($viewDocument['primary_file_path']); ?>" target="_blank">Open File</a>
+            <div class="repo-file-preview-wrap">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <div>
+                  <strong><?php echo e($fileName !== '' ? $fileName : basename($filePath)); ?></strong>
+                  <div class="small text-secondary"><?php echo e(strtoupper($fileExt !== '' ? $fileExt : 'FILE')); ?> file preview</div>
+                </div>
+                <a class="btn btn-sm btn-outline-primary" href="<?php echo e($filePath); ?>" target="_blank">Open File</a>
+              </div>
+
+              <?php if ($canInlinePreview): ?>
+                <?php if ($isImagePreview): ?>
+                  <img src="<?php echo e($filePath); ?>" alt="<?php echo e($fileName); ?>" class="repo-file-preview-image">
+                <?php else: ?>
+                  <iframe src="<?php echo e($filePath); ?>" class="repo-file-preview-frame"></iframe>
+                <?php endif; ?>
+              <?php else: ?>
+                <div class="repo-purpose-box">
+                  Inline preview is not available for this file type.
+                  <?php if ($fileName !== ''): ?>
+                    <div class="mt-2"><strong><?php echo e($fileName); ?></strong></div>
+                  <?php endif; ?>
+                  <div class="mt-2">
+                    <a class="btn btn-sm btn-outline-primary" href="<?php echo e($filePath); ?>" target="_blank">Open File</a>
+                  </div>
+                </div>
               <?php endif; ?>
             </div>
           </div>
-        <?php else: ?>
+        <?php elseif (empty($viewDocument['content_text'])): ?>
           <div class="repo-purpose-box">No document content available.</div>
         <?php endif; ?>
       </div>
