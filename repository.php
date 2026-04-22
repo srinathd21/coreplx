@@ -84,6 +84,40 @@ if (!function_exists('displayStatusLabel')) {
     }
 }
 
+if (!function_exists('parseDocumentContent')) {
+    function parseDocumentContent($contentText) {
+        $result = [
+            'is_json_form'   => false,
+            'purpose_scope'  => '',
+            'form_responses' => [],
+            'raw_text'       => trim((string)$contentText),
+        ];
+
+        if (trim((string)$contentText) === '') {
+            return $result;
+        }
+
+        $decoded = json_decode((string)$contentText, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            if (array_key_exists('purpose_scope', $decoded) || array_key_exists('form_responses', $decoded)) {
+                $result['is_json_form'] = true;
+                $result['purpose_scope'] = trim((string)($decoded['purpose_scope'] ?? ''));
+                $result['form_responses'] = is_array($decoded['form_responses'] ?? null) ? $decoded['form_responses'] : [];
+            }
+        }
+
+        return $result;
+    }
+}
+
+if (!function_exists('formatFormResponseLabel')) {
+    function formatFormResponseLabel($key) {
+        $key = (string)$key;
+        if ($key === '') return 'Field';
+        return ucwords(str_replace(['_', '-'], ' ', $key));
+    }
+}
+
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login-admin.php');
     exit;
@@ -151,6 +185,8 @@ if ($deptRes) {
 }
 
 $viewDocument = null;
+$viewParsedContent = null;
+
 if ($viewId > 0 && $export === '') {
     $viewSql = "
         SELECT
@@ -183,6 +219,10 @@ if ($viewId > 0 && $export === '') {
         $viewRes = mysqli_stmt_get_result($viewStmt);
         $viewDocument = ($viewRes && mysqli_num_rows($viewRes) > 0) ? mysqli_fetch_assoc($viewRes) : null;
         mysqli_stmt_close($viewStmt);
+
+        if ($viewDocument) {
+            $viewParsedContent = parseDocumentContent($viewDocument['content_text'] ?? '');
+        }
     }
 }
 
@@ -200,6 +240,7 @@ $sql = "
         dv.review_date,
         dv.primary_file_name,
         dv.primary_file_path,
+        dv.content_text,
         CONCAT(COALESCE(owner.first_name,''), ' ', COALESCE(owner.last_name,'')) AS owner_name
     FROM documents d
     LEFT JOIN document_types dt ON dt.id = d.document_type_id
@@ -493,15 +534,66 @@ $excelUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['expor
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
   <style>
-    .view-card pre {
+    .table td, .table th {
+      vertical-align: middle;
+    }
+    .repo-modal-label {
+      font-size: 12px;
+      color: #6b7280;
+      font-weight: 600;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: .3px;
+    }
+    .repo-modal-value {
+      font-size: 14px;
+      color: #1f2937;
+      font-weight: 500;
+    }
+    .repo-modal-box {
+      background: #f8f9fb;
+      border: 1px solid #dde3ec;
+      border-radius: 10px;
+      padding: 14px;
+      height: 100%;
+    }
+    .repo-purpose-box {
+      background: #f8f9fb;
+      border: 1px solid #dde3ec;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 14px;
+      color: #1f2937;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .repo-form-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .repo-form-table th,
+    .repo-form-table td {
+      border: 1px solid #e5e7eb;
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+    .repo-form-table th {
+      width: 30%;
+      background: #eef3fb;
+      color: #0D2144;
+      font-weight: 700;
+    }
+    .repo-json-pre {
       white-space: pre-wrap;
       word-wrap: break-word;
       margin: 0;
       font-family: inherit;
       font-size: 14px;
+      color: #1f2937;
     }
-    .table td, .table th {
-      vertical-align: middle;
+    .modal-lg-custom {
+      max-width: 950px;
     }
   </style>
 </head>
@@ -652,45 +744,6 @@ $excelUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['expor
     </div>
   </div>
 
-  <?php if ($viewDocument): ?>
-    <div class="card cp-card mb-3 view-card">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-          <div>
-            <h2 class="card-title mb-1">Document View</h2>
-            <p class="card-subtitle mb-0">
-              <?php echo e($viewDocument['document_number']); ?> - <?php echo e($viewDocument['title'] ?: ($viewDocument['topic'] ?: 'Untitled')); ?>
-            </p>
-          </div>
-          <a href="repository.php" class="btn btn-outline-secondary">Close View</a>
-        </div>
-
-        <div class="row g-3 mb-3">
-          <div class="col-md-3"><strong>Type:</strong> <?php echo e($viewDocument['type_name'] ?: '—'); ?></div>
-          <div class="col-md-3"><strong>Version:</strong> <?php echo e($viewDocument['version_label'] ?: '—'); ?></div>
-          <div class="col-md-3"><strong>Department:</strong> <?php echo e($viewDocument['department_name'] ?: '—'); ?></div>
-          <div class="col-md-3"><strong>Owner:</strong> <?php echo e(trim((string)$viewDocument['owner_name']) !== '' ? $viewDocument['owner_name'] : '—'); ?></div>
-          <div class="col-md-3"><strong>Effective Date:</strong> <?php echo e(formatDateDisplay($viewDocument['effective_date'] ?? '')); ?></div>
-          <div class="col-md-3"><strong>Next Review:</strong> <?php echo e(formatDateDisplay($viewDocument['review_date'] ?? '')); ?></div>
-          <div class="col-md-3"><strong>Status:</strong> <?php echo e(displayStatusLabel($viewDocument['current_status'] ?? '', $viewDocument['review_date'] ?? '')); ?></div>
-        </div>
-
-        <div class="border rounded p-3 bg-light">
-          <?php if (!empty($viewDocument['content_text'])): ?>
-            <pre><?php echo e($viewDocument['content_text']); ?></pre>
-          <?php elseif (!empty($viewDocument['primary_file_name'])): ?>
-            <div class="text-secondary">
-              No text content available. Attached file:
-              <strong><?php echo e($viewDocument['primary_file_name']); ?></strong>
-            </div>
-          <?php else: ?>
-            <div class="text-secondary">No document content available.</div>
-          <?php endif; ?>
-        </div>
-      </div>
-    </div>
-  <?php endif; ?>
-
   <div class="card cp-card" style="padding:0;">
     <table class="table mb-0" id="repoTable">
       <thead>
@@ -725,6 +778,7 @@ $excelUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['expor
               $statusLabel = displayStatusLabel($row['current_status'] ?? '', $row['review_date'] ?? '');
               $statusClass = statusBadgeClass($row['current_status'] ?? '', $row['review_date'] ?? '');
               $pdfLink = !empty($row['primary_file_path']) ? $row['primary_file_path'] : ('repository.php?view_id=' . $docId);
+              $viewUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['view_id' => $docId]));
             ?>
             <tr>
               <td class="fw-semibold" style="color:#2563eb;font-size:13px;"><?php echo e($docNumber); ?></td>
@@ -737,7 +791,7 @@ $excelUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['expor
               <td style="font-size:12px;<?php echo e($reviewStyle); ?>"><?php echo e($reviewDate); ?></td>
               <td><span class="<?php echo e($statusClass); ?>"><?php echo e($statusLabel); ?></span></td>
               <td style="white-space:nowrap;">
-                <a class="btn btn-sm btn-outline-primary" style="height:28px;padding:0 10px;font-size:12px;" href="repository.php?view_id=<?php echo $docId; ?>">View</a>
+                <a class="btn btn-sm btn-outline-primary" style="height:28px;padding:0 10px;font-size:12px;" href="<?php echo e($viewUrl); ?>">View</a>
                 <a class="btn btn-sm btn-outline-secondary" style="height:28px;padding:0 10px;font-size:12px;" href="<?php echo e($pdfLink); ?>" target="_blank">↓ PDF</a>
               </td>
             </tr>
@@ -761,6 +815,152 @@ $excelUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['expor
 </div>
 </main>
 
+<?php if ($viewDocument): ?>
+<?php
+    $modalDocNumber = $viewDocument['document_number'] ?: ('DOC-' . (int)$viewDocument['id']);
+    $modalTitle = $viewDocument['title'] ?: ($viewDocument['topic'] ?: 'Untitled');
+    $modalStatusLabel = displayStatusLabel($viewDocument['current_status'] ?? '', $viewDocument['review_date'] ?? '');
+    $modalStatusClass = statusBadgeClass($viewDocument['current_status'] ?? '', $viewDocument['review_date'] ?? '');
+    $modalOwner = trim((string)$viewDocument['owner_name']) !== '' ? $viewDocument['owner_name'] : '—';
+?>
+<div class="modal fade" id="documentViewModal" tabindex="-1" aria-labelledby="documentViewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg-custom">
+    <div class="modal-content" style="border:none;border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:#f8fbff;border-bottom:1px solid #e8edf3;">
+        <div>
+          <h5 class="modal-title fw-bold mb-1" id="documentViewModalLabel">Document View</h5>
+          <div class="small text-secondary"><?php echo e($modalDocNumber); ?> - <?php echo e($modalTitle); ?></div>
+        </div>
+        <a href="repository.php?<?php echo e(http_build_query($baseQuery)); ?>" class="btn-close"></a>
+      </div>
+
+      <div class="modal-body p-4">
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <div class="repo-modal-box">
+              <div class="repo-modal-label">Type</div>
+              <div class="repo-modal-value"><?php echo e($viewDocument['type_name'] ?: '—'); ?></div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="repo-modal-box">
+              <div class="repo-modal-label">Version</div>
+              <div class="repo-modal-value"><?php echo e($viewDocument['version_label'] ?: '—'); ?></div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="repo-modal-box">
+              <div class="repo-modal-label">Status</div>
+              <div class="repo-modal-value"><span class="<?php echo e($modalStatusClass); ?>"><?php echo e($modalStatusLabel); ?></span></div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="repo-modal-box">
+              <div class="repo-modal-label">Department</div>
+              <div class="repo-modal-value"><?php echo e($viewDocument['department_name'] ?: '—'); ?></div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="repo-modal-box">
+              <div class="repo-modal-label">Owner</div>
+              <div class="repo-modal-value"><?php echo e($modalOwner); ?></div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="repo-modal-box">
+              <div class="repo-modal-label">Effective Date</div>
+              <div class="repo-modal-value"><?php echo e(formatDateDisplay($viewDocument['effective_date'] ?? '')); ?></div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="repo-modal-box">
+              <div class="repo-modal-label">Next Review</div>
+              <div class="repo-modal-value"><?php echo e(formatDateDisplay($viewDocument['review_date'] ?? '')); ?></div>
+            </div>
+          </div>
+
+          <div class="col-md-8">
+            <div class="repo-modal-box">
+              <div class="repo-modal-label">Title</div>
+              <div class="repo-modal-value"><?php echo e($modalTitle); ?></div>
+            </div>
+          </div>
+        </div>
+
+        <?php if ($viewParsedContent && $viewParsedContent['is_json_form']): ?>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Purpose & Scope</label>
+            <div class="repo-purpose-box">
+              <?php echo $viewParsedContent['purpose_scope'] !== '' ? nl2br(e($viewParsedContent['purpose_scope'])) : '—'; ?>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Form Response Details</label>
+            <?php if (!empty($viewParsedContent['form_responses'])): ?>
+              <div class="table-responsive">
+                <table class="repo-form-table">
+                  <thead>
+                    <tr>
+                      <th>Field</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach ($viewParsedContent['form_responses'] as $fieldKey => $fieldValue): ?>
+                      <tr>
+                        <td><?php echo e(formatFormResponseLabel($fieldKey)); ?></td>
+                        <td>
+                          <?php
+                            if (is_array($fieldValue)) {
+                                echo '<pre class="repo-json-pre">' . e(json_encode($fieldValue, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</pre>';
+                            } else {
+                                $displayValue = (string)$fieldValue;
+                                echo $displayValue !== '' ? nl2br(e($displayValue)) : '—';
+                            }
+                          ?>
+                        </td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            <?php else: ?>
+              <div class="repo-purpose-box">No form response details available.</div>
+            <?php endif; ?>
+          </div>
+        <?php elseif (!empty($viewDocument['content_text'])): ?>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Document Content</label>
+            <div class="repo-purpose-box">
+              <pre class="repo-json-pre"><?php echo e($viewDocument['content_text']); ?></pre>
+            </div>
+          </div>
+        <?php elseif (!empty($viewDocument['primary_file_name'])): ?>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Attached File</label>
+            <div class="repo-purpose-box">
+              <div class="mb-2"><strong><?php echo e($viewDocument['primary_file_name']); ?></strong></div>
+              <?php if (!empty($viewDocument['primary_file_path'])): ?>
+                <a class="btn btn-sm btn-outline-primary" href="<?php echo e($viewDocument['primary_file_path']); ?>" target="_blank">Open File</a>
+              <?php endif; ?>
+            </div>
+          </div>
+        <?php else: ?>
+          <div class="repo-purpose-box">No document content available.</div>
+        <?php endif; ?>
+      </div>
+
+      <div class="modal-footer">
+        <a href="repository.php?<?php echo e(http_build_query($baseQuery)); ?>" class="btn btn-outline-secondary">Close</a>
+      </div>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 document.querySelectorAll('.auto-submit-filter').forEach(function(el) {
@@ -768,6 +968,20 @@ document.querySelectorAll('.auto-submit-filter').forEach(function(el) {
     document.getElementById('repoFilterForm').submit();
   });
 });
+
+<?php if ($viewDocument): ?>
+document.addEventListener('DOMContentLoaded', function () {
+  const modalEl = document.getElementById('documentViewModal');
+  if (modalEl) {
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    modalEl.addEventListener('hidden.bs.modal', function () {
+      window.location.href = 'repository.php?<?php echo e(http_build_query($baseQuery)); ?>';
+    });
+  }
+});
+<?php endif; ?>
 </script>
 </body>
 </html>
