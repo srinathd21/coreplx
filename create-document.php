@@ -280,8 +280,13 @@ if (!in_array($currentRoleCode, ['qa_admin', 'super_admin'], true)) {
     die('Access denied.');
 }
 
-$hasFormDefinitionLink = has_column($conn, 'document_versions', 'form_definition_id');
-$hasFormBuilderJson = table_exists($conn, 'form_definitions') && has_column($conn, 'form_definitions', 'builder_json');
+$hasFormDefinitionLink  = has_column($conn, 'document_versions', 'form_definition_id');
+$hasFormBuilderJson     = table_exists($conn, 'form_definitions') && has_column($conn, 'form_definitions', 'builder_json');
+$hasPrimaryFileName     = has_column($conn, 'document_versions', 'primary_file_name');
+$hasPrimaryFilePath     = has_column($conn, 'document_versions', 'primary_file_path');
+$hasPrimaryFileMime     = has_column($conn, 'document_versions', 'primary_file_mime');
+$hasPrimaryFileSize     = has_column($conn, 'document_versions', 'primary_file_size');
+$hasChecksumSha256      = has_column($conn, 'document_versions', 'checksum_sha256');
 
 $currentUser = fetch_one_prepared($conn, "
     SELECT u.*, r.role_code, r.role_name
@@ -296,7 +301,7 @@ if (!$currentUser) {
 }
 
 $flashSuccess = $_SESSION['flash_success'] ?? '';
-$flashError = $_SESSION['flash_error'] ?? '';
+$flashError   = $_SESSION['flash_error'] ?? '';
 unset($_SESSION['flash_success'], $_SESSION['flash_error']);
 
 $documentTypes = fetch_all_assoc($conn, "
@@ -332,9 +337,11 @@ if ($creatorName === '') {
     $creatorName = (string)($currentUser['email'] ?? $currentDisplayName);
 }
 
+$defaultAutoTopic = build_auto_topic($defaultTypeName, (string)($old['document_number'] ?? ''));
+
 $formData = [
     'document_type_id'     => (string)($old['document_type_id'] ?? $defaultTypeId),
-    'document_topic'       => (string)($old['document_topic'] ?? build_auto_topic($defaultTypeName, (string)($old['document_number'] ?? ''))),
+    'document_topic'       => (string)($old['document_topic'] ?? $defaultAutoTopic),
     'document_number'      => (string)($old['document_number'] ?? ''),
     'approver_user_id'     => (string)($old['approver_user_id'] ?? ''),
     'effective_date'       => (string)($old['effective_date'] ?? ''),
@@ -366,7 +373,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $formData = [
         'document_type_id'     => trim((string)($_POST['document_type_id'] ?? '')),
-        'document_topic'       => '',
+        'document_topic'       => trim((string)($_POST['document_topic'] ?? '')),
         'document_number'      => trim((string)($_POST['document_number'] ?? '')),
         'approver_user_id'     => trim((string)($_POST['approver_user_id'] ?? '')),
         'effective_date'       => trim((string)($_POST['effective_date'] ?? '')),
@@ -399,7 +406,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $documentTypeId = (int)$formData['document_type_id'];
     $approverUserId = (int)$formData['approver_user_id'];
-    $draftId = (int)$formData['draft_id'];
 
     $docType = null;
     foreach ($documentTypes as $row) {
@@ -416,15 +422,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $docTypeName = (string)$docType['type_name'];
-    $docPrefix = (string)$docType['prefix'];
+    $docPrefix   = (string)$docType['prefix'];
     $isFormDocument = strtolower($docTypeName) === 'form';
 
-    $formData['document_topic'] = build_auto_topic($docTypeName, $formData['document_number']);
+    if ($formData['document_topic'] === '') {
+        $formData['document_topic'] = build_auto_topic($docTypeName, $formData['document_number']);
+    }
+
     $_SESSION['create_document_old'] = $formData;
 
     if ($formData['document_number'] === '') {
         $_SESSION['flash_error'] = 'Document number is required.';
         redirect_back();
+    }
+
+    $uploadedFileMeta = null;
+    if (
+        !$isFormDocument &&
+        $formData['content_mode'] === 'file' &&
+        isset($_FILES['document_file']) &&
+        (($_FILES['document_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE)
+    ) {
+        $uploadedFileMeta = save_document_upload($_FILES['document_file']);
+        $formData['existing_file_name'] = $uploadedFileMeta['original_name'];
+        $formData['existing_file_path'] = $uploadedFileMeta['relative_path'];
+        $formData['existing_file_mime'] = $uploadedFileMeta['mime_type'];
+        $formData['existing_file_size'] = (string)$uploadedFileMeta['file_size'];
+        $_SESSION['create_document_old'] = $formData;
     }
 
     if ($action === 'submit_review') {
@@ -445,27 +469,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_error'] = 'Please create Form / Checklist Builder data before submission.';
             redirect_back();
         }
+
+        if (!$isFormDocument) {
+            if ($formData['content_mode'] === 'file') {
+                if ($formData['existing_file_path'] === '') {
+                    $_SESSION['flash_error'] = 'Please upload a file before submission.';
+                    redirect_back();
+                }
+            } else {
+                if ($formData['content_text'] === '') {
+                    $_SESSION['flash_error'] = 'Please enter text content before submission.';
+                    redirect_back();
+                }
+            }
+        }
     }
 
     mysqli_begin_transaction($conn);
 
     try {
-        $documentTitle = $formData['document_topic'];
+        $documentTitle      = $formData['document_topic'];
         $documentNumberFull = $docPrefix . '-' . $formData['document_number'] . '-' . $formData['document_topic'] . '-01';
-        $currentStatus = ($action === 'submit_review') ? 'pending_approval' : 'draft';
-        $versionStatus = ($action === 'submit_review') ? 'pending_approval' : 'draft';
-        $submittedBy = ($action === 'submit_review') ? $currentUserId : null;
-        $submittedAt = ($action === 'submit_review') ? date('Y-m-d H:i:s') : null;
-        $ackReq = (int)($docType['acknowledgement_required'] ?? 0);
-        $remarks = $formData['purpose_scope'];
-        $approverText = $approverUserId > 0 ? (string)$approverUserId : null;
+        $currentStatus      = ($action === 'submit_review') ? 'pending_approval' : 'draft';
+        $versionStatus      = ($action === 'submit_review') ? 'pending_approval' : 'draft';
+        $submittedBy        = ($action === 'submit_review') ? $currentUserId : null;
+        $submittedAt        = ($action === 'submit_review') ? date('Y-m-d H:i:s') : null;
+        $ackReq             = (int)($docType['acknowledgement_required'] ?? 0);
+        $remarks            = $formData['purpose_scope'];
+        $approverText       = $approverUserId > 0 ? (string)$approverUserId : null;
+
+        $primaryFileName = $formData['existing_file_name'] !== '' ? $formData['existing_file_name'] : null;
+        $primaryFilePath = $formData['existing_file_path'] !== '' ? $formData['existing_file_path'] : null;
+        $primaryFileMime = $formData['existing_file_mime'] !== '' ? $formData['existing_file_mime'] : null;
+        $primaryFileSize = (int)$formData['existing_file_size'] > 0 ? (int)$formData['existing_file_size'] : null;
+        $checksumSha256  = $uploadedFileMeta['checksum'] ?? null;
 
         $finalContentFormat = $isFormDocument ? 'rich_text' : ($formData['content_mode'] === 'file' ? 'file' : 'rich_text');
 
         if ($isFormDocument) {
             $contentText = json_encode([
-                'purpose_scope'   => $formData['purpose_scope'],
-                'form_responses'  => $formData['form_response_json'] !== '' ? json_decode($formData['form_response_json'], true) : [],
+                'purpose_scope'  => $formData['purpose_scope'],
+                'form_responses' => $formData['form_response_json'] !== '' ? json_decode($formData['form_response_json'], true) : [],
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         } else {
             $contentText = ($finalContentFormat === 'rich_text') ? $formData['content_text'] : $formData['purpose_scope'];
@@ -511,49 +555,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $documentId = (int)mysqli_insert_id($conn);
         mysqli_stmt_close($stmt);
 
+        $versionColumns = [
+            'document_id',
+            'previous_version_id',
+            'version_sequence',
+            'version_label',
+            'title_snapshot',
+            'topic_snapshot',
+            'owner_user_id',
+            'created_by',
+            'change_summary',
+            'effective_date',
+            'review_date',
+            'status',
+            'content_format',
+            'content_text'
+        ];
+
+        $versionParams = [
+            $documentId,
+            null,
+            1,
+            '01',
+            $documentTitle,
+            $formData['document_topic'],
+            $currentUserId,
+            $currentUserId,
+            ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created',
+            $formData['effective_date'],
+            $formData['review_date'],
+            $versionStatus,
+            $finalContentFormat,
+            $contentText
+        ];
+
         if ($hasFormDefinitionLink) {
-            $stmt = exec_prepared($conn, "
-                INSERT INTO document_versions
-                (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, form_definition_id, submitted_by, submitted_at, created_at, updated_at)
-                VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-            ", [
-                $documentId,
-                $documentTitle,
-                $formData['document_topic'],
-                $currentUserId,
-                $currentUserId,
-                ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created',
-                $formData['effective_date'],
-                $formData['review_date'],
-                $versionStatus,
-                $finalContentFormat,
-                $contentText,
-                $formDefinitionId,
-                $submittedBy,
-                $submittedAt
-            ]);
-        } else {
-            $stmt = exec_prepared($conn, "
-                INSERT INTO document_versions
-                (document_id, previous_version_id, version_sequence, version_label, title_snapshot, topic_snapshot, owner_user_id, created_by, change_summary, effective_date, review_date, status, content_format, content_text, submitted_by, submitted_at, created_at, updated_at)
-                VALUES (?, NULL, 1, '01', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-            ", [
-                $documentId,
-                $documentTitle,
-                $formData['document_topic'],
-                $currentUserId,
-                $currentUserId,
-                ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created',
-                $formData['effective_date'],
-                $formData['review_date'],
-                $versionStatus,
-                $finalContentFormat,
-                $contentText,
-                $submittedBy,
-                $submittedAt
-            ]);
+            $versionColumns[] = 'form_definition_id';
+            $versionParams[]  = $formDefinitionId;
         }
 
+        if ($hasPrimaryFileName) {
+            $versionColumns[] = 'primary_file_name';
+            $versionParams[] = $primaryFileName;
+        }
+        if ($hasPrimaryFilePath) {
+            $versionColumns[] = 'primary_file_path';
+            $versionParams[] = $primaryFilePath;
+        }
+        if ($hasPrimaryFileMime) {
+            $versionColumns[] = 'primary_file_mime';
+            $versionParams[] = $primaryFileMime;
+        }
+        if ($hasPrimaryFileSize) {
+            $versionColumns[] = 'primary_file_size';
+            $versionParams[] = $primaryFileSize;
+        }
+        if ($hasChecksumSha256) {
+            $versionColumns[] = 'checksum_sha256';
+            $versionParams[] = $checksumSha256;
+        }
+
+        $versionColumns[] = 'submitted_by';
+        $versionParams[] = $submittedBy;
+        $versionColumns[] = 'submitted_at';
+        $versionParams[] = $submittedAt;
+
+        $placeholders = implode(', ', array_fill(0, count($versionParams), '?'));
+        $sqlVersion = "INSERT INTO document_versions (" . implode(', ', $versionColumns) . ", created_at, updated_at) VALUES ($placeholders, NOW(), NOW())";
+
+        $stmt = exec_prepared($conn, $sqlVersion, $versionParams);
         $documentVersionId = (int)mysqli_insert_id($conn);
         mysqli_stmt_close($stmt);
 
@@ -607,20 +677,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $currentTypePrefix = 'SOP';
-$currentTypeName = 'SOP';
+$currentTypeName   = 'SOP';
 foreach ($documentTypes as $row) {
     if ((string)$row['id'] === (string)$formData['document_type_id']) {
         $currentTypePrefix = (string)$row['prefix'];
-        $currentTypeName = (string)$row['type_name'];
+        $currentTypeName   = (string)$row['type_name'];
         break;
     }
 }
 
-$formData['document_topic'] = build_auto_topic($currentTypeName, $formData['document_number']);
+if ($formData['document_topic'] === '') {
+    $formData['document_topic'] = build_auto_topic($currentTypeName, $formData['document_number']);
+}
 
 $docIdPreview = $currentTypePrefix . '-' .
     ($formData['document_number'] !== '' ? $formData['document_number'] : '104') . '-' .
     ($formData['document_topic'] !== '' ? $formData['document_topic'] : $currentTypeName . ' Draft') . '-01';
+
+$existingFileDisplay = $formData['existing_file_name'] !== '' ? $formData['existing_file_name'] : '';
+$existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0) ? round(((int)$formData['existing_file_size']) / 1024, 2) . ' KB' : '';
 ?>
 <!doctype html>
 <html lang="en">
@@ -632,7 +707,7 @@ $docIdPreview = $currentTypePrefix . '-' .
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <style>
     .readonly-field{background:#f5f7fa!important;color:#6b7280!important;cursor:not-allowed;}
-    .info-form-summary-card,.form-fill-card{background:#f8f9fb;border:1px solid #dde3ec;border-radius:10px;padding:14px;}
+    .info-form-summary-card,.form-fill-card,.file-selected-box{background:#f8f9fb;border:1px solid #dde3ec;border-radius:10px;padding:14px;}
     .info-form-summary-table{width:100%;margin:0;font-size:13px;}
     .info-form-summary-table th,.info-form-summary-table td{padding:9px 10px;border:1px solid #e8edf3;vertical-align:middle;}
     .info-form-summary-table th{background:#eef3fb;color:#0D2144;font-weight:700;width:180px;}
@@ -640,6 +715,21 @@ $docIdPreview = $currentTypePrefix . '-' .
     .fill-field-card{border:1px solid #dde3ec;border-radius:10px;padding:14px;background:#fff;}
     .fill-field-label{font-size:14px;font-weight:600;color:#0D2144;margin-bottom:8px;display:block;}
     .fill-field-type{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eaf2ff;color:#2563eb;margin-left:8px;}
+
+    .upload-box{
+      border:2px dashed #cfd8e3;
+      border-radius:12px;
+      background:#fff;
+      transition:all .2s ease;
+    }
+    .upload-box:hover{
+      border-color:#7aa7ff;
+      background:#f8fbff;
+    }
+    .upload-box.drag-over{
+      border-color:#0d6efd!important;
+      background:#eef5ff!important;
+    }
 
     .swal2-popup.cp-builder-popup{
       width:920px!important;
@@ -704,6 +794,42 @@ $docIdPreview = $currentTypePrefix . '-' .
 <nav class="navbar navbar-expand-xl navbar-coreplx sticky-top">
   <div class="container-fluid px-4 px-xxl-5">
     <a class="navbar-brand fw-bold" href="dashboard-admin.php">CorePlx Quality DMS</a>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="topNav">
+      <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
+        <li class="nav-item"><a class="nav-link active" href="dashboard-admin.php">Dashboard</a></li>
+
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="create-document.php">Create Document</a></li>
+            <li><a class="dropdown-item" href="update-document.php">Update Document</a></li>
+            <li><a class="dropdown-item" href="retire-document.php">Retire Document</a></li>
+            <li><a class="dropdown-item" href="repository.php">Repository</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="audit-trail.php">Audit Trail</a></li>
+            <li><a class="dropdown-item" href="document-assignment.php">Document Assignment</a></li>
+            <li><a class="dropdown-item" href="user-management.php">User Management</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item"><a class="nav-link" href="portal-select.php">Switch to User</a></li>
+      </ul>
+
+      <div class="d-flex align-items-center gap-3 ms-xl-3">
+        <span class="navbar-text small"><?php echo e($currentRoleName); ?></span>
+        <a class="nav-link px-0" href="notifications.php">Notifications</a>
+        <span class="navbar-text small"><?php echo e($creatorName); ?></span>
+      </div>
+    </div>
   </div>
 </nav>
 
@@ -742,6 +868,10 @@ $docIdPreview = $currentTypePrefix . '-' .
     <input type="hidden" name="form_builder_json" id="form_builder_json_hidden" value="<?php echo e($formData['form_builder_json']); ?>">
     <input type="hidden" name="form_response_json" id="form_response_json_hidden" value="<?php echo e($formData['form_response_json']); ?>">
     <input type="hidden" name="document_topic" id="document_topic_hidden" value="<?php echo e($formData['document_topic']); ?>">
+    <input type="hidden" name="existing_file_name" id="existing_file_name" value="<?php echo e($formData['existing_file_name']); ?>">
+    <input type="hidden" name="existing_file_path" id="existing_file_path" value="<?php echo e($formData['existing_file_path']); ?>">
+    <input type="hidden" name="existing_file_mime" id="existing_file_mime" value="<?php echo e($formData['existing_file_mime']); ?>">
+    <input type="hidden" name="existing_file_size" id="existing_file_size" value="<?php echo e($formData['existing_file_size']); ?>">
 
     <div class="row g-3">
       <div class="col-lg-8">
@@ -769,7 +899,8 @@ $docIdPreview = $currentTypePrefix . '-' .
 
               <div class="col-md-6">
                 <label class="form-label">Document Topic</label>
-                <input class="form-control readonly-field" id="document_topic_preview" type="text" readonly value="<?php echo e($formData['document_topic']); ?>">
+                <input class="form-control" id="document_topic_input" type="text" value="<?php echo e($formData['document_topic']); ?>">
+                <div class="form-text">Editable only on create document page.</div>
               </div>
 
               <div class="col-md-6">
@@ -884,23 +1015,28 @@ $docIdPreview = $currentTypePrefix . '-' .
         <div class="card cp-card" id="contentCard">
           <div class="card-body">
             <h2 class="card-title mb-1">Document Content</h2>
-            <p class="card-subtitle mb-3">Add document content using rich text or controlled file upload.</p>
+            <p class="card-subtitle mb-3">Add document content using controlled file upload or text editor.</p>
 
             <ul class="nav nav-pills gap-2 mb-3">
-              <li class="nav-item"><a class="nav-link <?php echo $formData['content_mode'] === 'rich_text' ? 'active' : ''; ?>" id="tabRichText" href="#" onclick="setContentMode('rich_text'); return false;">Rich Text Editor</a></li>
               <li class="nav-item"><a class="nav-link <?php echo $formData['content_mode'] === 'file' ? 'active' : ''; ?>" id="tabFileUpload" href="#" onclick="setContentMode('file'); return false;">File Upload</a></li>
+              <li class="nav-item"><a class="nav-link <?php echo $formData['content_mode'] === 'rich_text' ? 'active' : ''; ?>" id="tabTextEditor" href="#" onclick="setContentMode('rich_text'); return false;">Text Editor</a></li>
             </ul>
-
-            <div id="richTextPanel" class="<?php echo $formData['content_mode'] === 'rich_text' ? '' : 'd-none'; ?>">
-              <textarea class="form-control" name="content_text" id="content_text" rows="9"><?php echo e($formData['content_text']); ?></textarea>
-            </div>
 
             <div id="fileUploadPanel" class="<?php echo $formData['content_mode'] === 'file' ? '' : 'd-none'; ?>">
               <input type="file" name="document_file" id="document_file" accept=".pdf,.doc,.docx,.xls,.xlsx" style="display:none;">
               <div class="upload-box p-4 text-center small text-secondary" id="documentUploadBox" style="cursor:pointer;">
                 Drag and drop file here or click to browse.<br>
-                Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
+                Supported: PDF, DOC, DOCX, XLS, XLSX | Maximum size: 25 MB
               </div>
+
+              <div id="selectedFileInfo" class="file-selected-box mt-3 <?php echo $existingFileDisplay !== '' ? '' : 'd-none'; ?>">
+                <div class="fw-semibold text-primary" id="selectedFileName"><?php echo e($existingFileDisplay); ?></div>
+                <div class="small text-secondary" id="selectedFileMeta"><?php echo e($existingFileSizeDisplay); ?></div>
+              </div>
+            </div>
+
+            <div id="richTextPanel" class="<?php echo $formData['content_mode'] === 'rich_text' ? '' : 'd-none'; ?>">
+              <textarea class="form-control" name="content_text" id="content_text" rows="9"><?php echo e($formData['content_text']); ?></textarea>
             </div>
           </div>
         </div>
@@ -917,6 +1053,7 @@ $docIdPreview = $currentTypePrefix . '-' .
               <li>Unique document ID validated.</li>
               <li>Created fields filled.</li>
               <li>Approver selected and validated.</li>
+              <li>File upload or text content added.</li>
             </ul>
           </div>
         </div>
@@ -932,6 +1069,8 @@ $docIdPreview = $currentTypePrefix . '-' .
 const BUILDER_STORAGE_KEY = 'cpBuiltFormInline';
 const BUILDER_RESPONSE_KEY = 'cpBuiltFormResponses';
 
+let topicTouched = false;
+
 function getSelectedTypeOption() {
   return document.getElementById('docTypeSelect').selectedOptions[0];
 }
@@ -943,6 +1082,14 @@ function buildAutoTopicJs() {
   return docNumber !== '' ? typeName + ' ' + docNumber : typeName + ' Draft';
 }
 
+function syncTopicInput(forceAuto = false) {
+  const topicInput = document.getElementById('document_topic_input');
+  if (!topicTouched || forceAuto || !topicInput.value.trim()) {
+    topicInput.value = buildAutoTopicJs();
+  }
+  document.getElementById('document_topic_hidden').value = topicInput.value.trim();
+}
+
 function handleDocTypeChange(selectEl) {
   const opt = selectEl.selectedOptions[0];
   const typeName = (opt.dataset.name || '').toLowerCase();
@@ -950,13 +1097,23 @@ function handleDocTypeChange(selectEl) {
 
   document.getElementById('contentCard').classList.toggle('d-none', isForm);
   document.getElementById('formTypePanel').classList.toggle('d-none', !isForm);
+
+  const reviewDays = parseInt(opt.dataset.reviewDays || '365', 10);
+  const eff = document.getElementById('effective_date').value;
+  if (eff) {
+    const base = new Date(eff + 'T00:00:00');
+    base.setDate(base.getDate() + reviewDays);
+    document.getElementById('review_date').value = base.toISOString().slice(0, 10);
+  }
+
+  syncTopicInput(false);
   updateDocIdPreview();
 }
 
 function setContentMode(mode) {
   document.getElementById('content_mode').value = mode;
   document.getElementById('tabFileUpload').classList.toggle('active', mode === 'file');
-  document.getElementById('tabRichText').classList.toggle('active', mode === 'rich_text');
+  document.getElementById('tabTextEditor').classList.toggle('active', mode === 'rich_text');
   document.getElementById('fileUploadPanel').classList.toggle('d-none', mode !== 'file');
   document.getElementById('richTextPanel').classList.toggle('d-none', mode !== 'rich_text');
 }
@@ -964,11 +1121,12 @@ function setContentMode(mode) {
 function updateDocIdPreview() {
   const opt = getSelectedTypeOption();
   const prefix = opt ? (opt.dataset.prefix || 'SOP') : 'SOP';
-  const number = document.getElementById('docNumber').value || '104';
-  const topic = buildAutoTopicJs();
+  const number = (document.getElementById('docNumber').value || '104').trim();
+  const topicInput = document.getElementById('document_topic_input');
+  const topic = topicInput.value.trim() || buildAutoTopicJs();
 
+  topicInput.value = topic;
   document.getElementById('document_topic_hidden').value = topic;
-  document.getElementById('document_topic_preview').value = topic;
   document.getElementById('docIdPreview').textContent = prefix + '-' + number + '-' + topic + '-01';
 }
 
@@ -1250,6 +1408,7 @@ function syncFormResponses() {
   });
 
   saveResponseData(data);
+  document.getElementById('document_topic_hidden').value = document.getElementById('document_topic_input').value.trim();
 }
 
 async function openChecklistBuilder(isEdit) {
@@ -1342,12 +1501,88 @@ async function openChecklistBuilder(isEdit) {
   }
 }
 
+/* file upload */
+const fileInput = document.getElementById('document_file');
+const uploadBox = document.getElementById('documentUploadBox');
+const selectedFileInfo = document.getElementById('selectedFileInfo');
+const selectedFileName = document.getElementById('selectedFileName');
+const selectedFileMeta = document.getElementById('selectedFileMeta');
+
+function showSelectedFile(file) {
+  if (!file) return;
+  selectedFileName.textContent = file.name;
+  selectedFileMeta.textContent = (Math.round((file.size / 1024) * 100) / 100) + ' KB';
+  selectedFileInfo.classList.remove('d-none');
+  document.getElementById('existing_file_name').value = file.name;
+  document.getElementById('existing_file_size').value = file.size;
+}
+
+uploadBox.addEventListener('click', function(e) {
+  e.preventDefault();
+  fileInput.click();
+});
+
+fileInput.addEventListener('change', function() {
+  if (this.files && this.files.length > 0) {
+    showSelectedFile(this.files[0]);
+  }
+});
+
+uploadBox.addEventListener('dragenter', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadBox.classList.add('drag-over');
+});
+
+uploadBox.addEventListener('dragover', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadBox.classList.add('drag-over');
+});
+
+uploadBox.addEventListener('dragleave', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadBox.classList.remove('drag-over');
+});
+
+uploadBox.addEventListener('drop', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadBox.classList.remove('drag-over');
+
+  const files = e.dataTransfer.files;
+  if (files && files.length > 0) {
+    const dt = new DataTransfer();
+    for (let i = 0; i < files.length; i++) {
+      dt.items.add(files[i]);
+    }
+    fileInput.files = dt.files;
+    showSelectedFile(files[0]);
+  }
+});
+
 document.getElementById('openBuilderBtn').addEventListener('click', function(e) {
   e.preventDefault();
   openChecklistBuilder(false);
 });
 
-document.getElementById('docNumber').addEventListener('input', updateDocIdPreview);
+document.getElementById('docNumber').addEventListener('input', function() {
+  if (!topicTouched) {
+    syncTopicInput(false);
+  }
+  updateDocIdPreview();
+});
+
+document.getElementById('document_topic_input').addEventListener('input', function() {
+  topicTouched = true;
+  document.getElementById('document_topic_hidden').value = this.value.trim();
+  updateDocIdPreview();
+});
+
+document.getElementById('effective_date').addEventListener('change', function() {
+  handleDocTypeChange(document.getElementById('docTypeSelect'));
+});
 
 (function restoreBuiltForm() {
   let data = null;
@@ -1360,6 +1595,10 @@ document.getElementById('docNumber').addEventListener('input', updateDocIdPrevie
     try { data = JSON.parse(rawSession); } catch (e) {}
   }
 
+  const topicInput = document.getElementById('document_topic_input');
+  const autoTopic = buildAutoTopicJs();
+  topicTouched = topicInput.value.trim() !== '' && topicInput.value.trim() !== autoTopic;
+
   if (data && Array.isArray(data.fields) && data.fields.length) {
     renderBuilderSummary(data, false);
     renderDynamicFillForm(data);
@@ -1367,6 +1606,8 @@ document.getElementById('docNumber').addEventListener('input', updateDocIdPrevie
 
   handleDocTypeChange(document.getElementById('docTypeSelect'));
   setContentMode(document.getElementById('content_mode').value || 'file');
+  syncTopicInput(false);
+  updateDocIdPreview();
 })();
 </script>
 </body>
