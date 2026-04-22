@@ -23,6 +23,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
     <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
+
     <div class="collapse navbar-collapse" id="topNav">
       <ul class="navbar-nav ms-xl-4 me-auto mb-2 mb-xl-0 gap-xl-2">
         <li class="nav-item">
@@ -30,12 +31,13 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         </li>
 
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle <?php echo in_array($currentPage, ['create-document.php','update-document.php','retire-document.php','repository.php'], true) ? 'active' : ''; ?>" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
+          <a class="nav-link dropdown-toggle <?php echo in_array($currentPage, ['create-document.php','update-document.php','retire-document.php','repository.php','assigned-documents.php'], true) ? 'active' : ''; ?>" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Documents</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item <?php echo $currentPage === 'create-document.php' ? 'active' : ''; ?>" href="create-document.php">Create Document</a></li>
             <li><a class="dropdown-item <?php echo $currentPage === 'update-document.php' ? 'active' : ''; ?>" href="update-document.php">Update Document</a></li>
             <li><a class="dropdown-item <?php echo $currentPage === 'retire-document.php' ? 'active' : ''; ?>" href="retire-document.php">Retire Document</a></li>
             <li><a class="dropdown-item <?php echo $currentPage === 'repository.php' ? 'active' : ''; ?>" href="repository.php">Repository</a></li>
+            <li><a class="dropdown-item <?php echo $currentPage === 'assigned-documents.php' ? 'active' : ''; ?>" href="assigned-documents.php">Assigned Documents</a></li>
           </ul>
         </li>
 

@@ -170,26 +170,29 @@ $creationRows = execute_prepared_query($conn, $creationSql, $creationTypes, $cre
 /* ---------------------------------------------------------
    TAB 2 - APPROVAL / DENIAL
 --------------------------------------------------------- */
-$approvalParams = [];
-$approvalTypes = '';
-$approvalWhere = build_common_filters(
+$approvalRows = [];
+
+/* Comment based approval history */
+$approvalParams1 = [];
+$approvalTypes1 = '';
+$approvalWhere1 = build_common_filters(
     'dc.created_at',
     'dc.created_by',
     'd.document_number',
-    $approvalParams,
-    $approvalTypes,
+    $approvalParams1,
+    $approvalTypes1,
     $filterFrom,
     $filterTo,
     $filterUser,
     $filterDoc
 );
 
-$approvalWhere .= " AND dc.comment_type IN ('approval','rejection','return') ";
+$approvalWhere1 .= " AND dc.comment_type IN ('approval','rejection','return') ";
 
-$approvalSql = "
+$approvalSql1 = "
     SELECT
         dc.id,
-        dc.created_at,
+        dc.created_at AS event_time,
         dc.comment_type,
         dc.decision,
         dc.comment_text,
@@ -204,7 +207,8 @@ $approvalSql = "
         es.sign_action,
         es.signed_at,
         es.ip_address AS sign_ip_address,
-        es.signature_reason
+        es.signature_reason,
+        'comment' AS source_type
     FROM document_comments dc
     INNER JOIN document_versions dv
         ON dv.id = dc.document_version_id
@@ -216,10 +220,69 @@ $approvalSql = "
         ON es.document_version_id = dc.document_version_id
        AND es.workflow_step_id = dc.workflow_step_id
        AND es.signed_by = dc.created_by
-    $approvalWhere
+    $approvalWhere1
     ORDER BY dc.created_at DESC, dc.id DESC
 ";
-$approvalRows = execute_prepared_query($conn, $approvalSql, $approvalTypes, $approvalParams);
+$approvalRows1 = execute_prepared_query($conn, $approvalSql1, $approvalTypes1, $approvalParams1);
+
+/* Audit-log based approval history from assigned-documents.php */
+$approvalParams2 = [];
+$approvalTypes2 = '';
+$approvalWhere2 = build_common_filters(
+    'al.performed_at',
+    'al.performed_by',
+    'd.document_number',
+    $approvalParams2,
+    $approvalTypes2,
+    $filterFrom,
+    $filterTo,
+    $filterUser,
+    $filterDoc
+);
+
+$approvalWhere2 .= " AND al.entity_type = 'document' AND al.action IN ('approve','reject','return') ";
+
+$approvalSql2 = "
+    SELECT
+        al.id,
+        al.performed_at AS event_time,
+        al.action,
+        al.remarks AS comment_text,
+        al.old_value,
+        al.new_value,
+        al.performed_by AS created_by,
+        al.ip_address AS sign_ip_address,
+        d.document_number,
+        dv.version_label,
+        u.first_name,
+        u.last_name,
+        u.email,
+        '' AS comment_type,
+        '' AS decision,
+        '' AS sign_action,
+        NULL AS signed_at,
+        '' AS signature_reason,
+        'audit' AS source_type
+    FROM audit_logs al
+    LEFT JOIN documents d
+        ON d.id = al.entity_id
+    LEFT JOIN document_versions dv
+        ON dv.id = COALESCE(
+            JSON_UNQUOTE(JSON_EXTRACT(al.new_value, '$.document_version_id')),
+            JSON_UNQUOTE(JSON_EXTRACT(al.old_value, '$.document_version_id'))
+        )
+    LEFT JOIN users u
+        ON u.id = al.performed_by
+    $approvalWhere2
+    ORDER BY al.performed_at DESC, al.id DESC
+";
+$approvalRows2 = execute_prepared_query($conn, $approvalSql2, $approvalTypes2, $approvalParams2);
+
+$approvalRows = array_merge($approvalRows1, $approvalRows2);
+
+usort($approvalRows, function ($a, $b) {
+    return strtotime((string)($b['event_time'] ?? '')) <=> strtotime((string)($a['event_time'] ?? ''));
+});
 
 /* ---------------------------------------------------------
    TAB 3 - APPROVER COMMENTS
@@ -445,19 +508,36 @@ if ($exportType === 'csv') {
         }
     } elseif ($activeTab === 'approval') {
         fputcsv($out, ['Timestamp', 'User', 'Meaning', 'Document ID', 'Version', 'Reason', 'IP Address']);
+
         foreach ($approvalRows as $row) {
             $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
             if ($name === '') {
                 $name = (string)($row['email'] ?? 'System');
             }
-            $meaning = ucfirst((string)($row['decision'] ?: $row['comment_type']));
+
+            $meaning = '';
+            if (($row['source_type'] ?? '') === 'audit') {
+                $meaning = strtolower((string)($row['action'] ?? ''));
+            } else {
+                $meaning = (string)($row['decision'] ?: $row['comment_type']);
+            }
+
+            if ($meaning === 'approve' || $meaning === 'approval') $meaning = 'approved';
+            if ($meaning === 'reject' || $meaning === 'rejection') $meaning = 'rejected';
+            if ($meaning === 'return') $meaning = 'returned';
+
+            $reason = $row['comment_text'] ?? '';
+            if ($reason === '' && ($row['source_type'] ?? '') === 'comment') {
+                $reason = $row['signature_reason'] ?? '';
+            }
+
             fputcsv($out, [
-                $row['created_at'] ?? '',
+                $row['event_time'] ?? '',
                 $name,
-                $meaning,
+                ucfirst($meaning),
                 $row['document_number'] ?? '',
                 $row['version_label'] ?? '',
-                $row['comment_text'] ?? '',
+                $reason,
                 $row['sign_ip_address'] ?? ''
             ]);
         }
@@ -741,7 +821,6 @@ $queryBase = [
     </div>
   </div>
 
-  <!-- TAB 1 -->
   <div id="panelCreation" class="<?php echo $activeTab === 'creation' ? '' : 'd-none'; ?>">
     <div class="card cp-card" style="padding:0;">
       <div class="px-4 py-3 border-bottom">
@@ -786,12 +865,11 @@ $queryBase = [
     </div>
   </div>
 
-  <!-- TAB 2 -->
   <div id="panelApproval" class="<?php echo $activeTab === 'approval' ? '' : 'd-none'; ?>">
     <div class="card cp-card" style="padding:0;">
       <div class="px-4 py-3 border-bottom">
         <div class="fw-bold" style="color:#1a3a6e;font-size:14px;">Approval &amp; Denial Events</div>
-        <div class="text-secondary" style="font-size:12px;">Captures: approver, meaning, full reason, electronic signature evidence, IP address.</div>
+        <div class="text-secondary" style="font-size:12px;">Captures: approver, meaning, full reason, electronic signature evidence, audit logs, IP address.</div>
       </div>
       <div class="table-responsive">
         <table class="table align-middle mb-0">
@@ -810,19 +888,37 @@ $queryBase = [
             <?php if (!empty($approvalRows)): ?>
               <?php foreach ($approvalRows as $row): ?>
                 <?php
-                  $meaning = (string)($row['decision'] ?: $row['comment_type']);
+                  $meaning = '';
+                  if (($row['source_type'] ?? '') === 'audit') {
+                      $meaning = strtolower((string)($row['action'] ?? ''));
+                  } else {
+                      $meaning = (string)($row['decision'] ?: $row['comment_type']);
+                  }
+
                   if ($meaning === 'approve' || $meaning === 'approval') $meaning = 'approved';
                   if ($meaning === 'reject' || $meaning === 'rejection') $meaning = 'rejected';
                   if ($meaning === 'return') $meaning = 'returned';
+
+                  $displayTime = format_dt($row['event_time'] ?? '');
+                  $displayIp = $row['sign_ip_address'] ?? '—';
+                  $displayReason = $row['comment_text'] ?? '';
+
+                  if ($displayReason === '' && ($row['source_type'] ?? '') === 'comment') {
+                      $displayReason = $row['signature_reason'] ?? '';
+                  }
+
+                  if ($displayReason === '') {
+                      $displayReason = '—';
+                  }
                 ?>
                 <tr>
-                  <td style="font-size:12px;color:#6b7280;"><?php echo e(format_dt($row['created_at'] ?? '')); ?></td>
+                  <td style="font-size:12px;color:#6b7280;"><?php echo e($displayTime); ?></td>
                   <td><?php echo e(format_name($row)); ?></td>
                   <td><?php echo action_badge_html($meaning); ?></td>
                   <td class="fw-semibold text-primary"><?php echo e($row['document_number'] ?: '—'); ?></td>
                   <td><?php echo e($row['version_label'] ? 'V' . $row['version_label'] : '—'); ?></td>
-                  <td style="font-size:12px;color:#555;"><?php echo e($row['comment_text'] ?: ($row['signature_reason'] ?: '—')); ?></td>
-                  <td style="font-size:12px;color:#6b7280;"><?php echo e($row['sign_ip_address'] ?: '—'); ?></td>
+                  <td style="font-size:12px;color:#555;"><?php echo e($displayReason); ?></td>
+                  <td style="font-size:12px;color:#6b7280;"><?php echo e($displayIp); ?></td>
                 </tr>
               <?php endforeach; ?>
             <?php else: ?>
@@ -839,7 +935,6 @@ $queryBase = [
     </div>
   </div>
 
-  <!-- TAB 3 -->
   <div id="panelComments" class="<?php echo $activeTab === 'comments' ? '' : 'd-none'; ?>">
     <div class="card cp-card" style="padding:0;">
       <div class="px-4 py-3 border-bottom">
@@ -884,7 +979,6 @@ $queryBase = [
     </div>
   </div>
 
-  <!-- TAB 4 -->
   <div id="panelUsers" class="<?php echo $activeTab === 'users' ? '' : 'd-none'; ?>">
     <div class="card cp-card" style="padding:0;">
       <div class="px-4 py-3 border-bottom">
@@ -908,25 +1002,15 @@ $queryBase = [
               <?php foreach ($userActivityRows as $row): ?>
                 <?php
                   $actor = trim((string)$row['user_name']);
-                  if ($actor === '') {
-                      $actor = (string)$row['user_email'];
-                  }
-                  if ($actor === '') {
-                      $actor = 'System';
-                  }
+                  if ($actor === '') $actor = (string)$row['user_email'];
+                  if ($actor === '') $actor = 'System';
 
                   $target = trim((string)$row['target_name']);
-                  if ($target === '') {
-                      $target = (string)$row['target_email'];
-                  }
-                  if ($target === '') {
-                      $target = '—';
-                  }
+                  if ($target === '') $target = (string)$row['target_email'];
+                  if ($target === '') $target = '—';
 
                   $details = trim((string)$row['remarks']);
-                  if ($details === '') {
-                      $details = '—';
-                  }
+                  if ($details === '') $details = '—';
                 ?>
                 <tr>
                   <td style="font-size:12px;color:#6b7280;"><?php echo e(format_dt($row['event_time'] ?? '')); ?></td>
