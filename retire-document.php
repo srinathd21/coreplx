@@ -58,6 +58,23 @@ if (!function_exists('get_client_ip')) {
     }
 }
 
+if (!function_exists('stmt_dynamic_bind_execute')) {
+    function stmt_dynamic_bind_execute(mysqli_stmt $stmt, string $types, array $values): bool
+    {
+        if ($types === '' || empty($values)) {
+            return mysqli_stmt_execute($stmt);
+        }
+
+        $bindParams = [$types];
+        foreach ($values as $k => $v) {
+            $bindParams[] = &$values[$k];
+        }
+
+        call_user_func_array([$stmt, 'bind_param'], $bindParams);
+        return mysqli_stmt_execute($stmt);
+    }
+}
+
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login-admin.php');
     exit;
@@ -293,12 +310,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $approverUserId = (int)$form['approver_user_id'];
     $replacementDocumentId = $form['replacement_document_id'] !== '' ? (int)$form['replacement_document_id'] : null;
 
-    if ($selectedDocumentId <= 0) $errors[] = 'Please select a document.';
+    if ($selectedDocumentId <= 0) {
+        $errors[] = 'Please select a document.';
+    }
     if ($form['retirement_reason'] === '' || mb_strlen($form['retirement_reason']) < 20) {
         $errors[] = 'Retirement reason must be at least 20 characters.';
     }
-    if ($approverUserId <= 0) $errors[] = 'Approver is required.';
-    if ($approverUserId === $userId) $errors[] = 'Requested by and approver cannot be the same user.';
+    if ($approverUserId <= 0) {
+        $errors[] = 'Approver is required.';
+    }
+    if ($approverUserId === $userId) {
+        $errors[] = 'Requested by and approver cannot be the same user.';
+    }
     if ($replacementDocumentId !== null && $replacementDocumentId === $selectedDocumentId) {
         $errors[] = 'Replacement document cannot be the same as the selected document.';
     }
@@ -324,17 +347,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $newStatus = 'pending_retirement';
 
-            $updateSql = "UPDATE documents SET current_status = ?, remarks = ? WHERE id = ?";
+            $updateSql = "UPDATE documents SET current_status = ?, remarks = ?, approver = ?, updated_at = NOW() WHERE id = ?";
             $updateStmt = mysqli_prepare($conn, $updateSql);
             if (!$updateStmt) {
                 throw new RuntimeException('Failed to prepare document update.');
             }
 
+            $approverText = (string)$approverUserId;
             mysqli_stmt_bind_param(
                 $updateStmt,
-                "ssi",
+                "sssi",
                 $newStatus,
                 $form['retirement_reason'],
+                $approverText,
                 $selectedDocumentId
             );
 
@@ -437,8 +462,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sql = "INSERT INTO document_approvals (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ")";
                     $stmt = mysqli_prepare($conn, $sql);
                     if ($stmt) {
-                        mysqli_stmt_bind_param($stmt, $types, ...$bind);
-                        mysqli_stmt_execute($stmt);
+                        if (!stmt_dynamic_bind_execute($stmt, $types, $bind)) {
+                            throw new RuntimeException('Failed to insert document approval: ' . mysqli_stmt_error($stmt));
+                        }
                         mysqli_stmt_close($stmt);
                     }
                 }
@@ -476,38 +502,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sql = "INSERT INTO approver_comments (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ")";
                     $stmt = mysqli_prepare($conn, $sql);
                     if ($stmt) {
-                        mysqli_stmt_bind_param($stmt, $types, ...$bind);
-                        mysqli_stmt_execute($stmt);
+                        if (!stmt_dynamic_bind_execute($stmt, $types, $bind)) {
+                            throw new RuntimeException('Failed to insert approver comment: ' . mysqli_stmt_error($stmt));
+                        }
                         mysqli_stmt_close($stmt);
                     }
                 }
             }
 
             if (tableExists($conn, 'notifications')) {
-                $notifSql = "
-                    INSERT INTO notifications (
-                        user_id,
-                        notification_type,
-                        reference_type,
-                        reference_id,
-                        title,
-                        message
-                    ) VALUES (?, 'retirement_request', 'document', ?, ?, ?)
-                ";
-                $notifStmt = mysqli_prepare($conn, $notifSql);
-                if ($notifStmt) {
-                    $notifTitle = 'Document Retirement Request';
-                    $notifMessage = 'A retirement request has been raised for document "' . $form['document_number'] . '".';
-                    mysqli_stmt_bind_param(
-                        $notifStmt,
-                        "iiss",
-                        $approverUserId,
-                        $selectedDocumentId,
-                        $notifTitle,
-                        $notifMessage
-                    );
-                    mysqli_stmt_execute($notifStmt);
-                    mysqli_stmt_close($notifStmt);
+                $notifColumns = [];
+                $notifPlaceholders = [];
+                $notifTypes = '';
+                $notifValues = [];
+
+                $notifMap = [
+                    'user_id' => $approverUserId,
+                    'notification_type' => 'retirement_request',
+                    'reference_type' => 'document',
+                    'reference_id' => $selectedDocumentId,
+                    'title' => 'Document Retirement Request',
+                    'message' => 'A retirement request has been raised for document "' . $form['document_number'] . '".',
+                ];
+
+                foreach ($notifMap as $col => $val) {
+                    if (columnExists($conn, 'notifications', $col)) {
+                        $notifColumns[] = "`{$col}`";
+                        $notifPlaceholders[] = "?";
+                        $notifTypes .= is_int($val) ? 'i' : 's';
+                        $notifValues[] = $val;
+                    }
+                }
+
+                if (!empty($notifColumns)) {
+                    $notifSql = "INSERT INTO notifications (" . implode(', ', $notifColumns) . ") VALUES (" . implode(', ', $notifPlaceholders) . ")";
+                    $notifStmt = mysqli_prepare($conn, $notifSql);
+                    if ($notifStmt) {
+                        stmt_dynamic_bind_execute($notifStmt, $notifTypes, $notifValues);
+                        mysqli_stmt_close($notifStmt);
+                    }
                 }
             }
 
