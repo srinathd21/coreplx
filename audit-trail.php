@@ -620,6 +620,65 @@ $queryBase = [
     }
     .audit-tab:hover { color:#1a3a6e; }
     .audit-tab.active { color:#1a3a6e; border-bottom-color:#2563eb; }
+
+    .audit-filter-grid {
+      display: grid;
+      grid-template-columns: 150px 150px 220px 170px auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .audit-filter-field label {
+      display:block;
+      font-size:12px;
+      font-weight:600;
+      color:#5f6b7a;
+      margin-bottom:6px;
+    }
+    .audit-filter-field .form-control-sm,
+    .audit-filter-field .form-select-sm {
+      height:40px;
+      border-radius:8px;
+      font-size:14px;
+    }
+    .audit-filter-actions {
+      display:flex;
+      align-items:end;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-start;
+    }
+    .audit-filter-actions .btn {
+      height:40px;
+      border-radius:8px;
+      padding:0 16px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size:14px;
+      font-weight:600;
+      white-space:nowrap;
+    }
+
+    @media (max-width: 1200px) {
+      .audit-filter-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      .audit-filter-actions {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .audit-filter-grid {
+        grid-template-columns: 1fr;
+      }
+      .audit-filter-actions {
+        width:100%;
+      }
+      .audit-filter-actions .btn {
+        flex:1 1 auto;
+      }
+    }
   </style>
 </head>
 <body>
@@ -641,36 +700,42 @@ $queryBase = [
 
   <div class="card cp-card mb-3">
     <div class="card-body py-3">
-      <form method="get" class="d-flex gap-2 flex-wrap align-items-end">
+      <form method="get">
         <input type="hidden" name="tab" value="<?php echo e($activeTab); ?>">
 
-        <div>
-          <label class="form-label mb-1">From</label>
-          <input class="form-control form-control-sm" type="date" name="from" value="<?php echo e($filterFrom); ?>" style="max-width:150px;">
-        </div>
-        <div>
-          <label class="form-label mb-1">To</label>
-          <input class="form-control form-control-sm" type="date" name="to" value="<?php echo e($filterTo); ?>" style="max-width:150px;">
-        </div>
-        <div>
-          <label class="form-label mb-1">User</label>
-          <select class="form-select form-select-sm" name="user_id" style="max-width:220px;">
-            <option value="">All Users</option>
-            <?php foreach ($userOptions as $user): ?>
-              <option value="<?php echo (int)$user['id']; ?>" <?php echo $filterUser === (int)$user['id'] ? 'selected' : ''; ?>>
-                <?php echo e($user['display_name']); ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div>
-          <label class="form-label mb-1">Document ID</label>
-          <input class="form-control form-control-sm" type="text" name="doc_id" value="<?php echo e($filterDoc); ?>" placeholder="e.g. SOP-104" style="max-width:160px;">
-        </div>
-        <div class="d-flex gap-2 ms-auto">
-          <button class="btn btn-primary btn-sm" type="submit">Apply</button>
-          <a class="btn btn-outline-secondary btn-sm" href="?<?php echo http_build_query(['tab' => $activeTab]); ?>">Reset</a>
-          <a class="btn btn-outline-primary btn-sm" href="?<?php echo http_build_query(array_merge($queryBase, ['tab' => $activeTab, 'export' => 'csv'])); ?>">&#11015; Export CSV</a>
+        <div class="audit-filter-grid">
+          <div class="audit-filter-field">
+            <label class="form-label mb-1">From</label>
+            <input class="form-control form-control-sm" type="date" name="from" value="<?php echo e($filterFrom); ?>">
+          </div>
+
+          <div class="audit-filter-field">
+            <label class="form-label mb-1">To</label>
+            <input class="form-control form-control-sm" type="date" name="to" value="<?php echo e($filterTo); ?>">
+          </div>
+
+          <div class="audit-filter-field">
+            <label class="form-label mb-1">User</label>
+            <select class="form-select form-select-sm" name="user_id">
+              <option value="">All Users</option>
+              <?php foreach ($userOptions as $user): ?>
+                <option value="<?php echo (int)$user['id']; ?>" <?php echo $filterUser === (int)$user['id'] ? 'selected' : ''; ?>>
+                  <?php echo e($user['display_name']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <div class="audit-filter-field">
+            <label class="form-label mb-1">Document ID</label>
+            <input class="form-control form-control-sm" type="text" name="doc_id" value="<?php echo e($filterDoc); ?>" placeholder="e.g. SOP-104">
+          </div>
+
+          <div class="audit-filter-actions">
+            <button class="btn btn-primary btn-sm" type="submit">Apply</button>
+            <a class="btn btn-outline-secondary btn-sm" href="?<?php echo http_build_query(['tab' => $activeTab]); ?>">Reset</a>
+            <a class="btn btn-outline-primary btn-sm" href="?<?php echo http_build_query(array_merge($queryBase, ['tab' => $activeTab, 'export' => 'csv'])); ?>">&#11015; Export CSV</a>
+          </div>
         </div>
       </form>
     </div>

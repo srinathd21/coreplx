@@ -266,6 +266,76 @@ if (!function_exists('build_auto_topic')) {
     }
 }
 
+if (!function_exists('slugify_field_label')) {
+    function slugify_field_label(string $label, int $index = 0): string
+    {
+        $label = strtolower(trim($label));
+        $label = preg_replace('/[^a-z0-9]+/i', '_', $label);
+        $label = trim((string)$label, '_');
+
+        if ($label === '') {
+            $label = 'field_' . ($index + 1);
+        }
+
+        return $label;
+    }
+}
+
+if (!function_exists('normalize_form_response_labels')) {
+    function normalize_form_response_labels(string $builderJson, string $responseJson): string
+    {
+        if ($builderJson === '' || $responseJson === '') {
+            return $responseJson;
+        }
+
+        $builder = json_decode($builderJson, true);
+        $responses = json_decode($responseJson, true);
+
+        if (!is_array($builder) || !is_array($responses)) {
+            return $responseJson;
+        }
+
+        $fields = is_array($builder['fields'] ?? null) ? $builder['fields'] : [];
+        if (!$fields) {
+            return $responseJson;
+        }
+
+        $normalized = [];
+        $usedKeys = [];
+
+        foreach ($fields as $index => $field) {
+            $label = (string)($field['label'] ?? '');
+            $labelKey = slugify_field_label($label, $index);
+
+            $baseKey = $labelKey;
+            $counter = 2;
+            while (isset($usedKeys[$labelKey])) {
+                $labelKey = $baseKey . '_' . $counter;
+                $counter++;
+            }
+            $usedKeys[$labelKey] = true;
+
+            $oldKey = 'field_' . $index;
+
+            if (array_key_exists($labelKey, $responses)) {
+                $normalized[$labelKey] = $responses[$labelKey];
+            } elseif (array_key_exists($oldKey, $responses)) {
+                $normalized[$labelKey] = $responses[$oldKey];
+            } else {
+                $normalized[$labelKey] = '';
+            }
+        }
+
+        foreach ($responses as $key => $value) {
+            if (!array_key_exists($key, $normalized) && !preg_match('/^field_\d+$/', (string)$key)) {
+                $normalized[$key] = $value;
+            }
+        }
+
+        return json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+}
+
 $currentUserId = (int)($_SESSION['user_id'] ?? $_SESSION['admin_id'] ?? 0);
 $currentRoleCode = (string)($_SESSION['role_code'] ?? '');
 $currentRoleName = (string)($_SESSION['role_name'] ?? 'QA Admin');
@@ -317,6 +387,7 @@ $approvers = fetch_all_assoc($conn, "
     LEFT JOIN roles r ON r.id = u.current_role_id
     WHERE u.status = 'active'
       AND r.role_code IN ('qa_admin', 'super_admin')
+      AND u.id <> " . (int)$currentUserId . "
     ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
 ");
 
@@ -331,6 +402,8 @@ $queryDraftId = trim((string)($_GET['draft_id'] ?? ''));
 if ($queryDraftId !== '') {
     $old['draft_id'] = $queryDraftId;
 }
+
+$isFreshCreatePage = ($queryDraftId === '' && empty($old));
 
 $creatorName = trim((string)($currentUser['first_name'] ?? '') . ' ' . (string)($currentUser['last_name'] ?? ''));
 if ($creatorName === '') {
@@ -429,6 +502,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $formData['document_topic'] = build_auto_topic($docTypeName, $formData['document_number']);
     }
 
+    if ($formData['form_response_json'] !== '' && $formData['form_builder_json'] !== '') {
+        $formData['form_response_json'] = normalize_form_response_labels(
+            $formData['form_builder_json'],
+            $formData['form_response_json']
+        );
+    }
+
     $_SESSION['create_document_old'] = $formData;
 
     if ($formData['document_number'] === '') {
@@ -483,6 +563,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+
+        $approverName = '';
+        foreach ($approvers as $approverRow) {
+            if ((int)$approverRow['id'] === $approverUserId) {
+                $approverName = trim((string)($approverRow['first_name'] ?? '') . ' ' . (string)($approverRow['last_name'] ?? ''));
+                if ($approverName === '') {
+                    $approverName = (string)($approverRow['email'] ?? '');
+                }
+                break;
+            }
+        }
+
+        $_SESSION['submit_review_payload'] = [
+            'document_type_id'      => $formData['document_type_id'],
+            'document_type_name'    => $docTypeName,
+            'document_prefix'       => $docPrefix,
+            'document_topic'        => $formData['document_topic'],
+            'document_number'       => $formData['document_number'],
+            'document_number_full'  => $docPrefix . '-' . $formData['document_number'] . '-' . $formData['document_topic'] . '-01',
+            'approver_user_id'      => $approverUserId,
+            'approver_name'         => $approverName,
+            'owner_user_id'         => $currentUserId,
+            'owner_name'            => $creatorName,
+            'effective_date'        => $formData['effective_date'],
+            'review_date'           => $formData['review_date'],
+            'purpose_scope'         => $formData['purpose_scope'],
+            'content_mode'          => $formData['content_mode'],
+            'content_text'          => $formData['content_text'],
+            'form_name'             => $formData['form_name'],
+            'form_type'             => $formData['form_type'],
+            'form_desc'             => $formData['form_desc'],
+            'form_builder_json'     => $formData['form_builder_json'],
+            'form_response_json'    => $formData['form_response_json'],
+            'existing_file_name'    => $formData['existing_file_name'],
+            'existing_file_path'    => $formData['existing_file_path'],
+            'existing_file_mime'    => $formData['existing_file_mime'],
+            'existing_file_size'    => $formData['existing_file_size'],
+            'is_form_document'      => $isFormDocument ? 1 : 0,
+            'ack_required'          => (int)($docType['acknowledgement_required'] ?? 0),
+        ];
+
+        $_SESSION['create_document_old'] = $formData;
+        header('Location: submit-review.php');
+        exit;
+    }
+
+    if ($action !== 'save_draft') {
+        $_SESSION['flash_error'] = 'Invalid action.';
+        $_SESSION['create_document_old'] = $formData;
+        redirect_back();
     }
 
     mysqli_begin_transaction($conn);
@@ -490,10 +620,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $documentTitle      = $formData['document_topic'];
         $documentNumberFull = $docPrefix . '-' . $formData['document_number'] . '-' . $formData['document_topic'] . '-01';
-        $currentStatus      = ($action === 'submit_review') ? 'pending_approval' : 'draft';
-        $versionStatus      = ($action === 'submit_review') ? 'pending_approval' : 'draft';
-        $submittedBy        = ($action === 'submit_review') ? $currentUserId : null;
-        $submittedAt        = ($action === 'submit_review') ? date('Y-m-d H:i:s') : null;
+        $currentStatus      = 'draft';
+        $versionStatus      = 'draft';
+        $submittedBy        = null;
+        $submittedAt        = null;
         $ackReq             = (int)($docType['acknowledgement_required'] ?? 0);
         $remarks            = $formData['purpose_scope'];
         $approverText       = $approverUserId > 0 ? (string)$approverUserId : null;
@@ -581,7 +711,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $formData['document_topic'],
             $currentUserId,
             $currentUserId,
-            ($action === 'submit_review') ? 'Document created and submitted for review' : 'Initial draft created',
+            'Initial draft created',
             $formData['effective_date'],
             $formData['review_date'],
             $versionStatus,
@@ -637,36 +767,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn,
             'document',
             $documentId,
-            $action === 'submit_review' ? 'submit' : 'create',
+            'create',
             null,
             [
-                'document_id' => $documentId,
+                'document_id'         => $documentId,
                 'document_version_id' => $documentVersionId,
-                'document_number' => $documentNumberFull,
-                'title' => $documentTitle,
-                'topic' => $formData['document_topic'],
-                'status' => $currentStatus,
-                'version_label' => '01',
-                'approver_user_id' => $approverUserId,
-                'owner_user_id' => $currentUserId,
+                'document_number'     => $documentNumberFull,
+                'title'               => $documentTitle,
+                'topic'               => $formData['document_topic'],
+                'status'              => $currentStatus,
+                'version_label'       => '01',
+                'approver_user_id'    => $approverUserId,
+                'owner_user_id'       => $currentUserId,
             ],
             $currentUserId,
-            $action === 'submit_review' ? 'Document created and submitted for review.' : 'Document draft created.'
+            'Document draft created.'
         );
 
         mysqli_commit($conn);
 
-        unset($_SESSION['create_document_old']);
-
-        if ($action === 'submit_review') {
-            header('Location: submit-review.php?id=' . $documentId . '&submitted=1');
-            exit;
-        }
-
+        unset($_SESSION['create_document_old'], $_SESSION['submit_review_payload'], $_SESSION['submit_review_data']);
         $_SESSION['flash_success'] = 'Draft created successfully.';
-        $_SESSION['create_document_old'] = $formData;
-        $_SESSION['create_document_old']['draft_id'] = (string)$documentId;
-        redirect_back('draft_id=' . urlencode((string)$documentId));
+        header('Location: repository.php');
+        exit;
 
     } catch (Throwable $e) {
         mysqli_rollback($conn);
@@ -872,6 +995,7 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0) ? round(((
     <input type="hidden" name="existing_file_path" id="existing_file_path" value="<?php echo e($formData['existing_file_path']); ?>">
     <input type="hidden" name="existing_file_mime" id="existing_file_mime" value="<?php echo e($formData['existing_file_mime']); ?>">
     <input type="hidden" name="existing_file_size" id="existing_file_size" value="<?php echo e($formData['existing_file_size']); ?>">
+    <input type="hidden" id="is_fresh_create_page" value="<?php echo $isFreshCreatePage ? '1' : '0'; ?>">
 
     <div class="row g-3">
       <div class="col-lg-8">
@@ -925,6 +1049,9 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0) ? round(((
                   <?php foreach ($approvers as $approver): ?>
                     <?php
                       $approverName = trim(($approver['first_name'] ?? '') . ' ' . ($approver['last_name'] ?? ''));
+                      if ($approverName === '') {
+                          $approverName = (string)($approver['email'] ?? 'Approver');
+                      }
                       $label = $approverName . ' — ' . ($approver['role_name'] ?? 'Approver');
                     ?>
                     <option value="<?php echo (int)$approver['id']; ?>" <?php echo (string)$formData['approver_user_id'] === (string)$approver['id'] ? 'selected' : ''; ?>>
@@ -1237,7 +1364,7 @@ function renderBuilderInfoTable(data) {
   wrapper.classList.remove('d-none');
 }
 
-function renderBuilderSummary(data, showBanner) {
+function renderBuilderSummary(data) {
   const fieldCount = Array.isArray(data.fields) ? data.fields.length : 0;
   document.getElementById('attachedFormName').textContent = data.formName || 'Untitled Form';
   document.getElementById('attachedFormMeta').textContent =
@@ -1329,6 +1456,20 @@ function removeBuilderField(index) {
   openChecklistBuilder(true);
 }
 
+function makeFieldKey(field, index) {
+  let base = String(field.label || ('field_' + (index + 1)))
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  if (!base) {
+    base = 'field_' + (index + 1);
+  }
+
+  return base;
+}
+
 function renderDynamicFillForm(data) {
   const wrapper = document.getElementById('formFillWrapper');
   const container = document.getElementById('dynamicFormFields');
@@ -1341,8 +1482,18 @@ function renderDynamicFillForm(data) {
     return;
   }
 
+  const usedKeys = {};
+
   container.innerHTML = fields.map((field, index) => {
-    const key = 'field_' + index;
+    let key = makeFieldKey(field, index);
+    const originalKey = key;
+    let counter = 2;
+    while (usedKeys[key]) {
+      key = originalKey + '_' + counter;
+      counter++;
+    }
+    usedKeys[key] = true;
+
     const value = responses[key] ?? '';
     let control = '';
 
@@ -1584,10 +1735,38 @@ document.getElementById('effective_date').addEventListener('change', function() 
   handleDocTypeChange(document.getElementById('docTypeSelect'));
 });
 
+function clearCreateDocumentState() {
+  sessionStorage.removeItem(BUILDER_STORAGE_KEY);
+  sessionStorage.removeItem(BUILDER_RESPONSE_KEY);
+
+  document.getElementById('form_name_hidden').value = '';
+  document.getElementById('form_type_hidden').value = '';
+  document.getElementById('form_desc_hidden').value = '';
+  document.getElementById('form_builder_json_hidden').value = '';
+  document.getElementById('form_response_json_hidden').value = '';
+  document.getElementById('existing_file_name').value = '';
+  document.getElementById('existing_file_path').value = '';
+  document.getElementById('existing_file_mime').value = '';
+  document.getElementById('existing_file_size').value = '';
+
+  const selectedFileInfo = document.getElementById('selectedFileInfo');
+  if (selectedFileInfo) {
+    selectedFileInfo.classList.add('d-none');
+  }
+
+  detachForm();
+}
+
 (function restoreBuiltForm() {
+  const isFreshCreatePage = document.getElementById('is_fresh_create_page')?.value === '1';
+
+  if (isFreshCreatePage) {
+    clearCreateDocumentState();
+  }
+
   let data = null;
   const rawHidden = document.getElementById('form_builder_json_hidden').value || '';
-  const rawSession = sessionStorage.getItem(BUILDER_STORAGE_KEY);
+  const rawSession = isFreshCreatePage ? '' : (sessionStorage.getItem(BUILDER_STORAGE_KEY) || '');
 
   if (rawHidden) {
     try { data = JSON.parse(rawHidden); } catch (e) {}
@@ -1600,7 +1779,7 @@ document.getElementById('effective_date').addEventListener('change', function() 
   topicTouched = topicInput.value.trim() !== '' && topicInput.value.trim() !== autoTopic;
 
   if (data && Array.isArray(data.fields) && data.fields.length) {
-    renderBuilderSummary(data, false);
+    renderBuilderSummary(data);
     renderDynamicFillForm(data);
   }
 
