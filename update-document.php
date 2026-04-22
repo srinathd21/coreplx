@@ -317,6 +317,7 @@ $currentVersionId = 0;
 $currentVersionLabel = '';
 $nextVersionLabel = '';
 $existingFileName = '';
+$existingFilePath = '';
 
 $form = [
     'document_id'         => '',
@@ -340,6 +341,7 @@ $successMessage = '';
 $badgeClass = 'badge badge-soft-info';
 $badgeLabel = 'Under Review';
 
+$lockedOwnerName = '—';
 if ($selectedDocumentId > 0) {
     $detailSql = "
         SELECT
@@ -379,6 +381,7 @@ if ($selectedDocumentId > 0) {
         $currentVersionLabel = (string)($selectedDocument['version_label'] ?? '01');
         $nextVersionLabel = increment_version_label($currentVersionLabel);
         $existingFileName = (string)($selectedDocument['primary_file_name'] ?? '');
+        $existingFilePath = (string)($selectedDocument['primary_file_path'] ?? '');
 
         $form['document_id'] = (string)$selectedDocument['id'];
         $form['document_type_id'] = (string)($selectedDocument['document_type_id'] ?? '');
@@ -394,6 +397,13 @@ if ($selectedDocumentId > 0) {
         $form['content_text'] = (string)($selectedDocument['content_text'] ?? '');
         $form['current_version'] = $currentVersionLabel;
         $form['next_version'] = $nextVersionLabel;
+
+        foreach ($owners as $owner) {
+            if ((string)$owner['id'] === (string)$form['owner_user_id']) {
+                $lockedOwnerName = $owner['name'];
+                break;
+            }
+        }
     }
 }
 
@@ -436,6 +446,34 @@ $documentsByTypeJson = json_encode($documentsByType, JSON_UNESCAPED_UNICODE | JS
     #docInfoPanel .di-id   { font-weight: 700; color: #2563eb; font-size: 14px; }
     #docInfoPanel .di-meta { color: #6b7280; margin-top: 2px; }
     select:disabled { background: #f5f7fa; color: #aaa; cursor: not-allowed; }
+
+    .upload-box {
+      border: 1px dashed #cfd8e3;
+      border-radius: 10px;
+      background: #f8fafc;
+      transition: all .2s ease;
+    }
+    .upload-box.drag-over {
+      border-color: #2563eb;
+      background: #eef4ff;
+    }
+    .file-selected-box {
+      background: #f8f9fb;
+      border: 1px solid #dde3ec;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13px;
+    }
+    .file-selected-box .file-name {
+      font-weight: 600;
+      color: #2563eb;
+      word-break: break-word;
+    }
+    .file-selected-box .file-meta {
+      color: #6b7280;
+      font-size: 12px;
+      margin-top: 3px;
+    }
   </style>
 </head>
 <body>
@@ -550,7 +588,8 @@ $documentsByTypeJson = json_encode($documentsByType, JSON_UNESCAPED_UNICODE | JS
 
             <div class="col-md-6">
               <label class="form-label">Document Title / Topic</label>
-              <input class="form-control" id="fDocTopic" value="<?php echo e($form['title'] !== '' ? $form['title'] : $form['topic']); ?>">
+              <input class="form-control field-locked" id="fDocTopic" readonly value="<?php echo e($form['title'] !== '' ? $form['title'] : $form['topic']); ?>">
+              <div class="form-text">Locked on update page — this cannot be edited here.</div>
             </div>
 
             <div class="col-md-6">
@@ -577,13 +616,9 @@ $documentsByTypeJson = json_encode($documentsByType, JSON_UNESCAPED_UNICODE | JS
 
             <div class="col-md-6">
               <label class="form-label">Owner</label>
-              <select class="form-select" id="fOwner">
-                <?php foreach ($owners as $owner): ?>
-                  <option value="<?php echo e($owner['name']); ?>" <?php echo ((string)$owner['id'] === (string)$form['owner_user_id']) ? 'selected' : ''; ?>>
-                    <?php echo e($owner['name']); ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
+              <input class="form-control field-locked" id="fOwner" readonly value="<?php echo e($lockedOwnerName); ?>">
+              <input type="hidden" id="fOwnerId" value="<?php echo e($form['owner_user_id']); ?>">
+              <div class="form-text">Owner cannot be changed on update page.</div>
             </div>
 
             <div class="col-md-6">
@@ -618,24 +653,37 @@ $documentsByTypeJson = json_encode($documentsByType, JSON_UNESCAPED_UNICODE | JS
         </div>
       </div>
 
-      <div class="card cp-card d-none <?php echo $selectedDocument ? '' : 'd-none'; ?>" id="contentCard">
+      <div class="card cp-card <?php echo $selectedDocument ? '' : 'd-none'; ?>" id="contentCard">
         <div class="card-body">
           <h2 class="card-title mb-1">Updated Document Content</h2>
           <p class="card-subtitle mb-3">Replace or revise the document content for the new version.</p>
+
           <ul class="nav nav-pills gap-2 mb-3">
-            <li class="nav-item"><a class="nav-link active tab-pill" href="#">Rich Text Editor</a></li>
-            <li class="nav-item"><a class="nav-link tab-pill" href="#">File Upload</a></li>
+            <li class="nav-item"><a class="nav-link active tab-pill" href="javascript:void(0);">Rich Text Editor</a></li>
+            <li class="nav-item"><a class="nav-link tab-pill" href="javascript:void(0);">File Upload</a></li>
           </ul>
+
           <div class="mb-3">
             <label class="form-label">Document Body</label>
-            <textarea class="form-control" rows="9" placeholder="Enter updated document content here"><?php echo e($form['content_text']); ?></textarea>
+            <textarea class="form-control" id="fContentText" rows="9" placeholder="Enter updated document content here"><?php echo e($form['content_text']); ?></textarea>
           </div>
-          <div class="upload-box p-4 text-center small text-secondary">
-            Drag and drop file here or click to browse.<br/>
-            Supported: PDF, DOCX, XLSX | Maximum size: 25 MB
-            <?php if ($existingFileName !== ''): ?>
-              <div class="mt-2">Current File: <?php echo e($existingFileName); ?></div>
-            <?php endif; ?>
+
+          <div class="mb-2">
+            <label class="form-label">Attach Updated File</label>
+            <input type="file" id="document_file" name="document_file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" style="display:none;">
+            <div class="upload-box p-4 text-center small text-secondary" id="documentUploadBox" style="cursor:pointer;">
+              Drag and drop file here or click to browse.<br/>
+              Supported: PDF, DOCX, XLSX, TXT | Maximum size: 25 MB
+            </div>
+          </div>
+
+          <div id="selectedFileInfo" class="file-selected-box mt-3 <?php echo $existingFileName !== '' ? '' : 'd-none'; ?>">
+            <div class="file-name" id="selectedFileName"><?php echo e($existingFileName !== '' ? $existingFileName : ''); ?></div>
+            <div class="file-meta" id="selectedFileMeta">
+              <?php if ($existingFileName !== ''): ?>
+                Current attached file<?php echo $existingFilePath !== '' ? ' · ' . e($existingFilePath) : ''; ?>
+              <?php endif; ?>
+            </div>
           </div>
         </div>
       </div>
@@ -750,6 +798,66 @@ function formatDate(str) {
   var d = new Date(str);
   if (isNaN(d.getTime())) return str;
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+const fileInput = document.getElementById('document_file');
+const uploadBox = document.getElementById('documentUploadBox');
+const selectedFileInfo = document.getElementById('selectedFileInfo');
+const selectedFileName = document.getElementById('selectedFileName');
+const selectedFileMeta = document.getElementById('selectedFileMeta');
+
+function showSelectedFile(file) {
+  if (!file) return;
+  selectedFileName.textContent = file.name;
+  selectedFileMeta.textContent = (Math.round((file.size / 1024) * 100) / 100) + ' KB';
+  selectedFileInfo.classList.remove('d-none');
+}
+
+if (uploadBox && fileInput) {
+  uploadBox.addEventListener('click', function(e) {
+    e.preventDefault();
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', function() {
+    if (this.files && this.files.length > 0) {
+      showSelectedFile(this.files[0]);
+    }
+  });
+
+  uploadBox.addEventListener('dragenter', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.classList.add('drag-over');
+  });
+
+  uploadBox.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.classList.add('drag-over');
+  });
+
+  uploadBox.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.classList.remove('drag-over');
+  });
+
+  uploadBox.addEventListener('drop', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.classList.remove('drag-over');
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const dt = new DataTransfer();
+      for (let i = 0; i < files.length; i++) {
+        dt.items.add(files[i]);
+      }
+      fileInput.files = dt.files;
+      showSelectedFile(files[0]);
+    }
+  });
 }
 </script>
 </body>
