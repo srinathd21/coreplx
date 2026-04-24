@@ -25,20 +25,16 @@ if (!function_exists('generate_uuid_v4')) {
     }
 }
 
-if (!function_exists('tableExists')) {
-    function tableExists(mysqli $conn, $tableName) {
-        $tableName = mysqli_real_escape_string($conn, $tableName);
-        $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
-        return ($res && mysqli_num_rows($res) > 0);
-    }
-}
-
-if (!function_exists('columnExists')) {
-    function columnExists(mysqli $conn, $tableName, $columnName) {
-        $tableName = mysqli_real_escape_string($conn, $tableName);
-        $columnName = mysqli_real_escape_string($conn, $columnName);
-        $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$tableName}` LIKE '{$columnName}'");
-        return ($res && mysqli_num_rows($res) > 0);
+if (!function_exists('table_exists')) {
+    function table_exists(mysqli $conn, string $table): bool
+    {
+        $table = mysqli_real_escape_string($conn, $table);
+        $res = mysqli_query($conn, "SHOW TABLES LIKE '$table'");
+        $has = $res && mysqli_num_rows($res) > 0;
+        if ($res) {
+            mysqli_free_result($res);
+        }
+        return $has;
     }
 }
 
@@ -48,19 +44,6 @@ if (!function_exists('has_column')) {
         $table = mysqli_real_escape_string($conn, $table);
         $column = mysqli_real_escape_string($conn, $column);
         $res = mysqli_query($conn, "SHOW COLUMNS FROM `$table` LIKE '$column'");
-        $has = $res && mysqli_num_rows($res) > 0;
-        if ($res) {
-            mysqli_free_result($res);
-        }
-        return $has;
-    }
-}
-
-if (!function_exists('table_exists')) {
-    function table_exists(mysqli $conn, string $table): bool
-    {
-        $table = mysqli_real_escape_string($conn, $table);
-        $res = mysqli_query($conn, "SHOW TABLES LIKE '$table'");
         $has = $res && mysqli_num_rows($res) > 0;
         if ($res) {
             mysqli_free_result($res);
@@ -116,18 +99,28 @@ if (!function_exists('exec_prepared')) {
         if (!$stmt) {
             throw new Exception('Database prepare failed: ' . mysqli_error($conn));
         }
+
         if (!stmt_bind_execute($stmt, $params)) {
             $err = mysqli_stmt_error($stmt);
             mysqli_stmt_close($stmt);
             throw new Exception('Database execute failed: ' . $err);
         }
+
         return $stmt;
     }
 }
 
 if (!function_exists('write_audit_log')) {
-    function write_audit_log(mysqli $conn, string $entityType, $entityId, string $action, $oldValue, $newValue, $performedBy, string $remarks = ''): void
-    {
+    function write_audit_log(
+        mysqli $conn,
+        string $entityType,
+        $entityId,
+        string $action,
+        $oldValue,
+        $newValue,
+        $performedBy,
+        string $remarks = ''
+    ): void {
         if (!table_exists($conn, 'audit_logs')) {
             return;
         }
@@ -143,6 +136,7 @@ if (!function_exists('write_audit_log')) {
             (event_id, entity_type, entity_id, action, old_value, new_value, performed_by, performed_at, remarks, ip_address, user_agent)
             VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
         ";
+
         $stmt = mysqli_prepare($conn, $sql);
         if ($stmt) {
             stmt_bind_execute($stmt, [
@@ -169,19 +163,9 @@ if (!function_exists('format_display_date')) {
         if ($dateValue === '' || $dateValue === '0000-00-00' || $dateValue === '0000-00-00 00:00:00') {
             return '—';
         }
+
         $ts = strtotime($dateValue);
         return $ts ? date('d M Y', $ts) : $dateValue;
-    }
-}
-
-if (!function_exists('format_response_label')) {
-    function format_response_label($key): string
-    {
-        $key = trim((string)$key);
-        if ($key === '') {
-            return 'Field';
-        }
-        return ucwords(str_replace(['_', '-'], ' ', $key));
     }
 }
 
@@ -192,14 +176,52 @@ if (!function_exists('parse_json_array')) {
         if ($json === '') {
             return [];
         }
+
         $decoded = json_decode($json, true);
         return is_array($decoded) ? $decoded : [];
     }
 }
 
+if (!function_exists('normalize_builder_key')) {
+    function normalize_builder_key(string $label, int $index = 0): string
+    {
+        $key = strtolower(trim($label));
+        $key = preg_replace('/[^a-z0-9]+/i', '_', $key);
+        $key = trim((string)$key, '_');
+
+        if ($key === '') {
+            $key = 'field_' . ($index + 1);
+        }
+
+        return $key;
+    }
+}
+
+if (!function_exists('is_checked_value')) {
+    function is_checked_value($value): bool
+    {
+        return $value === 1 || $value === '1' || $value === true || $value === 'true' || $value === 'Yes' || $value === 'yes' || $value === 'checked';
+    }
+}
+
+if (!function_exists('is_checklist_document_type')) {
+    function is_checklist_document_type(string $typeName): bool
+    {
+        return strtolower(trim($typeName)) === 'checklist';
+    }
+}
+
+if (!function_exists('is_form_document_type')) {
+    function is_form_document_type(string $typeName): bool
+    {
+        $typeName = strtolower(trim($typeName));
+        return in_array($typeName, ['form', 'checklist'], true);
+    }
+}
+
 $currentUserId = (int)($_SESSION['user_id'] ?? $_SESSION['admin_id'] ?? 0);
-$currentUserName = isset($_SESSION['full_name']) && trim($_SESSION['full_name']) !== ''
-    ? trim($_SESSION['full_name'])
+$currentUserName = isset($_SESSION['full_name']) && trim((string)$_SESSION['full_name']) !== ''
+    ? trim((string)$_SESSION['full_name'])
     : 'QA Admin';
 
 if ($currentUserId <= 0) {
@@ -240,7 +262,7 @@ $formType         = (string)($payload['form_type'] ?? '');
 $formDesc         = (string)($payload['form_desc'] ?? '');
 $formBuilderJson  = (string)($payload['form_builder_json'] ?? '');
 $formResponseJson = (string)($payload['form_response_json'] ?? '');
-$isFormDocument   = !empty($payload['is_form_document']);
+$isFormDocument   = !empty($payload['is_form_document']) || is_form_document_type($documentType);
 
 $primaryFileName  = (string)($payload['existing_file_name'] ?? '');
 $primaryFilePath  = (string)($payload['existing_file_path'] ?? '');
@@ -250,6 +272,9 @@ $primaryFileSize  = (int)($payload['existing_file_size'] ?? 0);
 $formBuilderData  = parse_json_array($formBuilderJson);
 $formFields       = is_array($formBuilderData['fields'] ?? null) ? $formBuilderData['fields'] : [];
 $formResponses    = parse_json_array($formResponseJson);
+
+$resolvedBuilderType = $formType !== '' ? $formType : $documentType;
+$isChecklistDocument = is_checklist_document_type($resolvedBuilderType) || is_checklist_document_type($documentType);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string)($_POST['action'] ?? ''));
@@ -286,8 +311,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $formDefinitionId = null;
                 if ($isFormDocument && $formBuilderJson !== '' && table_exists($conn, 'form_definitions') && $hasFormBuilderJson) {
-                    $formNameToStore = $formName !== '' ? $formName : ($documentTopic . ' Form');
-                    $formTypeToStore = $formType !== '' ? $formType : 'Checklist';
+                    $formNameToStore = $formName !== '' ? $formName : ($documentTopic . ' Builder');
+                    $formTypeToStore = $resolvedBuilderType !== '' ? $resolvedBuilderType : $documentType;
 
                     $stmt = exec_prepared($conn, "
                         INSERT INTO form_definitions
@@ -360,7 +385,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($hasFormDefinitionLink) {
                     $versionColumns[] = 'form_definition_id';
-                    $versionParams[]  = $formDefinitionId;
+                    $versionParams[] = $formDefinitionId;
                 }
 
                 if ($hasPrimaryFileName) {
@@ -425,9 +450,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 mysqli_commit($conn);
 
-                unset($_SESSION['submit_review_payload']);
-                unset($_SESSION['submit_review_data']);
-                unset($_SESSION['create_document_old']);
+                unset($_SESSION['submit_review_payload'], $_SESSION['submit_review_data'], $_SESSION['create_document_old']);
 
                 $_SESSION['flash_success'] = 'Document submitted for review successfully.';
                 header('Location: repository.php');
@@ -446,55 +469,91 @@ $fileSizeDisplay = $primaryFileSize > 0 ? round($primaryFileSize / 1024, 2) . ' 
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CorePlx Quality DMS - Submit for Review</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
   <style>
-    .cp-card {
-      border: 1px solid rgba(0,0,0,.08);
-      border-radius: 18px;
-      box-shadow: 0 6px 24px rgba(0,0,0,.06);
-      background: #fff;
+    .cp-card{
+      border:1px solid rgba(0,0,0,.08);
+      border-radius:18px;
+      box-shadow:0 6px 24px rgba(0,0,0,.06);
+      background:#fff;
     }
-    .page-title {
-      font-size: 1.75rem;
-      font-weight: 700;
+    .page-title{
+      font-size:1.75rem;
+      font-weight:700;
     }
-    .page-subtitle,
-    .card-subtitle {
-      color: #6c757d;
+    .page-subtitle,.card-subtitle{
+      color:#6c757d;
     }
-    .note-list {
-      padding-left: 1rem;
+    .note-list{
+      padding-left:1rem;
     }
-    .summary-box {
-      background: #f8f9fb;
-      border: 1px solid #dde3ec;
-      border-radius: 12px;
-      padding: 14px;
+    .summary-box{
+      background:#f8f9fb;
+      border:1px solid #dde3ec;
+      border-radius:12px;
+      padding:14px;
     }
-    .summary-box h6 {
-      font-size: 13px;
-      font-weight: 700;
-      color: #0D2144;
-      margin-bottom: 10px;
-      text-transform: uppercase;
-      letter-spacing: .3px;
+    .summary-box h6{
+      font-size:13px;
+      font-weight:700;
+      color:#0D2144;
+      margin-bottom:10px;
+      text-transform:uppercase;
+      letter-spacing:.3px;
     }
-    .summary-pre {
-      white-space: pre-wrap;
-      word-break: break-word;
-      margin: 0;
-      font-size: 14px;
-      color: #1f2937;
-      font-family: inherit;
+    .summary-pre{
+      white-space:pre-wrap;
+      word-break:break-word;
+      margin:0;
+      font-size:14px;
+      color:#1f2937;
+      font-family:inherit;
     }
-    .review-check-box {
-      background: #f8fbff;
-      border: 1px solid #d8e4ff;
-      border-radius: 12px;
-      padding: 14px 16px;
+    .review-check-box{
+      background:#f8fbff;
+      border:1px solid #d8e4ff;
+      border-radius:12px;
+      padding:14px 16px;
+    }
+    .checklist-list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .checklist-item{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 14px;
+      border:1px solid #dde3ec;
+      border-radius:12px;
+      background:#fff;
+    }
+    .checklist-item-label{
+      font-weight:600;
+      color:#1f2937;
+      margin:0;
+    }
+    .status-badge{
+      display:inline-block;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      white-space:nowrap;
+    }
+    .status-checked{
+      background:#dcfce7;
+      color:#166534;
+    }
+    .status-unchecked{
+      background:#fee2e2;
+      color:#991b1b;
     }
   </style>
 </head>
@@ -521,6 +580,7 @@ $fileSizeDisplay = $primaryFileSize > 0 ? round($primaryFileSize / 1024, 2) . ' 
 
         <li class="nav-item"><a class="nav-link" href="portal-select.php">Switch to User</a></li>
       </ul>
+
       <div class="d-flex align-items-center gap-3 ms-xl-3">
         <span class="navbar-text small"><?php echo e($currentUserName); ?></span>
         <a class="nav-link px-0" href="notifications.php">Notifications</a>
@@ -534,7 +594,7 @@ $fileSizeDisplay = $primaryFileSize > 0 ? round($primaryFileSize / 1024, 2) . ' 
 <div class="content-wrap px-4 py-4 mx-auto">
   <div class="mb-4">
     <h1 class="page-title mb-2">Submit for Review</h1>
-    <p class="page-subtitle mb-0">Review all document details, created fields, attached content, and confirm before submitting for approval.</p>
+    <p class="page-subtitle mb-0">Review all document details, created fields or checklist items, attached content, and confirm before submitting for approval.</p>
   </div>
 
   <?php if ($successMessage !== ''): ?>
@@ -601,24 +661,24 @@ $fileSizeDisplay = $primaryFileSize > 0 ? round($primaryFileSize / 1024, 2) . ' 
 
             <?php if ($isFormDocument): ?>
               <div class="summary-box mb-3">
-                <h6>Form Details</h6>
+                <h6><?php echo $isChecklistDocument ? 'Checklist Details' : 'Form Details'; ?></h6>
                 <div class="table-responsive">
                   <table class="table table-sm mb-0">
                     <tbody>
                       <tr>
-                        <th style="width:180px;">Form Name</th>
+                        <th style="width:180px;"><?php echo $isChecklistDocument ? 'Checklist Name' : 'Form Name'; ?></th>
                         <td><?php echo e($formName !== '' ? $formName : '—'); ?></td>
                       </tr>
                       <tr>
-                        <th>Form Type</th>
-                        <td><?php echo e($formType !== '' ? $formType : 'Checklist'); ?></td>
+                        <th>Type</th>
+                        <td><?php echo e($resolvedBuilderType !== '' ? $resolvedBuilderType : '—'); ?></td>
                       </tr>
                       <tr>
                         <th>Description</th>
                         <td><?php echo e($formDesc !== '' ? $formDesc : '—'); ?></td>
                       </tr>
                       <tr>
-                        <th>Total Fields</th>
+                        <th>Total Items</th>
                         <td><?php echo e((string)count($formFields)); ?></td>
                       </tr>
                     </tbody>
@@ -626,66 +686,112 @@ $fileSizeDisplay = $primaryFileSize > 0 ? round($primaryFileSize / 1024, 2) . ' 
                 </div>
               </div>
 
-              <div class="summary-box mb-3">
-                <h6>Created Fields & Entered Values</h6>
-                <?php if (!empty($formFields)): ?>
-                  <div class="table-responsive">
-                    <table class="table table-bordered table-sm mb-0">
-                      <thead>
-                        <tr>
-                          <th style="width:60px;">#</th>
-                          <th>Field Label</th>
-                          <th style="width:160px;">Field Type</th>
-                          <th>Entered Value</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <?php
-                        $usedKeys = [];
-                        foreach ($formFields as $index => $field):
-                            $label = trim((string)($field['label'] ?? ('Field ' . ($index + 1))));
-                            $type  = trim((string)($field['type'] ?? 'text'));
+              <?php if ($isChecklistDocument): ?>
+                <div class="summary-box mb-3">
+                  <h6>Checklist Items</h6>
 
-                            $key = strtolower(preg_replace('/[^a-z0-9]+/i', '_', $label));
-                            $key = trim((string)$key, '_');
-                            if ($key === '') {
-                                $key = 'field_' . ($index + 1);
-                            }
+                  <?php if (!empty($formFields)): ?>
+                    <div class="checklist-list">
+                      <?php
+                      $usedKeys = [];
+                      foreach ($formFields as $index => $field):
+                          $label = trim((string)($field['label'] ?? ('Checklist Item ' . ($index + 1))));
+                          $type  = trim((string)($field['type'] ?? 'checklist_item'));
 
-                            $baseKey = $key;
-                            $counter = 2;
-                            while (isset($usedKeys[$key])) {
-                                $key = $baseKey . '_' . $counter;
-                                $counter++;
-                            }
-                            $usedKeys[$key] = true;
+                          $key = normalize_builder_key($label, $index);
+                          $baseKey = $key;
+                          $counter = 2;
 
-                            $value = $formResponses[$key] ?? '';
-                            if (is_array($value)) {
-                                $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                            }
-                            if ($type === 'checkbox') {
-                                $value = ($value === '1' || $value === 1 || $value === true) ? 'Checked' : 'Not Checked';
-                            }
-                            if ($value === '' || $value === null) {
-                                $value = '—';
-                            }
-                        ?>
+                          while (isset($usedKeys[$key])) {
+                              $key = $baseKey . '_' . $counter;
+                              $counter++;
+                          }
+                          $usedKeys[$key] = true;
+
+                          $value = $formResponses[$key] ?? '';
+                          $isChecked = is_checked_value($value);
+                      ?>
+                        <div class="checklist-item">
+                          <div>
+                            <div class="checklist-item-label"><?php echo e($label); ?></div>
+                            <div class="small text-secondary mt-1"><?php echo e(ucwords(str_replace(['_', '-'], ' ', $type))); ?></div>
+                          </div>
+                          <div>
+                            <span class="status-badge <?php echo $isChecked ? 'status-checked' : 'status-unchecked'; ?>">
+                              <?php echo $isChecked ? 'Checked' : 'Not Checked'; ?>
+                            </span>
+                          </div>
+                        </div>
+                      <?php endforeach; ?>
+                    </div>
+                  <?php else: ?>
+                    <div class="text-secondary">No checklist items found.</div>
+                  <?php endif; ?>
+                </div>
+              <?php else: ?>
+                <div class="summary-box mb-3">
+                  <h6>Created Fields & Entered Values</h6>
+
+                  <?php if (!empty($formFields)): ?>
+                    <div class="table-responsive">
+                      <table class="table table-bordered table-sm mb-0">
+                        <thead>
                           <tr>
-                            <td><?php echo e((string)($index + 1)); ?></td>
-                            <td><?php echo e($label); ?></td>
-                            <td><?php echo e(ucwords(str_replace(['_', '-'], ' ', $type))); ?></td>
-                            <td><?php echo e((string)$value); ?></td>
+                            <th style="width:60px;">#</th>
+                            <th>Field Label</th>
+                            <th style="width:160px;">Field Type</th>
+                            <th>Entered Value</th>
                           </tr>
-                        <?php endforeach; ?>
-                      </tbody>
-                    </table>
-                  </div>
-                <?php else: ?>
-                  <div class="text-secondary">No created fields found.</div>
-                <?php endif; ?>
-              </div>
+                        </thead>
+                        <tbody>
+                          <?php
+                          $usedKeys = [];
+                          foreach ($formFields as $index => $field):
+                              $label = trim((string)($field['label'] ?? ('Field ' . ($index + 1))));
+                              $type  = trim((string)($field['type'] ?? 'text'));
+
+                              $key = normalize_builder_key($label, $index);
+                              $baseKey = $key;
+                              $counter = 2;
+
+                              while (isset($usedKeys[$key])) {
+                                  $key = $baseKey . '_' . $counter;
+                                  $counter++;
+                              }
+                              $usedKeys[$key] = true;
+
+                              $value = $formResponses[$key] ?? '';
+
+                              if (is_array($value)) {
+                                  $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                              }
+
+                              if ($type === 'checkbox') {
+                                  $value = is_checked_value($value) ? 'Checked' : 'Not Checked';
+                              }
+
+                              if ($value === '' || $value === null) {
+                                  $value = '—';
+                              }
+                          ?>
+                            <tr>
+                              <td><?php echo e((string)($index + 1)); ?></td>
+                              <td><?php echo e($label); ?></td>
+                              <td><?php echo e(ucwords(str_replace(['_', '-'], ' ', $type))); ?></td>
+                              <td><?php echo e((string)$value); ?></td>
+                            </tr>
+                          <?php endforeach; ?>
+                        </tbody>
+                      </table>
+                    </div>
+                  <?php else: ?>
+                    <div class="text-secondary">No created fields found.</div>
+                  <?php endif; ?>
+                </div>
+              <?php endif; ?>
+
             <?php else: ?>
+
               <?php if ($contentMode === 'rich_text'): ?>
                 <div class="summary-box mb-3">
                   <h6>Document Text Content</h6>
@@ -720,13 +826,14 @@ $fileSizeDisplay = $primaryFileSize > 0 ? round($primaryFileSize / 1024, 2) . ' 
                   </div>
                 </div>
               <?php endif; ?>
+
             <?php endif; ?>
 
             <div class="review-check-box mb-3">
               <div class="form-check mb-0">
                 <input class="form-check-input" type="checkbox" name="confirm_review_read" id="confirm_review_read" value="1" <?php echo isset($_POST['confirm_review_read']) ? 'checked' : ''; ?>>
                 <label class="form-check-label fw-semibold" for="confirm_review_read">
-                  I reviewed all document details, created fields, entered values, and attached content.
+                  I reviewed all document details, created fields or checklist items, entered values, and attached content.
                 </label>
               </div>
             </div>
@@ -738,7 +845,6 @@ $fileSizeDisplay = $primaryFileSize > 0 ? round($primaryFileSize / 1024, 2) . ' 
               <button type="submit" class="btn btn-success">Confirm Submit</button>
             </div>
           </form>
-
         </div>
       </div>
     </div>
@@ -749,10 +855,10 @@ $fileSizeDisplay = $primaryFileSize > 0 ? round($primaryFileSize / 1024, 2) . ' 
           <h2 class="card-title mb-1">System Actions After Submit</h2>
           <ul class="small text-secondary note-list mb-0">
             <li>Status changes to Pending Approval.</li>
-            <li>Email notification sent to approver.</li>
             <li>Submission event written to audit trail.</li>
             <li>Document version is saved as review submission.</li>
             <li>All reviewed content becomes part of workflow record.</li>
+            <li>Approver can review the submitted record in repository/workflow screens.</li>
           </ul>
         </div>
       </div>
