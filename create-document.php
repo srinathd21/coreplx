@@ -351,6 +351,7 @@ $flashError   = $_SESSION['flash_error'] ?? '';
 
 unset($_SESSION['flash_success'], $_SESSION['flash_error']);
 
+// Fetch document types - ensure we get all active types
 $documentTypes = fetch_all_assoc($conn, "
     SELECT id, type_name, prefix, review_cycle_days, acknowledgement_required
     FROM document_types
@@ -358,6 +359,41 @@ $documentTypes = fetch_all_assoc($conn, "
     ORDER BY type_name ASC
 ");
 
+// Debug: If no document types found, try to insert default ones
+if (empty($documentTypes)) {
+    // Check if table has any records
+    $countCheck = mysqli_query($conn, "SELECT COUNT(*) as cnt FROM document_types");
+    if ($countCheck) {
+        $row = mysqli_fetch_assoc($countCheck);
+        if ($row['cnt'] == 0) {
+            // Insert default document types
+            $defaultTypes = [
+                ['SOP', 'Standard Operating Procedure', 'SOP', 365, 1],
+                ['Policy', 'Controlled policy document', 'POL', 365, 1],
+                ['Guidance', 'Guidance document', 'GUI', 365, 0],
+                ['Form', 'Controlled form', 'FRM', 365, 0],
+                ['Work Instruction', 'Work instruction document', 'WI', 365, 1],
+                ['Checklist', 'Controlled checklist', 'CHK', 180, 0]
+            ];
+            
+            foreach ($defaultTypes as $type) {
+                $insertSql = "INSERT INTO document_types (type_name, description, prefix, review_cycle_days, acknowledgement_required, status, created_at) 
+                              VALUES ('{$type[0]}', '{$type[1]}', '{$type[2]}', {$type[3]}, {$type[4]}, 'active', NOW())";
+                mysqli_query($conn, $insertSql);
+            }
+            
+            // Refetch document types
+            $documentTypes = fetch_all_assoc($conn, "
+                SELECT id, type_name, prefix, review_cycle_days, acknowledgement_required
+                FROM document_types
+                WHERE status = 'active'
+                ORDER BY type_name ASC
+            ");
+        }
+    }
+}
+
+// Fetch approvers
 $approvers = fetch_all_assoc($conn, "
     SELECT u.id, u.first_name, u.last_name, u.email, r.role_code, r.role_name
     FROM users u
@@ -1063,15 +1099,19 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0)
               <div class="col-md-6">
                 <label class="form-label">Document Type</label>
                 <select class="form-select" id="docTypeSelect" name="document_type_id" onchange="handleDocTypeChange(this)">
-                  <?php foreach ($documentTypes as $type): ?>
-                    <option value="<?php echo (int)$type['id']; ?>"
-                            data-prefix="<?php echo e($type['prefix']); ?>"
-                            data-name="<?php echo e($type['type_name']); ?>"
-                            data-review-days="<?php echo (int)$type['review_cycle_days']; ?>"
-                            <?php echo (string)$formData['document_type_id'] === (string)$type['id'] ? 'selected' : ''; ?>>
-                      <?php echo e($type['type_name']); ?>
-                    </option>
-                  <?php endforeach; ?>
+                  <?php if (!empty($documentTypes)): ?>
+                    <?php foreach ($documentTypes as $type): ?>
+                      <option value="<?php echo (int)$type['id']; ?>"
+                              data-prefix="<?php echo e($type['prefix']); ?>"
+                              data-name="<?php echo e($type['type_name']); ?>"
+                              data-review-days="<?php echo (int)$type['review_cycle_days']; ?>"
+                              <?php echo (string)$formData['document_type_id'] === (string)$type['id'] ? 'selected' : ''; ?>>
+                        <?php echo e($type['type_name']); ?>
+                      </option>
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <option value="">No document types available</option>
+                  <?php endif; ?>
                 </select>
               </div>
 
@@ -1277,7 +1317,11 @@ const BUILDER_STORAGE_KEY = 'cpBuiltFormInline';
 const BUILDER_RESPONSE_KEY = 'cpBuiltFormResponses';
 
 function getSelectedTypeOption() {
-  return document.getElementById('docTypeSelect').selectedOptions[0];
+  const select = document.getElementById('docTypeSelect');
+  if (!select || !select.selectedOptions || !select.selectedOptions.length) {
+    return null;
+  }
+  return select.selectedOptions[0];
 }
 
 function getSelectedTypeName() {
@@ -1304,16 +1348,45 @@ function isChecklistTypeJs(typeName) {
 
 function syncTopicInput() {
   const topicInput = document.getElementById('document_topic_input');
-  document.getElementById('document_topic_hidden').value = topicInput.value.trim();
+  if (topicInput) {
+    document.getElementById('document_topic_hidden').value = topicInput.value.trim();
+  }
+}
+
+function autoFillTopic() {
+  const opt = getSelectedTypeOption();
+  if (!opt) return;
+  
+  const typeName = opt.dataset.name || '';
+  const topicInput = document.getElementById('document_topic_input');
+  const currentTopic = topicInput ? topicInput.value.trim() : '';
+  
+  // Only auto-fill if the topic is empty
+  if (!currentTopic) {
+    if (topicInput) {
+      topicInput.value = typeName + ' ';
+      // Place cursor at the end after the space
+      topicInput.focus();
+      const length = topicInput.value.length;
+      topicInput.setSelectionRange(length, length);
+      syncTopicInput();
+      updateDocIdPreview();
+    }
+  }
 }
 
 function handleDocTypeChange(selectEl) {
   const opt = selectEl.selectedOptions[0];
+  if (!opt) return;
+  
   const typeName = (opt.dataset.name || '');
   const isBuilderType = isBuilderDocumentTypeJs(typeName);
 
-  document.getElementById('contentCard').classList.toggle('d-none', isBuilderType);
-  document.getElementById('formTypePanel').classList.toggle('d-none', !isBuilderType);
+  const contentCard = document.getElementById('contentCard');
+  const formTypePanel = document.getElementById('formTypePanel');
+  
+  if (contentCard) contentCard.classList.toggle('d-none', isBuilderType);
+  if (formTypePanel) formTypePanel.classList.toggle('d-none', !isBuilderType);
 
   const reviewDays = parseInt(opt.dataset.reviewDays || '365', 10);
   const eff = document.getElementById('effective_date').value;
@@ -1324,6 +1397,9 @@ function handleDocTypeChange(selectEl) {
     document.getElementById('review_date').value = base.toISOString().slice(0, 10);
   }
 
+  // Auto-fill topic if empty
+  autoFillTopic();
+  
   syncTopicInput();
   updateDocIdPreview();
 
@@ -1351,7 +1427,7 @@ function updateDocIdPreview() {
   const number = (document.getElementById('docNumber').value || '104').trim();
 
   const topicInput = document.getElementById('document_topic_input');
-  const topic = topicInput.value.trim();
+  const topic = topicInput ? topicInput.value.trim() : '';
 
   document.getElementById('document_topic_hidden').value = topic;
 
@@ -1461,61 +1537,83 @@ function detachForm() {
   document.getElementById('form_builder_json_hidden').value = '';
   document.getElementById('form_response_json_hidden').value = '';
 
-  document.getElementById('attachedFormSummary').classList.add('d-none');
-  document.getElementById('noFormAttached').classList.remove('d-none');
-  document.getElementById('documentInfoFormTableWrapper').classList.add('d-none');
-  document.getElementById('formFillWrapper').classList.add('d-none');
-  document.getElementById('dynamicFormFields').innerHTML = '';
+  const attachedFormSummary = document.getElementById('attachedFormSummary');
+  const noFormAttached = document.getElementById('noFormAttached');
+  const documentInfoFormTableWrapper = document.getElementById('documentInfoFormTableWrapper');
+  const formFillWrapper = document.getElementById('formFillWrapper');
+  const dynamicFormFields = document.getElementById('dynamicFormFields');
+  
+  if (attachedFormSummary) attachedFormSummary.classList.add('d-none');
+  if (noFormAttached) noFormAttached.classList.remove('d-none');
+  if (documentInfoFormTableWrapper) documentInfoFormTableWrapper.classList.add('d-none');
+  if (formFillWrapper) formFillWrapper.classList.add('d-none');
+  if (dynamicFormFields) dynamicFormFields.innerHTML = '';
 }
 
 function renderAttachedFields(fields) {
   const box = document.getElementById('attachedFieldsPreview');
 
   if (!Array.isArray(fields) || !fields.length) {
-    box.innerHTML = '';
-    box.classList.add('d-none');
+    if (box) {
+      box.innerHTML = '';
+      box.classList.add('d-none');
+    }
     return;
   }
 
-  box.innerHTML = fields.map(function(field, index) {
-    return '<div class="attached-field-row"><strong>' + (index + 1) + '.</strong> ' +
-      escapeHtml(field.label || ('Item ' + (index + 1))) +
-      '<span class="builder-chip">' + escapeHtml(fieldTypeLabel(field.type)) + '</span></div>';
-  }).join('');
+  if (box) {
+    box.innerHTML = fields.map(function(field, index) {
+      return '<div class="attached-field-row"><strong>' + (index + 1) + '.</strong> ' +
+        escapeHtml(field.label || ('Item ' + (index + 1))) +
+        '<span class="builder-chip">' + escapeHtml(fieldTypeLabel(field.type)) + '</span></div>';
+    }).join('');
 
-  box.classList.remove('d-none');
+    box.classList.remove('d-none');
+  }
 }
 
 function renderBuilderInfoTable(data) {
   const wrapper = document.getElementById('documentInfoFormTableWrapper');
   const fields = Array.isArray(data.fields) ? data.fields : [];
 
-  document.getElementById('infoFormName').textContent = data.formName || 'Untitled';
-  document.getElementById('infoFormType').textContent = data.formType || getSelectedTypeName();
-  document.getElementById('infoFormFieldCount').textContent = String(fields.length);
-  document.getElementById('infoFormDesc').textContent = data.formDesc || '—';
+  const infoFormName = document.getElementById('infoFormName');
+  const infoFormType = document.getElementById('infoFormType');
+  const infoFormFieldCount = document.getElementById('infoFormFieldCount');
+  const infoFormDesc = document.getElementById('infoFormDesc');
+  
+  if (infoFormName) infoFormName.textContent = data.formName || 'Untitled';
+  if (infoFormType) infoFormType.textContent = data.formType || getSelectedTypeName();
+  if (infoFormFieldCount) infoFormFieldCount.textContent = String(fields.length);
+  if (infoFormDesc) infoFormDesc.textContent = data.formDesc || '—';
 
-  wrapper.classList.remove('d-none');
+  if (wrapper && fields.length > 0) wrapper.classList.remove('d-none');
 }
 
 function renderBuilderSummary(data) {
   const fieldCount = Array.isArray(data.fields) ? data.fields.length : 0;
 
-  document.getElementById('attachedFormName').textContent = data.formName || 'Untitled';
-
-  document.getElementById('attachedFormMeta').textContent =
-    (data.formType || getSelectedTypeName()) +
-    ' · ' +
-    fieldCount +
-    ' item' +
-    (fieldCount !== 1 ? 's' : '') +
-    (data.formDesc ? ' · ' + data.formDesc : '');
+  const attachedFormName = document.getElementById('attachedFormName');
+  const attachedFormMeta = document.getElementById('attachedFormMeta');
+  const attachedFormSummary = document.getElementById('attachedFormSummary');
+  const noFormAttached = document.getElementById('noFormAttached');
+  
+  if (attachedFormName) attachedFormName.textContent = data.formName || 'Untitled';
+  
+  if (attachedFormMeta) {
+    attachedFormMeta.textContent =
+      (data.formType || getSelectedTypeName()) +
+      ' · ' +
+      fieldCount +
+      ' item' +
+      (fieldCount !== 1 ? 's' : '') +
+      (data.formDesc ? ' · ' + data.formDesc : '');
+  }
 
   renderAttachedFields(data.fields || []);
   renderBuilderInfoTable(data);
 
-  document.getElementById('attachedFormSummary').classList.remove('d-none');
-  document.getElementById('noFormAttached').classList.add('d-none');
+  if (attachedFormSummary) attachedFormSummary.classList.remove('d-none');
+  if (noFormAttached) noFormAttached.classList.add('d-none');
 }
 
 function buildFieldsHtml(fields) {
@@ -1642,80 +1740,85 @@ function renderDynamicFillForm(data) {
   const fields = Array.isArray(data.fields) ? data.fields : [];
 
   if (!fields.length) {
-    wrapper.classList.add('d-none');
-    container.innerHTML = '';
+    if (wrapper) wrapper.classList.add('d-none');
+    if (container) container.innerHTML = '';
     return;
   }
 
   const isChecklist = isChecklistTypeJs(data.formType || getSelectedTypeName());
   const usedKeys = {};
 
-  container.innerHTML = fields.map((field, index) => {
-    let key = makeFieldKey(field, index);
-    const originalKey = key;
-    let counter = 2;
+  if (container) {
+    container.innerHTML = fields.map((field, index) => {
+      let key = makeFieldKey(field, index);
+      const originalKey = key;
+      let counter = 2;
 
-    while (usedKeys[key]) {
-      key = originalKey + '_' + counter;
-      counter++;
-    }
+      while (usedKeys[key]) {
+        key = originalKey + '_' + counter;
+        counter++;
+      }
 
-    usedKeys[key] = true;
+      usedKeys[key] = true;
 
-    const value = responses[key] ?? '';
+      const value = responses[key] ?? '';
 
-    if (isChecklist || field.type === 'checklist_item') {
-      return '<div class="checklist-fill-row">' +
-        '<input class="form-check-input dynamic-builder-input" type="checkbox" data-key="' + key + '" ' + (value ? 'checked' : '') + '>' +
-        '<label class="mb-0 fw-medium">' + escapeHtml(field.label || ('Checklist Item ' + (index + 1))) + '</label>' +
+      if (isChecklist || field.type === 'checklist_item') {
+        return '<div class="checklist-fill-row">' +
+          '<input class="form-check-input dynamic-builder-input" type="checkbox" data-key="' + key + '" ' + (value ? 'checked' : '') + '>' +
+          '<label class="mb-0 fw-medium">' + escapeHtml(field.label || ('Checklist Item ' + (index + 1))) + '</label>' +
+          '</div>';
+      }
+
+      let control = '';
+
+      if (field.type === 'textarea') {
+        control = '<textarea class="form-control dynamic-builder-input" data-key="' + key + '" rows="3">' + escapeHtml(value) + '</textarea>';
+      } else if (field.type === 'number') {
+        control = '<input type="number" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
+      } else if (field.type === 'date') {
+        control = '<input type="date" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
+      } else if (field.type === 'dropdown') {
+        const opts = (field.options || []).map(opt =>
+          '<option value="' + escapeHtml(opt) + '" ' + (String(value) === String(opt) ? 'selected' : '') + '>' + escapeHtml(opt) + '</option>'
+        ).join('');
+
+        control = '<select class="form-select dynamic-builder-input" data-key="' + key + '"><option value="">Select option</option>' + opts + '</select>';
+      } else if (field.type === 'checkbox') {
+        control = '<div class="form-check"><input class="form-check-input dynamic-builder-input" type="checkbox" data-key="' + key + '" ' + (value ? 'checked' : '') + '><label class="form-check-label">Checked</label></div>';
+      } else if (field.type === 'yesno') {
+        control = '<div class="d-flex gap-3">' +
+          '<div class="form-check"><input class="form-check-input dynamic-builder-radio" type="radio" name="' + key + '" data-key="' + key + '" value="Yes" ' + (value === 'Yes' ? 'checked' : '') + '><label class="form-check-label">Yes</label></div>' +
+          '<div class="form-check"><input class="form-check-input dynamic-builder-radio" type="radio" name="' + key + '" data-key="' + key + '" value="No" ' + (value === 'No' ? 'checked' : '') + '><label class="form-check-label">No</label></div>' +
+          '</div>';
+      } else if (field.type === 'signature') {
+        control = '<input type="text" class="form-control dynamic-builder-input" data-key="' + key + '" placeholder="Enter signature name" value="' + escapeHtml(value) + '">';
+      } else {
+        control = '<input type="text" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
+      }
+
+      return '<div class="fill-field-card">' +
+        '<label class="fill-field-label">' + escapeHtml(field.label) +
+        '<span class="fill-field-type">' + escapeHtml(fieldTypeLabel(field.type)) + '</span></label>' +
+        control +
         '</div>';
-    }
+    }).join('');
+  }
 
-    let control = '';
-
-    if (field.type === 'textarea') {
-      control = '<textarea class="form-control dynamic-builder-input" data-key="' + key + '" rows="3">' + escapeHtml(value) + '</textarea>';
-    } else if (field.type === 'number') {
-      control = '<input type="number" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
-    } else if (field.type === 'date') {
-      control = '<input type="date" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
-    } else if (field.type === 'dropdown') {
-      const opts = (field.options || []).map(opt =>
-        '<option value="' + escapeHtml(opt) + '" ' + (String(value) === String(opt) ? 'selected' : '') + '>' + escapeHtml(opt) + '</option>'
-      ).join('');
-
-      control = '<select class="form-select dynamic-builder-input" data-key="' + key + '"><option value="">Select option</option>' + opts + '</select>';
-    } else if (field.type === 'checkbox') {
-      control = '<div class="form-check"><input class="form-check-input dynamic-builder-input" type="checkbox" data-key="' + key + '" ' + (value ? 'checked' : '') + '><label class="form-check-label">Checked</label></div>';
-    } else if (field.type === 'yesno') {
-      control = '<div class="d-flex gap-3">' +
-        '<div class="form-check"><input class="form-check-input dynamic-builder-radio" type="radio" name="' + key + '" data-key="' + key + '" value="Yes" ' + (value === 'Yes' ? 'checked' : '') + '><label class="form-check-label">Yes</label></div>' +
-        '<div class="form-check"><input class="form-check-input dynamic-builder-radio" type="radio" name="' + key + '" data-key="' + key + '" value="No" ' + (value === 'No' ? 'checked' : '') + '><label class="form-check-label">No</label></div>' +
-        '</div>';
-    } else if (field.type === 'signature') {
-      control = '<input type="text" class="form-control dynamic-builder-input" data-key="' + key + '" placeholder="Enter signature name" value="' + escapeHtml(value) + '">';
-    } else {
-      control = '<input type="text" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
-    }
-
-    return '<div class="fill-field-card">' +
-      '<label class="fill-field-label">' + escapeHtml(field.label) +
-      '<span class="fill-field-type">' + escapeHtml(fieldTypeLabel(field.type)) + '</span></label>' +
-      control +
-      '</div>';
-  }).join('');
-
-  wrapper.classList.remove('d-none');
+  if (wrapper) wrapper.classList.remove('d-none');
   bindDynamicInputs();
 }
 
 function bindDynamicInputs() {
   document.querySelectorAll('.dynamic-builder-input').forEach(el => {
+    el.removeEventListener('input', syncFormResponses);
+    el.removeEventListener('change', syncFormResponses);
     el.addEventListener('input', syncFormResponses);
     el.addEventListener('change', syncFormResponses);
   });
 
   document.querySelectorAll('.dynamic-builder-radio').forEach(el => {
+    el.removeEventListener('change', syncFormResponses);
     el.addEventListener('change', syncFormResponses);
   });
 }
@@ -1904,101 +2007,129 @@ function showSelectedFile(file) {
     return;
   }
 
-  selectedFileName.textContent = file.name;
-  selectedFileMeta.textContent = (Math.round((file.size / 1024) * 100) / 100) + ' KB';
-  selectedFileInfo.classList.remove('d-none');
+  if (selectedFileName) selectedFileName.textContent = file.name;
+  if (selectedFileMeta) selectedFileMeta.textContent = (Math.round((file.size / 1024) * 100) / 100) + ' KB';
+  if (selectedFileInfo) selectedFileInfo.classList.remove('d-none');
 
-  document.getElementById('existing_file_name').value = file.name;
-  document.getElementById('existing_file_size').value = file.size;
+  const existingFileName = document.getElementById('existing_file_name');
+  const existingFileSize = document.getElementById('existing_file_size');
+  
+  if (existingFileName) existingFileName.value = file.name;
+  if (existingFileSize) existingFileSize.value = file.size;
 }
 
-uploadBox.addEventListener('click', function(e) {
-  e.preventDefault();
-  fileInput.click();
-});
+if (uploadBox) {
+  uploadBox.addEventListener('click', function(e) {
+    e.preventDefault();
+    if (fileInput) fileInput.click();
+  });
+}
 
-fileInput.addEventListener('change', function() {
-  if (this.files && this.files.length > 0) {
-    showSelectedFile(this.files[0]);
-  }
-});
-
-uploadBox.addEventListener('dragenter', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadBox.classList.add('drag-over');
-});
-
-uploadBox.addEventListener('dragover', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadBox.classList.add('drag-over');
-});
-
-uploadBox.addEventListener('dragleave', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadBox.classList.remove('drag-over');
-});
-
-uploadBox.addEventListener('drop', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-
-  uploadBox.classList.remove('drag-over');
-
-  const files = e.dataTransfer.files;
-
-  if (files && files.length > 0) {
-    const dt = new DataTransfer();
-
-    for (let i = 0; i < files.length; i++) {
-      dt.items.add(files[i]);
+if (fileInput) {
+  fileInput.addEventListener('change', function() {
+    if (this.files && this.files.length > 0) {
+      showSelectedFile(this.files[0]);
     }
+  });
+}
 
-    fileInput.files = dt.files;
+if (uploadBox) {
+  uploadBox.addEventListener('dragenter', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.classList.add('drag-over');
+  });
 
-    showSelectedFile(files[0]);
-  }
-});
+  uploadBox.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.classList.add('drag-over');
+  });
 
-document.getElementById('openBuilderBtn').addEventListener('click', function(e) {
-  e.preventDefault();
-  openChecklistBuilder(false);
-});
+  uploadBox.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.classList.remove('drag-over');
+  });
 
-document.getElementById('docNumber').addEventListener('input', function() {
-  updateDocIdPreview();
-});
+  uploadBox.addEventListener('drop', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
 
-document.getElementById('document_topic_input').addEventListener('input', function() {
-  syncTopicInput();
-  updateDocIdPreview();
-});
+    uploadBox.classList.remove('drag-over');
 
-document.getElementById('effective_date').addEventListener('change', function() {
-  handleDocTypeChange(document.getElementById('docTypeSelect'));
-});
+    const files = e.dataTransfer.files;
+
+    if (files && files.length > 0) {
+      const dt = new DataTransfer();
+
+      for (let i = 0; i < files.length; i++) {
+        dt.items.add(files[i]);
+      }
+
+      if (fileInput) fileInput.files = dt.files;
+
+      showSelectedFile(files[0]);
+    }
+  });
+}
+
+const openBuilderBtn = document.getElementById('openBuilderBtn');
+if (openBuilderBtn) {
+  openBuilderBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    openChecklistBuilder(false);
+  });
+}
+
+const docNumber = document.getElementById('docNumber');
+if (docNumber) {
+  docNumber.addEventListener('input', function() {
+    updateDocIdPreview();
+  });
+}
+
+const documentTopicInput = document.getElementById('document_topic_input');
+if (documentTopicInput) {
+  documentTopicInput.addEventListener('input', function() {
+    syncTopicInput();
+    updateDocIdPreview();
+  });
+}
+
+const effectiveDate = document.getElementById('effective_date');
+if (effectiveDate) {
+  effectiveDate.addEventListener('change', function() {
+    const docTypeSelect = document.getElementById('docTypeSelect');
+    if (docTypeSelect) handleDocTypeChange(docTypeSelect);
+  });
+}
 
 function clearCreateDocumentState() {
   sessionStorage.removeItem(BUILDER_STORAGE_KEY);
   sessionStorage.removeItem(BUILDER_RESPONSE_KEY);
 
-  document.getElementById('form_name_hidden').value = '';
-  document.getElementById('form_type_hidden').value = '';
-  document.getElementById('form_desc_hidden').value = '';
-  document.getElementById('form_builder_json_hidden').value = '';
-  document.getElementById('form_response_json_hidden').value = '';
-  document.getElementById('existing_file_name').value = '';
-  document.getElementById('existing_file_path').value = '';
-  document.getElementById('existing_file_mime').value = '';
-  document.getElementById('existing_file_size').value = '';
+  const formNameHidden = document.getElementById('form_name_hidden');
+  const formTypeHidden = document.getElementById('form_type_hidden');
+  const formDescHidden = document.getElementById('form_desc_hidden');
+  const formBuilderJsonHidden = document.getElementById('form_builder_json_hidden');
+  const formResponseJsonHidden = document.getElementById('form_response_json_hidden');
+  const existingFileName = document.getElementById('existing_file_name');
+  const existingFilePath = document.getElementById('existing_file_path');
+  const existingFileMime = document.getElementById('existing_file_mime');
+  const existingFileSize = document.getElementById('existing_file_size');
+  
+  if (formNameHidden) formNameHidden.value = '';
+  if (formTypeHidden) formTypeHidden.value = '';
+  if (formDescHidden) formDescHidden.value = '';
+  if (formBuilderJsonHidden) formBuilderJsonHidden.value = '';
+  if (formResponseJsonHidden) formResponseJsonHidden.value = '';
+  if (existingFileName) existingFileName.value = '';
+  if (existingFilePath) existingFilePath.value = '';
+  if (existingFileMime) existingFileMime.value = '';
+  if (existingFileSize) existingFileSize.value = '';
 
-  const selectedFileInfo = document.getElementById('selectedFileInfo');
-
-  if (selectedFileInfo) {
-    selectedFileInfo.classList.add('d-none');
-  }
+  if (selectedFileInfo) selectedFileInfo.classList.add('d-none');
 
   detachForm();
 }
@@ -2030,8 +2161,12 @@ function clearCreateDocumentState() {
     renderDynamicFillForm(data);
   }
 
-  handleDocTypeChange(document.getElementById('docTypeSelect'));
-  setContentMode(document.getElementById('content_mode').value || 'file');
+  const docTypeSelect = document.getElementById('docTypeSelect');
+  if (docTypeSelect) handleDocTypeChange(docTypeSelect);
+  
+  const contentMode = document.getElementById('content_mode');
+  if (contentMode) setContentMode(contentMode.value || 'file');
+  
   syncTopicInput();
   updateDocIdPreview();
 })();
