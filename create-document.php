@@ -1305,11 +1305,11 @@ body.editor-open{
     </button>
   </div>
 <<<<<<< HEAD
-=======
+
 
   <textarea class="form-control" name="content_text" id="content_text" rows="18"><?php echo e($formData['content_text']); ?></textarea>
 </div>
->>>>>>> e9fbaa3fae22f628966e3cf2a6116de1e983e9de
+
 
   <textarea class="form-control" name="content_text" id="content_text" rows="18"><?php echo e($formData['content_text']); ?></textarea>
 </div>
