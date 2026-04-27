@@ -264,22 +264,7 @@ if ($hasWorkflowSteps) {
     $workQueueTypes .= 'i';
 }
 
-<<<<<<< HEAD
-$workQueueSql = "
-    SELECT
-        d.id AS document_id,
-        d.current_version_id,
-        d.document_number,
-        d.title,
-        d.current_status,
-        dv.review_date,
-        ws.status AS workflow_status
-    FROM documents d
-    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-";
-=======
 $updatedAtOrderCol = $hasDocumentsUpdatedAt ? "d.updated_at" : ($hasDocumentsCreatedAt ? "d.created_at" : "d.id");
->>>>>>> e9fbaa3fae22f628966e3cf2a6116de1e983e9de
 
 $workQueueSql = "
     SELECT
@@ -312,32 +297,6 @@ $workQueueSql .= "
     WHERE LOWER(COALESCE(d.current_status, '')) <> 'deleted'
       AND (" . implode(' OR ', $workQueueWhere) . ")
     ORDER BY {$updatedAtOrderCol} DESC, d.id DESC
-<<<<<<< HEAD
-    LIMIT 6
-";
-
-        SELECT
-            d.document_number,
-            d.title,
-            d.current_status,
-            dv.review_date,
-            '' AS workflow_status,
-            CASE
-                WHEN d.current_status = 'draft' THEN 'Draft Update'
-                WHEN d.current_status = 'pending_retirement' THEN 'Retirement Follow-up'
-                ELSE 'Owner Task'
-            END AS queue_task,
-            COALESCE(d.updated_at, d.created_at) AS sort_dt
-        FROM documents d
-        LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-        WHERE d.owner_user_id = ?
-           OR d.created_by = ?
-           OR COALESCE(d.updated_by, 0) = ?
-    ) q
-    GROUP BY q.document_number, q.title, q.current_status, q.review_date, q.queue_task, q.workflow_status, q.sort_dt
-    ORDER BY q.sort_dt DESC, q.document_number DESC
-=======
->>>>>>> e9fbaa3fae22f628966e3cf2a6116de1e983e9de
     LIMIT 6
 ";
 
@@ -757,7 +716,7 @@ $unreadUrl = 'notifications.php?filter=unread';
                 </tr>
               <?php endif; ?>
             </tbody>
-          </table>
+           </table>
         </div>
 
       </div>
