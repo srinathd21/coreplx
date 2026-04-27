@@ -956,7 +956,39 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0)
     .attached-field-row:last-child {
       border-bottom: none;
     }
-
+.text-editor-toolbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin-bottom:10px;
+}
+#content_text{
+  min-height:560px;
+  resize:vertical;
+  line-height:1.7;
+  font-size:15px;
+}
+.text-editor-fullscreen{
+  position:fixed!important;
+  top:20px!important;
+  left:20px!important;
+  right:20px!important;
+  bottom:20px!important;
+  z-index:99999!important;
+  background:#fff;
+  padding:20px;
+  border-radius:16px;
+  box-shadow:0 20px 70px rgba(0,0,0,.25);
+  overflow:hidden;
+}
+.text-editor-fullscreen #content_text{
+  height:calc(100vh - 150px)!important;
+  min-height:calc(100vh - 150px)!important;
+}
+body.editor-open{
+  overflow:hidden;
+}
     @media (max-width: 768px) {
       .cp-builder-top-fields,
       .cp-builder-grid {
@@ -1227,10 +1259,17 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0)
             </div>
 
             <div id="richTextPanel" class="<?php echo $formData['content_mode'] === 'rich_text' ? '' : 'd-none'; ?>">
-              <textarea class="form-control" name="content_text" id="content_text" rows="9"><?php echo e($formData['content_text']); ?></textarea>
-            </div>
-          </div>
-        </div>
+  <div class="text-editor-toolbar">
+    <div class="small text-secondary">
+      Use this large editor for Policy / SOP / Guidance / Work Instruction text content.
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary" id="toggleEditorSizeBtn" onclick="toggleTextEditorSize()">
+      Maximize Editor
+    </button>
+  </div>
+
+  <textarea class="form-control" name="content_text" id="content_text" rows="18"><?php echo e($formData['content_text']); ?></textarea>
+</div>
 
       </div>
 
