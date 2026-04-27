@@ -1,8 +1,8 @@
 <?php
-$host = "srv1740.hstgr.io";
-$username = "u966043993_coreplx_DMS";
-$password = "R=FV:EIe60#k";
-$database = "u966043993_coreplx_DMS";
+$host = "srv483.hstgr.io";
+$username = "u399080022_dms";
+$password = "Ariharan@2025";
+$database = "u399080022_dms";
 
 $conn = new mysqli($host, $username, $password, $database);
 
