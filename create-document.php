@@ -660,6 +660,34 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0)
       color: #6b7280 !important;
       cursor: not-allowed;
     }
+<<<<<<< HEAD
+    .cp-builder-modal{background:#fff;}
+    .cp-builder-header{padding:20px 22px 14px;border-bottom:1px solid #e8edf3;background:linear-gradient(180deg,#f8fbff 0%,#ffffff 100%);}
+    .cp-builder-title{margin:0;font-size:20px;font-weight:700;color:#0D2144;}
+    .cp-builder-subtitle{margin:4px 0 0;font-size:13px;color:#6b7280;}
+    .cp-builder-body{padding:18px 22px 10px;}
+    .cp-builder-top-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+    .cp-builder-field-group label{display:block;font-size:13px;font-weight:600;color:#1e2a3a;margin-bottom:6px;}
+    .cp-builder-input,.cp-builder-textarea{width:100%;border:1px solid #d9e2ec;border-radius:10px;background:#fff;padding:11px 12px;font-size:14px;color:#1e2a3a;outline:none;}
+    .cp-builder-textarea{min-height:96px;resize:vertical;}
+    .cp-builder-grid{display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start;}
+    .cp-builder-card{border:1px solid #dde3ec;border-radius:14px;background:#fff;padding:14px;}
+    .cp-builder-side-title{font-size:15px;font-weight:700;color:#0D2144;margin-bottom:2px;}
+    .cp-builder-side-subtitle{font-size:13px;color:#6b7280;margin-bottom:12px;}
+    .cp-builder-type-list{display:grid;grid-template-columns:1fr;gap:10px;}
+    .cp-builder-type-btn{display:flex;align-items:center;gap:12px;border:1px solid #d7dee8;border-radius:12px;background:#fff;padding:12px 14px;font-size:14px;font-weight:600;color:#1e2a3a;cursor:pointer;text-align:left;}
+    .cp-builder-type-btn:hover{background:#eef4ff;border-color:#9db7ea;color:#0D2144;}
+    .cp-builder-type-icon{width:36px;height:36px;border-radius:10px;background:#e9eef5;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0D2144;flex:0 0 36px;}
+    .cp-builder-preview-list{border:1px solid #dde3ec;border-radius:12px;background:#f8f9fb;padding:10px 12px;max-height:380px;overflow-y:auto;}
+    .cp-builder-preview-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #e8edf3;font-size:13px;}
+    .cp-builder-preview-item:last-child{border-bottom:none;}
+    .cp-builder-chip,.builder-chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eaf2ff;color:#2563eb;margin-right:6px;margin-bottom:4px;}
+    .cp-builder-empty{color:#6b7280;font-size:13px;padding:18px 8px;text-align:center;}
+    .swal2-popup.cp-small-popup{width:520px!important;max-width:calc(100vw - 24px)!important;border-radius:16px!important;padding:20px!important;}
+    .attached-fields-box{border:1px solid #dde3ec;border-radius:8px;background:#f8f9fb;padding:10px 12px;margin-top:12px;}
+    .attached-field-row{font-size:13px;color:#1e2a3a;padding:6px 0;border-bottom:1px solid #e8edf3;}
+    .attached-field-row:last-child{border-bottom:none;}
+=======
 
     .info-form-summary-card,
     .form-fill-card,
@@ -956,6 +984,7 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0)
     .attached-field-row:last-child {
       border-bottom: none;
     }
+>>>>>>> e9fbaa3fae22f628966e3cf2a6116de1e983e9de
 .text-editor-toolbar{
   display:flex;
   justify-content:space-between;
@@ -989,6 +1018,13 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0)
 body.editor-open{
   overflow:hidden;
 }
+<<<<<<< HEAD
+    @media (max-width:768px){
+      .cp-builder-top-fields,.cp-builder-grid{grid-template-columns:1fr;}
+      .info-form-summary-table th,.info-form-summary-table td{display:block;width:100%;}
+      .info-form-summary-table th{border-bottom:0;}
+      .info-form-summary-table td{border-top:0;margin-bottom:8px;}
+=======
     @media (max-width: 768px) {
       .cp-builder-top-fields,
       .cp-builder-grid {
@@ -1009,6 +1045,7 @@ body.editor-open{
         border-top: 0;
         margin-bottom: 8px;
       }
+>>>>>>> e9fbaa3fae22f628966e3cf2a6116de1e983e9de
     }
   </style>
 </head>
@@ -1267,10 +1304,15 @@ body.editor-open{
       Maximize Editor
     </button>
   </div>
+<<<<<<< HEAD
+=======
 
   <textarea class="form-control" name="content_text" id="content_text" rows="18"><?php echo e($formData['content_text']); ?></textarea>
 </div>
+>>>>>>> e9fbaa3fae22f628966e3cf2a6116de1e983e9de
 
+  <textarea class="form-control" name="content_text" id="content_text" rows="18"><?php echo e($formData['content_text']); ?></textarea>
+</div>
       </div>
 
       <div class="col-lg-4">
@@ -1899,7 +1941,39 @@ async function openChecklistBuilder(isEdit) {
     saveBuilderData(result.value);
   }
 }
+function toggleTextEditorSize() {
+  const panel = document.getElementById('richTextPanel');
+  const btn = document.getElementById('toggleEditorSizeBtn');
 
+  if (!panel || !btn) return;
+
+  const isFull = panel.classList.contains('text-editor-fullscreen');
+
+  if (isFull) {
+    panel.classList.remove('text-editor-fullscreen');
+    document.body.classList.remove('editor-open');
+    btn.textContent = 'Maximize Editor';
+  } else {
+    panel.classList.add('text-editor-fullscreen');
+    document.body.classList.add('editor-open');
+    btn.textContent = 'Minimize Editor';
+    document.getElementById('content_text').focus();
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const panel = document.getElementById('richTextPanel');
+    const btn = document.getElementById('toggleEditorSizeBtn');
+
+    if (panel && panel.classList.contains('text-editor-fullscreen')) {
+      panel.classList.remove('text-editor-fullscreen');
+      document.body.classList.remove('editor-open');
+      if (btn) btn.textContent = 'Maximize Editor';
+    }
+  }
+});
+/* file upload */
 const fileInput = document.getElementById('document_file');
 const uploadBox = document.getElementById('documentUploadBox');
 const selectedFileInfo = document.getElementById('selectedFileInfo');
