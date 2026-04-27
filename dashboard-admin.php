@@ -114,15 +114,6 @@ function status_badge(string $status): string
     if (in_array($status, ['in_progress', 'in progress'], true)) {
         return '<span class="badge badge-soft-info">In Progress</span>';
     }
-    if (in_array($status, ['rejected'], true)) {
-        return '<span class="badge badge-soft-danger">Rejected</span>';
-    }
-    if (in_array($status, ['returned'], true)) {
-        return '<span class="badge badge-soft-warning">Returned</span>';
-    }
-    if (in_array($status, ['pending_retirement'], true)) {
-        return '<span class="badge badge-soft-warning">Pending Retirement</span>';
-    }
 
     return '<span class="badge badge-soft-info">' . e(ucwords(str_replace('_', ' ', $status))) . '</span>';
 }
@@ -198,27 +189,6 @@ if ($hasWorkflowSteps && $hasDocVersions) {
     ", 'i', [$currentUserId]);
 }
 
-$fallbackPendingApprovals = 0;
-if ($hasDocumentsApprover && $hasDocVersions) {
-    $fallbackPendingApprovals = count_query($conn, "
-        SELECT COUNT(DISTINCT d.id) AS cnt
-        FROM documents d
-        INNER JOIN document_versions dv ON dv.id = d.current_version_id
-        WHERE d.current_status = 'pending_approval'
-          AND dv.status = 'pending_approval'
-          AND TRIM(COALESCE(d.approver, '')) = ?
-          AND NOT EXISTS (
-              SELECT 1
-              FROM workflow_steps ws
-              WHERE ws.document_version_id = d.current_version_id
-                AND ws.approver_user_id = ?
-                AND ws.status = 'pending'
-          )
-    ", 'si', [(string)$currentUserId, $currentUserId]);
-}
-
-$pendingApprovals = $workflowPendingApprovals + $fallbackPendingApprovals;
-
 $overdueReviews = 0;
 if ($hasDocVersions) {
     $overdueReviews = count_query($conn, "
@@ -232,9 +202,9 @@ if ($hasDocVersions) {
     ");
 }
 
-$notificationUnreadCount = 0;
+$unreadAlerts = 0;
 if ($hasNotifications) {
-    $notificationUnreadCount = count_query($conn, "
+    $unreadAlerts = count_query($conn, "
         SELECT COUNT(*) AS cnt
         FROM notifications
         WHERE user_id = ?
@@ -242,34 +212,9 @@ if ($hasNotifications) {
     ", 'i', [$currentUserId]);
 }
 
-/*
-|--------------------------------------------------------------------------
-| ALERT TILE
-|--------------------------------------------------------------------------
-| If user has pending approvals, show that count instead of plain notifications.
-*/
-if ($pendingApprovals > 0) {
-    $alertStatCount = $pendingApprovals;
-    $alertStatLabel = 'Pending Approval Alerts';
-    $alertStatLink = 'audit-trail.php?tab=approval';
-    $alertStatTitle = 'View documents pending your approval';
-} else {
-    $alertStatCount = $notificationUnreadCount;
-    $alertStatLabel = 'Unread Alerts';
-    $alertStatLink = 'notifications.php?filter=unread';
-    $alertStatTitle = 'View unread alerts';
-}
-
-/*
-|--------------------------------------------------------------------------
-| PENDING APPROVAL ROWS
-|--------------------------------------------------------------------------
-| union workflow + fallback documents.approver records
-*/
 $pendingApprovalRows = [];
-
 if ($hasWorkflowSteps && $hasDocVersions) {
-    $workflowRows = fetch_all($conn, "
+    $pendingApprovalRows = fetch_all($conn, "
         SELECT
             d.id AS document_id,
             d.document_number,
@@ -279,8 +224,7 @@ if ($hasWorkflowSteps && $hasDocVersions) {
             submitter.first_name,
             submitter.last_name,
             submitter.email,
-            ws.document_version_id,
-            'workflow' AS source_type
+            ws.document_version_id
         FROM workflow_steps ws
         INNER JOIN document_versions dv ON dv.id = ws.document_version_id
         INNER JOIN documents d ON d.id = dv.document_id
@@ -290,52 +234,52 @@ if ($hasWorkflowSteps && $hasDocVersions) {
           AND ws.status = 'pending'
           AND LOWER(COALESCE(d.current_status, '')) = 'pending_approval'
         ORDER BY dv.submitted_at ASC, ws.id ASC
-        LIMIT 10
+        LIMIT 5
     ", 'i', [$currentUserId]);
-
-    $pendingApprovalRows = array_merge($pendingApprovalRows, $workflowRows);
 }
 
-if ($hasDocumentsApprover && $hasDocVersions) {
-    $fallbackRows = fetch_all($conn, "
-        SELECT
-            d.document_number,
-            d.title,
-            dt.type_name,
-            dv.submitted_at,
-            submitter.first_name,
-            submitter.last_name,
-            submitter.email,
-            d.current_version_id AS document_version_id,
-            'document_fallback' AS source_type
-        FROM documents d
-        INNER JOIN document_versions dv ON dv.id = d.current_version_id
-        LEFT JOIN document_types dt ON dt.id = d.document_type_id
-        LEFT JOIN users submitter ON submitter.id = dv.submitted_by
-        WHERE d.current_status = 'pending_approval'
-          AND dv.status = 'pending_approval'
-          AND TRIM(COALESCE(d.approver, '')) = ?
-          AND NOT EXISTS (
-              SELECT 1
-              FROM workflow_steps ws
-              WHERE ws.document_version_id = d.current_version_id
-                AND ws.approver_user_id = ?
-                AND ws.status = 'pending'
-          )
-        ORDER BY dv.submitted_at ASC, d.id ASC
-        LIMIT 10
-    ", 'si', [(string)$currentUserId, $currentUserId]);
+$workQueueWhere = [];
+$workQueueParams = [];
+$workQueueTypes = '';
 
-    $pendingApprovalRows = array_merge($pendingApprovalRows, $fallbackRows);
+$workQueueWhere[] = "d.owner_user_id = ?";
+$workQueueParams[] = $currentUserId;
+$workQueueTypes .= 'i';
+
+if ($hasDocumentsCreatedBy) {
+    $workQueueWhere[] = "d.created_by = ?";
+    $workQueueParams[] = $currentUserId;
+    $workQueueTypes .= 'i';
 }
 
-usort($pendingApprovalRows, function ($a, $b) {
-    $aTime = !empty($a['submitted_at']) ? strtotime($a['submitted_at']) : 0;
-    $bTime = !empty($b['submitted_at']) ? strtotime($b['submitted_at']) : 0;
-    return $aTime <=> $bTime;
-});
+if ($hasDocumentsUpdatedBy) {
+    $workQueueWhere[] = "d.updated_by = ?";
+    $workQueueParams[] = $currentUserId;
+    $workQueueTypes .= 'i';
+}
 
-$pendingApprovalRows = array_slice($pendingApprovalRows, 0, 5);
+if ($hasWorkflowSteps) {
+    $workQueueWhere[] = "ws.approver_user_id = ?";
+    $workQueueParams[] = $currentUserId;
+    $workQueueTypes .= 'i';
+}
+
+<<<<<<< HEAD
+$workQueueSql = "
+    SELECT
+        d.id AS document_id,
+        d.current_version_id,
+        d.document_number,
+        d.title,
+        d.current_status,
+        dv.review_date,
+        ws.status AS workflow_status
+    FROM documents d
+    LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+";
+=======
+$updatedAtOrderCol = $hasDocumentsUpdatedAt ? "d.updated_at" : ($hasDocumentsCreatedAt ? "d.created_at" : "d.id");
+>>>>>>> e9fbaa3fae22f628966e3cf2a6116de1e983e9de
 
 $workQueueSql = "
     SELECT
@@ -350,28 +294,25 @@ $workQueueSql = "
     LEFT JOIN document_versions dv ON dv.id = d.current_version_id
 ";
 
-$workQueue = fetch_all($conn, "
-    SELECT *
-    FROM (
-        SELECT
-            d.document_number,
-            d.title,
-            d.current_status,
-            dv.review_date,
-            'pending' AS workflow_status,
-            'Approval Required' AS queue_task,
-            COALESCE(d.updated_at, d.created_at) AS sort_dt
-        FROM documents d
-        LEFT JOIN document_versions dv ON dv.id = d.current_version_id
-        INNER JOIN workflow_steps ws
+if ($hasWorkflowSteps) {
+    $workQueueSql .= "
+        LEFT JOIN workflow_steps ws
             ON ws.document_version_id = d.current_version_id
            AND ws.approver_user_id = ?
            AND ws.status = 'pending'
+    ";
+    $workQueueSqlTypesPrefix = 'i';
+    $workQueueSqlParamsPrefix = [$currentUserId];
+} else {
+    $workQueueSqlTypesPrefix = '';
+    $workQueueSqlParamsPrefix = [];
+}
 
 $workQueueSql .= "
     WHERE LOWER(COALESCE(d.current_status, '')) <> 'deleted'
       AND (" . implode(' OR ', $workQueueWhere) . ")
     ORDER BY {$updatedAtOrderCol} DESC, d.id DESC
+<<<<<<< HEAD
     LIMIT 6
 ";
 
@@ -395,15 +336,17 @@ $workQueueSql .= "
     ) q
     GROUP BY q.document_number, q.title, q.current_status, q.review_date, q.queue_task, q.workflow_status, q.sort_dt
     ORDER BY q.sort_dt DESC, q.document_number DESC
+=======
+>>>>>>> e9fbaa3fae22f628966e3cf2a6116de1e983e9de
     LIMIT 6
-", 'isiiii', [
-    $currentUserId,
-    (string)$currentUserId,
-    $currentUserId,
-    $currentUserId,
-    $currentUserId,
-    $currentUserId
-]);
+";
+
+$workQueue = fetch_all(
+    $conn,
+    $workQueueSql,
+    $workQueueSqlTypesPrefix . $workQueueTypes,
+    array_merge($workQueueSqlParamsPrefix, $workQueueParams)
+);
 
 $recentActivity = [];
 if ($hasAuditLogs) {
@@ -695,7 +638,7 @@ $unreadUrl = 'notifications.php?filter=unread';
                 <form action="javascript:void(0);" method="get" id="dashboardSearchForm" autocomplete="off">
                   <div class="input-group input-group-lg search-group">
                     <span class="input-group-text bg-white border-end-0">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
+                      <svg xmlns="https://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
                     </span>
                     <input type="text" id="dashboardSearchInput" class="form-control border-start-0 ps-0" placeholder="Search documents, IDs, owners, or keywords">
                   </div>
@@ -752,7 +695,6 @@ $unreadUrl = 'notifications.php?filter=unread';
       </div>
     </div>
 
-    <?php if ($pendingApprovals > 0): ?>
     <div class="card cp-card mb-4" id="actionRequiredPanel" style="border-left:4px solid #f59e0b;background:#fffbeb;">
       <div class="card-body p-4">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -811,26 +753,15 @@ $unreadUrl = 'notifications.php?filter=unread';
                 <?php endforeach; ?>
               <?php else: ?>
                 <tr>
-                  <td class="fw-semibold" style="color:#2563eb;"><?php echo e($row['document_number']); ?></td>
-                  <td><?php echo e($row['title']); ?></td>
-                  <td><span class="badge badge-soft-info"><?php echo e($row['type_name'] ?: 'Document'); ?></span></td>
-                  <td><?php echo e($submittedByName); ?></td>
-                  <td style="color:#6b7280;"><?php echo e($submittedOn ? date('d M Y', $submittedOn) : '—'); ?></td>
-                  <td><span class="badge <?php echo e($daysBadge); ?>"><?php echo (int)$daysWaiting; ?> day<?php echo $daysWaiting !== 1 ? 's' : ''; ?></span></td>
-                  <td>
-                    <a href="audit-trail.php?tab=approval&doc_id=<?php echo urlencode((string)$row['document_number']); ?>"
-                       class="btn btn-sm btn-success"
-                       style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a>
-                  </td>
+                  <td colspan="7" class="text-center text-secondary py-4">No pending approvals for you.</td>
                 </tr>
-              <?php endforeach; ?>
+              <?php endif; ?>
             </tbody>
           </table>
         </div>
 
       </div>
     </div>
-    <?php endif; ?>
 
     <div class="row g-3 g-xxl-4 mb-4">
       <div class="col-xl-8">
@@ -995,16 +926,13 @@ $unreadUrl = 'notifications.php?filter=unread';
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function dismissActionPanel() {
-  const panel = document.getElementById('actionRequiredPanel');
-  if (panel) {
-    panel.style.display = 'none';
-    sessionStorage.setItem('actionPanelDismissed', '1');
-  }
+  document.getElementById('actionRequiredPanel').style.display = 'none';
+  sessionStorage.setItem('actionPanelDismissed', '1');
 }
 
 if (sessionStorage.getItem('actionPanelDismissed') === '1') {
-  const panel = document.getElementById('actionRequiredPanel');
-  if (panel) panel.style.display = 'none';
+  var p = document.getElementById('actionRequiredPanel');
+  if (p) p.style.display = 'none';
 }
 
 const DASHBOARD_DOCUMENTS = <?php echo $searchDocumentsJson ?: '[]'; ?>;
@@ -1087,28 +1015,26 @@ function renderSearchResults(query) {
   dashboardSearchResults.classList.add('show');
 }
 
-if (dashboardSearchInput && dashboardSearchResults) {
-  dashboardSearchInput.addEventListener('input', function() {
+dashboardSearchInput.addEventListener('input', function() {
+  renderSearchResults(this.value);
+});
+
+dashboardSearchInput.addEventListener('focus', function() {
+  renderSearchResults(this.value);
+});
+
+dashboardSearchInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
     renderSearchResults(this.value);
-  });
+  }
+});
 
-  dashboardSearchInput.addEventListener('focus', function() {
-    renderSearchResults(this.value);
-  });
-
-  dashboardSearchInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      renderSearchResults(this.value);
-    }
-  });
-
-  document.addEventListener('click', function(e) {
-    if (!dashboardSearchResults.contains(e.target) && e.target !== dashboardSearchInput) {
-      dashboardSearchResults.classList.remove('show');
-    }
-  });
-}
+document.addEventListener('click', function(e) {
+  if (!dashboardSearchResults.contains(e.target) && e.target !== dashboardSearchInput) {
+    dashboardSearchResults.classList.remove('show');
+  }
+});
 </script>
 </body>
 </html>
