@@ -78,7 +78,7 @@ if (!function_exists('notificationBadgeClass')) {
         if (in_array($type, ['return', 'retirement_request', 'overdue_review', 'ack_reminder'], true)) {
             return 'badge badge-soft-warning';
         }
-        if (in_array($type, ['submit', 'ack_assignment'], true)) {
+        if (in_array($type, ['submit', 'ack_assignment', 'synthetic_pending_approval'], true)) {
             return 'badge badge-soft-info';
         }
 
@@ -91,20 +91,66 @@ if (!function_exists('notificationTypeLabel')) {
     {
         $type = strtolower(trim($type));
         $map = [
-            'submit'               => 'Submitted',
-            'approve'              => 'Approved',
-            'reject'               => 'Rejected',
-            'return'               => 'Returned',
-            'retirement_request'   => 'Retirement Request',
-            'retirement_approved'  => 'Retirement Approved',
-            'retirement_rejected'  => 'Retirement Rejected',
-            'overdue_review'       => 'Overdue Review',
-            'ack_assignment'       => 'Acknowledgement',
-            'ack_reminder'         => 'Reminder',
-            'system'               => 'System',
+            'submit'                     => 'Submitted',
+            'approve'                    => 'Approved',
+            'reject'                     => 'Rejected',
+            'return'                     => 'Returned',
+            'retirement_request'         => 'Retirement Request',
+            'retirement_approved'        => 'Retirement Approved',
+            'retirement_rejected'        => 'Retirement Rejected',
+            'overdue_review'             => 'Overdue Review',
+            'ack_assignment'             => 'Acknowledgement',
+            'ack_reminder'               => 'Reminder',
+            'system'                     => 'System',
+            'synthetic_pending_approval' => 'Pending Approval',
         ];
 
         return $map[$type] ?? ucwords(str_replace('_', ' ', $type));
+    }
+}
+
+if (!function_exists('fetchAllPrepared')) {
+    function fetchAllPrepared(mysqli $conn, string $sql, string $types = '', array $params = []): array
+    {
+        $rows = [];
+        $stmt = mysqli_prepare($conn, $sql);
+        if (!$stmt) {
+            return $rows;
+        }
+
+        if ($types !== '' && !empty($params)) {
+            mysqli_stmt_bind_param($stmt, $types, ...$params);
+        }
+
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        if ($res) {
+            while ($row = mysqli_fetch_assoc($res)) {
+                $rows[] = $row;
+            }
+        }
+        mysqli_stmt_close($stmt);
+        return $rows;
+    }
+}
+
+if (!function_exists('fetchOnePrepared')) {
+    function fetchOnePrepared(mysqli $conn, string $sql, string $types = '', array $params = [])
+    {
+        $stmt = mysqli_prepare($conn, $sql);
+        if (!$stmt) {
+            return null;
+        }
+
+        if ($types !== '' && !empty($params)) {
+            mysqli_stmt_bind_param($stmt, $types, ...$params);
+        }
+
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+        return $row;
     }
 }
 
@@ -124,8 +170,7 @@ if ($userId <= 0) {
     exit;
 }
 
-$currentUser = null;
-$userSql = "
+$currentUser = fetchOnePrepared($conn, "
     SELECT
         u.id,
         u.first_name,
@@ -136,15 +181,7 @@ $userSql = "
     LEFT JOIN roles r ON r.id = u.current_role_id
     WHERE u.id = ?
     LIMIT 1
-";
-$userStmt = mysqli_prepare($conn, $userSql);
-if ($userStmt) {
-    mysqli_stmt_bind_param($userStmt, "i", $userId);
-    mysqli_stmt_execute($userStmt);
-    $userRes = mysqli_stmt_get_result($userStmt);
-    $currentUser = ($userRes && mysqli_num_rows($userRes) > 0) ? mysqli_fetch_assoc($userRes) : null;
-    mysqli_stmt_close($userStmt);
-}
+", 'i', [$userId]);
 
 if (!$currentUser) {
     session_destroy();
@@ -161,6 +198,13 @@ $roleName = trim((string)($currentUser['role_name'] ?? 'QA Admin'));
 $flashSuccess = '';
 $flashError = '';
 
+$hasWorkflowSteps   = tableExists($conn, 'workflow_steps');
+$hasDocuments       = tableExists($conn, 'documents');
+$hasDocVersions     = tableExists($conn, 'document_versions');
+$hasDocTypes        = tableExists($conn, 'document_types');
+$hasUsers           = tableExists($conn, 'users');
+$hasDocumentsApprover = $hasDocuments && columnExists($conn, 'documents', 'approver');
+
 /* -------------------- ACTIONS -------------------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string)($_POST['action'] ?? ''));
@@ -172,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_bind_param($stmt, "i", $userId);
             mysqli_stmt_execute($stmt);
             mysqli_stmt_close($stmt);
-            $flashSuccess = 'All notifications marked as read.';
+            $flashSuccess = 'All stored notifications marked as read.';
         } else {
             $flashError = 'Unable to update notifications.';
         }
@@ -224,39 +268,25 @@ if ($typeRes) {
     }
     mysqli_free_result($typeRes);
 }
-
-/* -------------------- COUNTS -------------------- */
-$totalCount = 0;
-$unreadCount = 0;
-$readCount = 0;
-
-$countStmt = mysqli_prepare($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ?");
-if ($countStmt) {
-    mysqli_stmt_bind_param($countStmt, "i", $userId);
-    mysqli_stmt_execute($countStmt);
-    $countRes = mysqli_stmt_get_result($countStmt);
-    if ($countRes && ($row = mysqli_fetch_assoc($countRes))) {
-        $totalCount = (int)$row['cnt'];
-    }
-    mysqli_stmt_close($countStmt);
+if (!in_array('synthetic_pending_approval', $availableTypes, true)) {
+    $availableTypes[] = 'synthetic_pending_approval';
 }
+sort($availableTypes);
 
-$unreadStmt = mysqli_prepare($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0");
-if ($unreadStmt) {
-    mysqli_stmt_bind_param($unreadStmt, "i", $userId);
-    mysqli_stmt_execute($unreadStmt);
-    $unreadRes = mysqli_stmt_get_result($unreadStmt);
-    if ($unreadRes && ($row = mysqli_fetch_assoc($unreadRes))) {
-        $unreadCount = (int)$row['cnt'];
-    }
-    mysqli_stmt_close($unreadStmt);
-}
+/* -------------------- STORED NOTIFICATION COUNTS -------------------- */
+$totalStoredCount = 0;
+$unreadStoredCount = 0;
 
-$readCount = max(0, $totalCount - $unreadCount);
+$row = fetchOnePrepared($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ?", 'i', [$userId]);
+$totalStoredCount = (int)($row['cnt'] ?? 0);
 
-/* -------------------- LIST -------------------- */
+$row = fetchOnePrepared($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0", 'i', [$userId]);
+$unreadStoredCount = (int)($row['cnt'] ?? 0);
+
+/* -------------------- STORED NOTIFICATIONS -------------------- */
 $sql = "
     SELECT
+        CONCAT('db_', n.id) AS row_key,
         n.id,
         n.notification_type,
         n.reference_type,
@@ -265,7 +295,9 @@ $sql = "
         n.message,
         n.is_read,
         n.read_at,
-        n.created_at
+        n.created_at,
+        0 AS is_synthetic,
+        '' AS source_type
     FROM notifications n
     WHERE n.user_id = ?
 ";
@@ -287,27 +319,177 @@ if ($statusFilter === 'unread') {
 }
 
 if ($typeFilter !== '') {
-    $sql .= " AND n.notification_type = ?";
-    $params[] = $typeFilter;
-    $types .= 's';
-}
-
-$sql .= " ORDER BY n.created_at DESC, n.id DESC LIMIT 200";
-
-$notifications = [];
-$listStmt = mysqli_prepare($conn, $sql);
-if ($listStmt) {
-    mysqli_stmt_bind_param($listStmt, $types, ...$params);
-    mysqli_stmt_execute($listStmt);
-    $listRes = mysqli_stmt_get_result($listStmt);
-    if ($listRes) {
-        while ($row = mysqli_fetch_assoc($listRes)) {
-            $notifications[] = $row;
-        }
+    if ($typeFilter === 'synthetic_pending_approval') {
+        $sql .= " AND 1 = 0";
+    } else {
+        $sql .= " AND n.notification_type = ?";
+        $params[] = $typeFilter;
+        $types .= 's';
     }
-    mysqli_stmt_close($listStmt);
 }
 
+$sql .= " ORDER BY n.created_at DESC, n.id DESC";
+
+$storedNotifications = fetchAllPrepared($conn, $sql, $types, $params);
+
+/* -------------------- SYNTHETIC PENDING APPROVAL ALERTS -------------------- */
+/*
+   These are generated when a document is pending approval for the current user
+   but no notification row exists. This compensates for your broken submit flow.
+*/
+$syntheticNotifications = [];
+if ($hasDocuments && $hasDocVersions) {
+    $workflowRows = [];
+    if ($hasWorkflowSteps) {
+        $workflowRows = fetchAllPrepared($conn, "
+            SELECT
+                d.id AS document_id,
+                d.document_number,
+                d.title,
+                dt.type_name,
+                dv.id AS document_version_id,
+                dv.version_label,
+                dv.submitted_at,
+                submitter.first_name,
+                submitter.last_name,
+                submitter.email,
+                'workflow' AS source_type
+            FROM workflow_steps ws
+            INNER JOIN document_versions dv ON dv.id = ws.document_version_id
+            INNER JOIN documents d ON d.id = dv.document_id
+            LEFT JOIN document_types dt ON dt.id = d.document_type_id
+            LEFT JOIN users submitter ON submitter.id = dv.submitted_by
+            WHERE ws.approver_user_id = ?
+              AND ws.status = 'pending'
+        ", 'i', [$userId]);
+    }
+
+    $fallbackRows = [];
+    if ($hasDocumentsApprover) {
+        $fallbackRows = fetchAllPrepared($conn, "
+            SELECT
+                d.id AS document_id,
+                d.document_number,
+                d.title,
+                dt.type_name,
+                dv.id AS document_version_id,
+                dv.version_label,
+                dv.submitted_at,
+                submitter.first_name,
+                submitter.last_name,
+                submitter.email,
+                'document_fallback' AS source_type
+            FROM documents d
+            INNER JOIN document_versions dv ON dv.id = d.current_version_id
+            LEFT JOIN document_types dt ON dt.id = d.document_type_id
+            LEFT JOIN users submitter ON submitter.id = dv.submitted_by
+            WHERE d.current_status = 'pending_approval'
+              AND dv.status = 'pending_approval'
+              AND TRIM(COALESCE(d.approver, '')) = ?
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM workflow_steps ws
+                  WHERE ws.document_version_id = d.current_version_id
+                    AND ws.approver_user_id = ?
+                    AND ws.status = 'pending'
+              )
+        ", 'si', [(string)$userId, $userId]);
+    }
+
+    $pendingRows = array_merge($workflowRows, $fallbackRows);
+
+    $seenVersionIds = [];
+    foreach ($pendingRows as $row) {
+        $versionId = (int)($row['document_version_id'] ?? 0);
+        if ($versionId <= 0 || isset($seenVersionIds[$versionId])) {
+            continue;
+        }
+        $seenVersionIds[$versionId] = true;
+
+        $submittedByName = trim((string)($row['first_name'] ?? '') . ' ' . (string)($row['last_name'] ?? ''));
+        if ($submittedByName === '') {
+            $submittedByName = (string)($row['email'] ?? 'Unknown User');
+        }
+
+        $createdAt = (string)($row['submitted_at'] ?? '');
+        $documentNumber = (string)($row['document_number'] ?? '');
+        $documentTitle = (string)($row['title'] ?? 'Untitled Document');
+        $docType = (string)($row['type_name'] ?? 'Document');
+        $versionLabel = (string)($row['version_label'] ?? '—');
+
+        $title = 'Document Pending Your Approval';
+        $message = $docType . ' "' . $documentTitle . '" (' . $documentNumber . ') version ' . $versionLabel .
+            ' is waiting for your approval. Submitted by ' . $submittedByName . '.';
+
+        $syntheticNotifications[] = [
+            'row_key'            => 'syn_' . $versionId,
+            'id'                 => 0,
+            'notification_type'  => 'synthetic_pending_approval',
+            'reference_type'     => 'document_version',
+            'reference_id'       => $versionId,
+            'title'              => $title,
+            'message'            => $message,
+            'is_read'            => 0,
+            'read_at'            => null,
+            'created_at'         => $createdAt,
+            'is_synthetic'       => 1,
+            'source_type'        => (string)($row['source_type'] ?? ''),
+            'document_number'    => $documentNumber,
+        ];
+    }
+}
+
+/* -------------------- MERGE + FILTER -------------------- */
+$notifications = array_merge($storedNotifications, $syntheticNotifications);
+
+/* filter by type for synthetic rows */
+if ($typeFilter !== '') {
+    $notifications = array_values(array_filter($notifications, function ($row) use ($typeFilter) {
+        return (string)($row['notification_type'] ?? '') === $typeFilter;
+    }));
+}
+
+/* filter by search for synthetic rows too */
+if ($search !== '') {
+    $q = mb_strtolower($search);
+    $notifications = array_values(array_filter($notifications, function ($row) use ($q) {
+        $haystack = mb_strtolower(
+            (string)($row['title'] ?? '') . ' ' .
+            (string)($row['message'] ?? '') . ' ' .
+            (string)($row['reference_type'] ?? '') . ' ' .
+            (string)($row['document_number'] ?? '')
+        );
+        return strpos($haystack, $q) !== false;
+    }));
+}
+
+/* filter by status for synthetic */
+if ($statusFilter === 'unread') {
+    $notifications = array_values(array_filter($notifications, function ($row) {
+        return (int)($row['is_read'] ?? 0) === 0;
+    }));
+} elseif ($statusFilter === 'read') {
+    $notifications = array_values(array_filter($notifications, function ($row) {
+        return (int)($row['is_read'] ?? 0) === 1;
+    }));
+}
+
+/* sort latest first */
+usort($notifications, function ($a, $b) {
+    $aTime = !empty($a['created_at']) ? strtotime((string)$a['created_at']) : 0;
+    $bTime = !empty($b['created_at']) ? strtotime((string)$b['created_at']) : 0;
+
+    if ($aTime === $bTime) {
+        return strcmp((string)($b['row_key'] ?? ''), (string)($a['row_key'] ?? ''));
+    }
+    return $bTime <=> $aTime;
+});
+
+$notifications = array_slice($notifications, 0, 200);
+
+$totalCount = $totalStoredCount + count($syntheticNotifications);
+$unreadCount = $unreadStoredCount + count($syntheticNotifications);
+$readCount = max(0, $totalCount - $unreadCount);
 $filteredCount = count($notifications);
 ?>
 <!doctype html>
@@ -325,6 +507,10 @@ $filteredCount = count($notifications);
     .notification-item.read {
       border-left: 4px solid #e5e7eb;
       background: #fff;
+    }
+    .notification-item.synthetic {
+      border-left: 4px solid #f59e0b;
+      background: #fffaf0;
     }
     .notification-message {
       color: #6b7280;
@@ -406,6 +592,12 @@ $filteredCount = count($notifications);
       </div>
     <?php endif; ?>
 
+    <?php if (!empty($syntheticNotifications)): ?>
+      <div class="alert alert-warning border-0 shadow-sm">
+        <strong>Notice:</strong> <?php echo count($syntheticNotifications); ?> approval alert<?php echo count($syntheticNotifications) !== 1 ? 's are' : ' is'; ?> shown from live document status because matching notification rows were not created in the database.
+      </div>
+    <?php endif; ?>
+
     <div class="row g-3 mb-3">
       <div class="col-sm-6 col-xl-4">
         <div class="card cp-card">
@@ -463,7 +655,7 @@ $filteredCount = count($notifications);
 
           <div>
             <label class="form-label mb-1">Type</label>
-            <select class="form-select form-select-sm auto-submit-filter" name="type" style="max-width:180px;">
+            <select class="form-select form-select-sm auto-submit-filter" name="type" style="max-width:220px;">
               <option value="">All Types</option>
               <?php foreach ($availableTypes as $availableType): ?>
                 <option value="<?php echo e($availableType); ?>" <?php echo $typeFilter === $availableType ? 'selected' : ''; ?>>
@@ -488,8 +680,8 @@ $filteredCount = count($notifications);
       </div>
       <form method="post" class="m-0">
         <input type="hidden" name="action" value="mark_all_read">
-        <button type="submit" class="btn btn-sm btn-outline-primary" <?php echo $unreadCount <= 0 ? 'disabled' : ''; ?>>
-          Mark All as Read
+        <button type="submit" class="btn btn-sm btn-outline-primary" <?php echo $unreadStoredCount <= 0 ? 'disabled' : ''; ?>>
+          Mark All Stored as Read
         </button>
       </form>
     </div>
@@ -501,6 +693,7 @@ $filteredCount = count($notifications);
             <?php foreach ($notifications as $row): ?>
               <?php
                 $isRead = (int)($row['is_read'] ?? 0) === 1;
+                $isSynthetic = (int)($row['is_synthetic'] ?? 0) === 1;
                 $typeLabel = notificationTypeLabel((string)($row['notification_type'] ?? 'system'));
                 $typeClass = notificationBadgeClass((string)($row['notification_type'] ?? 'system'));
                 $referenceType = trim((string)($row['reference_type'] ?? ''));
@@ -510,22 +703,28 @@ $filteredCount = count($notifications);
                 if ($referenceType === 'document' && $referenceId > 0) {
                     $viewUrl = 'repository.php?view_id=' . $referenceId;
                 } elseif ($referenceType === 'document_version' && $referenceId > 0) {
-                    $viewUrl = 'audit-trail.php';
+                    $viewUrl = 'audit-trail.php?tab=approval';
                 } elseif ($referenceType === 'acknowledgement' && $referenceId > 0) {
                     $viewUrl = 'document-assignment.php';
                 } elseif ($referenceType === 'retirement_request' && $referenceId > 0) {
                     $viewUrl = 'retire-document.php';
                 }
+
+                $itemClass = $isSynthetic ? 'synthetic unread' : ($isRead ? 'read' : 'unread');
               ?>
-              <div class="notification-item <?php echo $isRead ? 'read' : 'unread'; ?> border-bottom p-3 p-md-4">
+              <div class="notification-item <?php echo e($itemClass); ?> border-bottom p-3 p-md-4">
                 <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
                   <div class="flex-grow-1">
                     <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
                       <h3 class="card-title mb-0" style="font-size:1rem;">
                         <?php echo e($row['title'] ?: 'Notification'); ?>
                       </h3>
+
                       <span class="<?php echo e($typeClass); ?>"><?php echo e($typeLabel); ?></span>
-                      <?php if (!$isRead): ?>
+
+                      <?php if ($isSynthetic): ?>
+                        <span class="badge badge-soft-warning">Live Status</span>
+                      <?php elseif (!$isRead): ?>
                         <span class="badge badge-soft-primary">Unread</span>
                       <?php endif; ?>
                     </div>
@@ -538,6 +737,9 @@ $filteredCount = count($notifications);
                       <span><strong>Created:</strong> <?php echo e(formatDateTime($row['created_at'] ?? '')); ?></span>
                       <span><strong>Read At:</strong> <?php echo e(formatDateTime($row['read_at'] ?? '')); ?></span>
                       <span><strong>Reference:</strong> <?php echo e($referenceType !== '' ? ucwords(str_replace('_', ' ', $referenceType)) : '—'); ?></span>
+                      <?php if ($isSynthetic): ?>
+                        <span><strong>Source:</strong> <?php echo e(ucwords(str_replace('_', ' ', (string)($row['source_type'] ?? 'fallback')))); ?></span>
+                      <?php endif; ?>
                     </div>
                   </div>
 
@@ -548,22 +750,24 @@ $filteredCount = count($notifications);
                       </a>
                     <?php endif; ?>
 
-                    <?php if (!$isRead): ?>
-                      <form method="post">
-                        <input type="hidden" name="action" value="mark_read">
-                        <input type="hidden" name="notification_id" value="<?php echo (int)$row['id']; ?>">
-                        <button type="submit" class="btn btn-sm btn-outline-success" style="height:32px;padding:0 12px;font-size:12px;">
-                          Mark Read
-                        </button>
-                      </form>
-                    <?php else: ?>
-                      <form method="post">
-                        <input type="hidden" name="action" value="mark_unread">
-                        <input type="hidden" name="notification_id" value="<?php echo (int)$row['id']; ?>">
-                        <button type="submit" class="btn btn-sm btn-outline-secondary" style="height:32px;padding:0 12px;font-size:12px;">
-                          Mark Unread
-                        </button>
-                      </form>
+                    <?php if (!$isSynthetic): ?>
+                      <?php if (!$isRead): ?>
+                        <form method="post">
+                          <input type="hidden" name="action" value="mark_read">
+                          <input type="hidden" name="notification_id" value="<?php echo (int)$row['id']; ?>">
+                          <button type="submit" class="btn btn-sm btn-outline-success" style="height:32px;padding:0 12px;font-size:12px;">
+                            Mark Read
+                          </button>
+                        </form>
+                      <?php else: ?>
+                        <form method="post">
+                          <input type="hidden" name="action" value="mark_unread">
+                          <input type="hidden" name="notification_id" value="<?php echo (int)$row['id']; ?>">
+                          <button type="submit" class="btn btn-sm btn-outline-secondary" style="height:32px;padding:0 12px;font-size:12px;">
+                            Mark Unread
+                          </button>
+                        </form>
+                      <?php endif; ?>
                     <?php endif; ?>
                   </div>
                 </div>

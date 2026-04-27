@@ -40,6 +40,43 @@ if (!in_array($activeTab, ['creation', 'approval', 'comments', 'users'], true)) 
 
 $exportType = trim((string)($_GET['export'] ?? ''));
 
+if (!function_exists('tableExists')) {
+    function tableExists(mysqli $conn, string $table): bool
+    {
+        $table = mysqli_real_escape_string($conn, $table);
+        $res = mysqli_query($conn, "SHOW TABLES LIKE '{$table}'");
+        $ok = ($res && mysqli_num_rows($res) > 0);
+        if ($res) {
+            mysqli_free_result($res);
+        }
+        return $ok;
+    }
+}
+
+if (!function_exists('columnExists')) {
+    function columnExists(mysqli $conn, string $table, string $column): bool
+    {
+        $table = mysqli_real_escape_string($conn, $table);
+        $column = mysqli_real_escape_string($conn, $column);
+        $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$table}` LIKE '{$column}'");
+        $ok = ($res && mysqli_num_rows($res) > 0);
+        if ($res) {
+            mysqli_free_result($res);
+        }
+        return $ok;
+    }
+}
+
+$hasWorkflowSteps = tableExists($conn, 'workflow_steps');
+$hasDocuments = tableExists($conn, 'documents');
+$hasDocumentVersions = tableExists($conn, 'document_versions');
+$hasDocumentTypes = tableExists($conn, 'document_types');
+$hasAuditLogs = tableExists($conn, 'audit_logs');
+$hasDocComments = tableExists($conn, 'document_comments');
+$hasElectronicSignatures = tableExists($conn, 'electronic_signatures');
+$hasLoginAttempts = tableExists($conn, 'login_attempts');
+$hasDocumentsApprover = $hasDocuments && columnExists($conn, 'documents', 'approver');
+
 function build_common_filters(string $dateField, string $userField, string $docNumberField, array &$params, string &$types, string $filterFrom, string $filterTo, int $filterUser, string $filterDoc): string
 {
     $where = " WHERE 1=1 ";
@@ -56,7 +93,7 @@ function build_common_filters(string $dateField, string $userField, string $docN
         $params[] = $filterTo;
     }
 
-    if ($filterUser > 0) {
+    if ($filterUser > 0 && $userField !== '') {
         $where .= " AND $userField = ? ";
         $types .= 'i';
         $params[] = $filterUser;
@@ -121,164 +158,361 @@ if ($userResult) {
 /* ---------------------------------------------------------
    TAB 1 - DOCUMENT CREATION
 --------------------------------------------------------- */
-$creationParams = [];
-$creationTypes = '';
-$creationWhere = build_common_filters(
-    'al.performed_at',
-    'al.performed_by',
-    'd.document_number',
-    $creationParams,
-    $creationTypes,
-    $filterFrom,
-    $filterTo,
-    $filterUser,
-    $filterDoc
-);
+$creationRows = [];
+if ($hasAuditLogs && $hasDocuments) {
+    $creationParams = [];
+    $creationTypes = '';
+    $creationWhere = build_common_filters(
+        'al.performed_at',
+        'al.performed_by',
+        'd.document_number',
+        $creationParams,
+        $creationTypes,
+        $filterFrom,
+        $filterTo,
+        $filterUser,
+        $filterDoc
+    );
 
-$creationWhere .= " AND al.entity_type = 'document' AND al.action IN ('create','draft_save','submit','revision_submit') ";
+    $creationWhere .= " AND al.entity_type = 'document' AND al.action IN ('create','draft_save','save_draft','submit','revision_submit','submit_review') ";
 
-$creationSql = "
-    SELECT
-        al.id,
-        al.performed_at,
-        al.action,
-        al.ip_address,
-        al.remarks,
-        al.new_value,
-        al.old_value,
-        al.entity_id,
-        d.document_number,
-        dv.version_label,
-        u.first_name,
-        u.last_name,
-        u.email
-    FROM audit_logs al
-    LEFT JOIN documents d
-        ON d.id = al.entity_id
-    LEFT JOIN document_versions dv
-        ON dv.id = COALESCE(
-            JSON_UNQUOTE(JSON_EXTRACT(al.new_value, '$.document_version_id')),
-            JSON_UNQUOTE(JSON_EXTRACT(al.old_value, '$.document_version_id'))
-        )
-    LEFT JOIN users u
-        ON u.id = al.performed_by
-    $creationWhere
-    ORDER BY al.performed_at DESC, al.id DESC
-";
-$creationRows = execute_prepared_query($conn, $creationSql, $creationTypes, $creationParams);
+    $creationSql = "
+        SELECT
+            al.id,
+            al.performed_at,
+            al.action,
+            al.ip_address,
+            al.remarks,
+            al.new_value,
+            al.old_value,
+            al.entity_id,
+            d.document_number,
+            dv.version_label,
+            u.first_name,
+            u.last_name,
+            u.email
+        FROM audit_logs al
+        LEFT JOIN documents d
+            ON d.id = al.entity_id
+        LEFT JOIN document_versions dv
+            ON dv.id = COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(al.new_value, '$.document_version_id')),
+                JSON_UNQUOTE(JSON_EXTRACT(al.old_value, '$.document_version_id'))
+            )
+        LEFT JOIN users u
+            ON u.id = al.performed_by
+        $creationWhere
+        ORDER BY al.performed_at DESC, al.id DESC
+    ";
+    $creationRows = execute_prepared_query($conn, $creationSql, $creationTypes, $creationParams);
+}
 
 /* ---------------------------------------------------------
-   TAB 2 - APPROVAL / DENIAL
+   TAB 2 - APPROVAL / DENIAL / PENDING
 --------------------------------------------------------- */
 $approvalRows = [];
 
-/* Comment based approval history */
-$approvalParams1 = [];
-$approvalTypes1 = '';
-$approvalWhere1 = build_common_filters(
-    'dc.created_at',
-    'dc.created_by',
-    'd.document_number',
-    $approvalParams1,
-    $approvalTypes1,
-    $filterFrom,
-    $filterTo,
-    $filterUser,
-    $filterDoc
-);
+/* A. LIVE PENDING APPROVALS FROM WORKFLOW_STEPS */
+$pendingWorkflowRows = [];
+if ($hasWorkflowSteps && $hasDocuments && $hasDocumentVersions) {
+    $pendingParams = [];
+    $pendingTypes = '';
+    $pendingWhere = build_common_filters(
+        'COALESCE(dv.submitted_at, ws.due_at)',
+        'ws.approver_user_id',
+        'd.document_number',
+        $pendingParams,
+        $pendingTypes,
+        $filterFrom,
+        $filterTo,
+        $filterUser > 0 ? $filterUser : $currentUserId,
+        $filterDoc
+    );
 
-$approvalWhere1 .= " AND dc.comment_type IN ('approval','rejection','return') ";
+    $pendingWhere .= " AND ws.status = 'pending' ";
 
-$approvalSql1 = "
-    SELECT
-        dc.id,
-        dc.created_at AS event_time,
-        dc.comment_type,
-        dc.decision,
-        dc.comment_text,
-        dc.created_by,
-        dc.document_version_id,
-        dc.workflow_step_id,
-        d.document_number,
-        dv.version_label,
-        u.first_name,
-        u.last_name,
-        u.email,
-        es.sign_action,
-        es.signed_at,
-        es.ip_address AS sign_ip_address,
-        es.signature_reason,
-        'comment' AS source_type
-    FROM document_comments dc
-    INNER JOIN document_versions dv
-        ON dv.id = dc.document_version_id
-    INNER JOIN documents d
-        ON d.id = dv.document_id
-    LEFT JOIN users u
-        ON u.id = dc.created_by
-    LEFT JOIN electronic_signatures es
-        ON es.document_version_id = dc.document_version_id
-       AND es.workflow_step_id = dc.workflow_step_id
-       AND es.signed_by = dc.created_by
-    $approvalWhere1
-    ORDER BY dc.created_at DESC, dc.id DESC
-";
-$approvalRows1 = execute_prepared_query($conn, $approvalSql1, $approvalTypes1, $approvalParams1);
+    $pendingSql = "
+        SELECT
+            ws.id,
+            COALESCE(dv.submitted_at, ws.due_at, dv.created_at) AS event_time,
+            'pending' AS action,
+            'pending' AS comment_type,
+            'pending' AS decision,
+            '' AS comment_text,
+            ws.approver_user_id AS created_by,
+            ws.document_version_id,
+            ws.id AS workflow_step_id,
+            d.document_number,
+            dv.version_label,
+            u.first_name,
+            u.last_name,
+            u.email,
+            '' AS sign_action,
+            NULL AS signed_at,
+            '' AS sign_ip_address,
+            '' AS signature_reason,
+            'pending_workflow' AS source_type,
+            d.title AS document_title,
+            dt.type_name,
+            submitter.first_name AS submitter_first_name,
+            submitter.last_name AS submitter_last_name,
+            submitter.email AS submitter_email,
+            ws.due_at
+        FROM workflow_steps ws
+        INNER JOIN document_versions dv
+            ON dv.id = ws.document_version_id
+        INNER JOIN documents d
+            ON d.id = dv.document_id
+        LEFT JOIN document_types dt
+            ON dt.id = d.document_type_id
+        LEFT JOIN users u
+            ON u.id = ws.approver_user_id
+        LEFT JOIN users submitter
+            ON submitter.id = dv.submitted_by
+        $pendingWhere
+        ORDER BY event_time DESC, ws.id DESC
+    ";
+    $pendingWorkflowRows = execute_prepared_query($conn, $pendingSql, $pendingTypes, $pendingParams);
+}
 
-/* Audit-log based approval history from assigned-documents.php */
-$approvalParams2 = [];
-$approvalTypes2 = '';
-$approvalWhere2 = build_common_filters(
-    'al.performed_at',
-    'al.performed_by',
-    'd.document_number',
-    $approvalParams2,
-    $approvalTypes2,
-    $filterFrom,
-    $filterTo,
-    $filterUser,
-    $filterDoc
-);
+/* B. FALLBACK PENDING APPROVALS FROM DOCUMENTS.APPROVER */
+$pendingFallbackRows = [];
+if ($hasDocuments && $hasDocumentVersions && $hasDocumentsApprover) {
+    $fallbackParams = [];
+    $fallbackTypes = '';
+    $fallbackWhere = build_common_filters(
+        'dv.submitted_at',
+        '',
+        'd.document_number',
+        $fallbackParams,
+        $fallbackTypes,
+        $filterFrom,
+        $filterTo,
+        0,
+        $filterDoc
+    );
 
-$approvalWhere2 .= " AND al.entity_type = 'document' AND al.action IN ('approve','reject','return') ";
+    $approverUserToCheck = $filterUser > 0 ? $filterUser : $currentUserId;
 
-$approvalSql2 = "
-    SELECT
-        al.id,
-        al.performed_at AS event_time,
-        al.action,
-        al.remarks AS comment_text,
-        al.old_value,
-        al.new_value,
-        al.performed_by AS created_by,
-        al.ip_address AS sign_ip_address,
-        d.document_number,
-        dv.version_label,
-        u.first_name,
-        u.last_name,
-        u.email,
-        '' AS comment_type,
-        '' AS decision,
-        '' AS sign_action,
-        NULL AS signed_at,
-        '' AS signature_reason,
-        'audit' AS source_type
-    FROM audit_logs al
-    LEFT JOIN documents d
-        ON d.id = al.entity_id
-    LEFT JOIN document_versions dv
-        ON dv.id = COALESCE(
-            JSON_UNQUOTE(JSON_EXTRACT(al.new_value, '$.document_version_id')),
-            JSON_UNQUOTE(JSON_EXTRACT(al.old_value, '$.document_version_id'))
-        )
-    LEFT JOIN users u
-        ON u.id = al.performed_by
-    $approvalWhere2
-    ORDER BY al.performed_at DESC, al.id DESC
-";
-$approvalRows2 = execute_prepared_query($conn, $approvalSql2, $approvalTypes2, $approvalParams2);
+    $fallbackWhere .= " AND d.current_status = 'pending_approval'
+                        AND dv.status = 'pending_approval'
+                        AND TRIM(COALESCE(d.approver, '')) = ?
+                    ";
+    $fallbackTypes .= 's';
+    $fallbackParams[] = (string)$approverUserToCheck;
 
-$approvalRows = array_merge($approvalRows1, $approvalRows2);
+    if ($hasWorkflowSteps) {
+        $fallbackWhere .= " AND NOT EXISTS (
+            SELECT 1
+            FROM workflow_steps ws2
+            WHERE ws2.document_version_id = d.current_version_id
+              AND ws2.approver_user_id = ?
+              AND ws2.status = 'pending'
+        ) ";
+        $fallbackTypes .= 'i';
+        $fallbackParams[] = $approverUserToCheck;
+    }
+
+    $fallbackSql = "
+        SELECT
+            d.id,
+            COALESCE(dv.submitted_at, dv.created_at) AS event_time,
+            'pending' AS action,
+            'pending' AS comment_type,
+            'pending' AS decision,
+            '' AS comment_text,
+            ? AS created_by,
+            dv.id AS document_version_id,
+            NULL AS workflow_step_id,
+            d.document_number,
+            dv.version_label,
+            u.first_name,
+            u.last_name,
+            u.email,
+            '' AS sign_action,
+            NULL AS signed_at,
+            '' AS sign_ip_address,
+            '' AS signature_reason,
+            'pending_fallback' AS source_type,
+            d.title AS document_title,
+            dt.type_name,
+            submitter.first_name AS submitter_first_name,
+            submitter.last_name AS submitter_last_name,
+            submitter.email AS submitter_email,
+            NULL AS due_at
+        FROM documents d
+        INNER JOIN document_versions dv
+            ON dv.id = d.current_version_id
+        LEFT JOIN document_types dt
+            ON dt.id = d.document_type_id
+        LEFT JOIN users u
+            ON u.id = ?
+        LEFT JOIN users submitter
+            ON submitter.id = dv.submitted_by
+        $fallbackWhere
+        ORDER BY event_time DESC, d.id DESC
+    ";
+    $pendingFallbackRows = execute_prepared_query(
+        $conn,
+        $fallbackSql,
+        'ii' . $fallbackTypes,
+        array_merge([$approverUserToCheck, $approverUserToCheck], $fallbackParams)
+    );
+}
+
+/* C. COMPLETED HISTORY FROM DOCUMENT_COMMENTS */
+$approvalRows1 = [];
+if ($hasDocComments && $hasDocuments && $hasDocumentVersions) {
+    $approvalParams1 = [];
+    $approvalTypes1 = '';
+    $approvalWhere1 = build_common_filters(
+        'dc.created_at',
+        'dc.created_by',
+        'd.document_number',
+        $approvalParams1,
+        $approvalTypes1,
+        $filterFrom,
+        $filterTo,
+        $filterUser,
+        $filterDoc
+    );
+
+    $approvalWhere1 .= " AND dc.comment_type IN ('approval','rejection','return') ";
+
+    $approvalSql1 = "
+        SELECT
+            dc.id,
+            dc.created_at AS event_time,
+            dc.comment_type,
+            dc.decision,
+            dc.comment_text,
+            dc.created_by,
+            dc.document_version_id,
+            dc.workflow_step_id,
+            d.document_number,
+            dv.version_label,
+            u.first_name,
+            u.last_name,
+            u.email,
+            es.sign_action,
+            es.signed_at,
+            es.ip_address AS sign_ip_address,
+            es.signature_reason,
+            'comment' AS source_type,
+            d.title AS document_title,
+            dt.type_name,
+            '' AS submitter_first_name,
+            '' AS submitter_last_name,
+            '' AS submitter_email,
+            NULL AS due_at,
+            '' AS action
+        FROM document_comments dc
+        INNER JOIN document_versions dv
+            ON dv.id = dc.document_version_id
+        INNER JOIN documents d
+            ON d.id = dv.document_id
+        LEFT JOIN document_types dt
+            ON dt.id = d.document_type_id
+        LEFT JOIN users u
+            ON u.id = dc.created_by
+        LEFT JOIN electronic_signatures es
+            ON es.document_version_id = dc.document_version_id
+           AND es.workflow_step_id = dc.workflow_step_id
+           AND es.signed_by = dc.created_by
+        $approvalWhere1
+        ORDER BY dc.created_at DESC, dc.id DESC
+    ";
+    $approvalRows1 = execute_prepared_query($conn, $approvalSql1, $approvalTypes1, $approvalParams1);
+}
+
+/* D. COMPLETED HISTORY FROM AUDIT_LOGS */
+$approvalRows2 = [];
+if ($hasAuditLogs && $hasDocuments) {
+    $approvalParams2 = [];
+    $approvalTypes2 = '';
+    $approvalWhere2 = build_common_filters(
+        'al.performed_at',
+        'al.performed_by',
+        'd.document_number',
+        $approvalParams2,
+        $approvalTypes2,
+        $filterFrom,
+        $filterTo,
+        $filterUser,
+        $filterDoc
+    );
+
+    $approvalWhere2 .= " AND al.entity_type = 'document' AND al.action IN ('approve','reject','return') ";
+
+    $approvalSql2 = "
+        SELECT
+            al.id,
+            al.performed_at AS event_time,
+            al.action,
+            '' AS comment_type,
+            '' AS decision,
+            al.remarks AS comment_text,
+            al.performed_by AS created_by,
+            COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(al.new_value, '$.document_version_id')),
+                JSON_UNQUOTE(JSON_EXTRACT(al.old_value, '$.document_version_id'))
+            ) AS document_version_id,
+            NULL AS workflow_step_id,
+            d.document_number,
+            dv.version_label,
+            u.first_name,
+            u.last_name,
+            u.email,
+            '' AS sign_action,
+            NULL AS signed_at,
+            al.ip_address AS sign_ip_address,
+            '' AS signature_reason,
+            'audit' AS source_type,
+            d.title AS document_title,
+            dt.type_name,
+            '' AS submitter_first_name,
+            '' AS submitter_last_name,
+            '' AS submitter_email,
+            NULL AS due_at
+        FROM audit_logs al
+        LEFT JOIN documents d
+            ON d.id = al.entity_id
+        LEFT JOIN document_versions dv
+            ON dv.id = COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(al.new_value, '$.document_version_id')),
+                JSON_UNQUOTE(JSON_EXTRACT(al.old_value, '$.document_version_id'))
+            )
+        LEFT JOIN document_types dt
+            ON dt.id = d.document_type_id
+        LEFT JOIN users u
+            ON u.id = al.performed_by
+        $approvalWhere2
+        ORDER BY al.performed_at DESC, al.id DESC
+    ";
+    $approvalRows2 = execute_prepared_query($conn, $approvalSql2, $approvalTypes2, $approvalParams2);
+}
+
+$approvalRows = array_merge($pendingWorkflowRows, $pendingFallbackRows, $approvalRows1, $approvalRows2);
+
+/* Deduplicate same pending version appearing twice */
+$seenPendingVersions = [];
+$approvalRowsDeduped = [];
+foreach ($approvalRows as $row) {
+    $sourceType = (string)($row['source_type'] ?? '');
+    $versionId = (int)($row['document_version_id'] ?? 0);
+
+    if (in_array($sourceType, ['pending_workflow', 'pending_fallback'], true)) {
+        if ($versionId > 0) {
+            if (isset($seenPendingVersions[$versionId])) {
+                continue;
+            }
+            $seenPendingVersions[$versionId] = true;
+        }
+    }
+
+    $approvalRowsDeduped[] = $row;
+}
+$approvalRows = $approvalRowsDeduped;
 
 usort($approvalRows, function ($a, $b) {
     return strtotime((string)($b['event_time'] ?? '')) <=> strtotime((string)($a['event_time'] ?? ''));
@@ -287,153 +521,162 @@ usort($approvalRows, function ($a, $b) {
 /* ---------------------------------------------------------
    TAB 3 - APPROVER COMMENTS
 --------------------------------------------------------- */
-$commentParams = [];
-$commentTypes = '';
-$commentWhere = build_common_filters(
-    'dc.created_at',
-    'dc.created_by',
-    'd.document_number',
-    $commentParams,
-    $commentTypes,
-    $filterFrom,
-    $filterTo,
-    $filterUser,
-    $filterDoc
-);
+$commentRows = [];
+if ($hasDocComments && $hasDocuments && $hasDocumentVersions) {
+    $commentParams = [];
+    $commentTypes = '';
+    $commentWhere = build_common_filters(
+        'dc.created_at',
+        'dc.created_by',
+        'd.document_number',
+        $commentParams,
+        $commentTypes,
+        $filterFrom,
+        $filterTo,
+        $filterUser,
+        $filterDoc
+    );
 
-$commentWhere .= " AND dc.comment_type IN ('general','review') ";
+    $commentWhere .= " AND dc.comment_type IN ('general','review') ";
 
-$commentSql = "
-    SELECT
-        dc.id,
-        dc.created_at,
-        dc.comment_type,
-        dc.comment_text,
-        dc.created_by,
-        dc.document_version_id,
-        d.document_number,
-        dv.version_label,
-        u.first_name,
-        u.last_name,
-        u.email,
-        al.ip_address
-    FROM document_comments dc
-    INNER JOIN document_versions dv
-        ON dv.id = dc.document_version_id
-    INNER JOIN documents d
-        ON d.id = dv.document_id
-    LEFT JOIN users u
-        ON u.id = dc.created_by
-    LEFT JOIN audit_logs al
-        ON al.entity_type = 'document'
-       AND al.performed_by = dc.created_by
-       AND JSON_UNQUOTE(JSON_EXTRACT(al.new_value, '$.document_version_id')) = CAST(dc.document_version_id AS CHAR)
-       AND DATE(al.performed_at) = DATE(dc.created_at)
-    $commentWhere
-    ORDER BY dc.created_at DESC, dc.id DESC
-";
-$commentRows = execute_prepared_query($conn, $commentSql, $commentTypes, $commentParams);
+    $commentSql = "
+        SELECT
+            dc.id,
+            dc.created_at,
+            dc.comment_type,
+            dc.comment_text,
+            dc.created_by,
+            dc.document_version_id,
+            d.document_number,
+            dv.version_label,
+            u.first_name,
+            u.last_name,
+            u.email,
+            al.ip_address
+        FROM document_comments dc
+        INNER JOIN document_versions dv
+            ON dv.id = dc.document_version_id
+        INNER JOIN documents d
+            ON d.id = dv.document_id
+        LEFT JOIN users u
+            ON u.id = dc.created_by
+        LEFT JOIN audit_logs al
+            ON al.entity_type = 'document'
+           AND al.performed_by = dc.created_by
+           AND JSON_UNQUOTE(JSON_EXTRACT(al.new_value, '$.document_version_id')) = CAST(dc.document_version_id AS CHAR)
+           AND DATE(al.performed_at) = DATE(dc.created_at)
+        $commentWhere
+        ORDER BY dc.created_at DESC, dc.id DESC
+    ";
+    $commentRows = execute_prepared_query($conn, $commentSql, $commentTypes, $commentParams);
+}
 
 /* ---------------------------------------------------------
    TAB 4 - USER ACTIVITY
 --------------------------------------------------------- */
 $userActivityRows = [];
 
-$userAuditParams = [];
-$userAuditTypes = '';
-$userAuditWhere = " WHERE 1=1 ";
+$userAuditRows = [];
+if ($hasAuditLogs) {
+    $userAuditParams = [];
+    $userAuditTypes = '';
+    $userAuditWhere = " WHERE 1=1 ";
 
-if ($filterFrom !== '') {
-    $userAuditWhere .= " AND DATE(al.performed_at) >= ? ";
-    $userAuditTypes .= 's';
-    $userAuditParams[] = $filterFrom;
-}
-if ($filterTo !== '') {
-    $userAuditWhere .= " AND DATE(al.performed_at) <= ? ";
-    $userAuditTypes .= 's';
-    $userAuditParams[] = $filterTo;
-}
-if ($filterUser > 0) {
-    $userAuditWhere .= " AND al.performed_by = ? ";
-    $userAuditTypes .= 'i';
-    $userAuditParams[] = $filterUser;
-}
+    if ($filterFrom !== '') {
+        $userAuditWhere .= " AND DATE(al.performed_at) >= ? ";
+        $userAuditTypes .= 's';
+        $userAuditParams[] = $filterFrom;
+    }
+    if ($filterTo !== '') {
+        $userAuditWhere .= " AND DATE(al.performed_at) <= ? ";
+        $userAuditTypes .= 's';
+        $userAuditParams[] = $filterTo;
+    }
+    if ($filterUser > 0) {
+        $userAuditWhere .= " AND al.performed_by = ? ";
+        $userAuditTypes .= 'i';
+        $userAuditParams[] = $filterUser;
+    }
 
-$userAuditWhere .= " AND (
-    al.entity_type = 'user'
-    OR al.entity_type = 'auth'
-    OR al.entity_type = 'system_limits'
-    OR al.entity_type = 'department'
-    OR al.entity_type = 'department_caps'
-    OR (al.entity_type = 'system_setting' AND al.action IN ('create','update'))
-) ";
+    $userAuditWhere .= " AND (
+        al.entity_type = 'user'
+        OR al.entity_type = 'auth'
+        OR al.entity_type = 'system_limits'
+        OR al.entity_type = 'department'
+        OR al.entity_type = 'department_caps'
+        OR (al.entity_type = 'system_setting' AND al.action IN ('create','update'))
+    ) ";
 
-$userAuditSql = "
-    SELECT
-        al.id,
-        al.performed_at AS event_time,
-        al.action,
-        al.entity_type,
-        al.entity_id,
-        al.old_value,
-        al.new_value,
-        al.remarks,
-        al.ip_address,
-        u.first_name,
-        u.last_name,
-        u.email,
-        target.first_name AS target_first_name,
-        target.last_name AS target_last_name,
-        target.email AS target_email
-    FROM audit_logs al
-    LEFT JOIN users u
-        ON u.id = al.performed_by
-    LEFT JOIN users target
-        ON target.id = al.entity_id AND al.entity_type = 'user'
-    $userAuditWhere
-    ORDER BY al.performed_at DESC, al.id DESC
-";
-$userAuditRows = execute_prepared_query($conn, $userAuditSql, $userAuditTypes, $userAuditParams);
-
-$loginParams = [];
-$loginTypes = '';
-$loginWhere = " WHERE 1=1 ";
-
-if ($filterFrom !== '') {
-    $loginWhere .= " AND DATE(la.attempted_at) >= ? ";
-    $loginTypes .= 's';
-    $loginParams[] = $filterFrom;
-}
-if ($filterTo !== '') {
-    $loginWhere .= " AND DATE(la.attempted_at) <= ? ";
-    $loginTypes .= 's';
-    $loginParams[] = $filterTo;
-}
-if ($filterUser > 0) {
-    $loginWhere .= " AND la.user_id = ? ";
-    $loginTypes .= 'i';
-    $loginParams[] = $filterUser;
+    $userAuditSql = "
+        SELECT
+            al.id,
+            al.performed_at AS event_time,
+            al.action,
+            al.entity_type,
+            al.entity_id,
+            al.old_value,
+            al.new_value,
+            al.remarks,
+            al.ip_address,
+            u.first_name,
+            u.last_name,
+            u.email,
+            target.first_name AS target_first_name,
+            target.last_name AS target_last_name,
+            target.email AS target_email
+        FROM audit_logs al
+        LEFT JOIN users u
+            ON u.id = al.performed_by
+        LEFT JOIN users target
+            ON target.id = al.entity_id AND al.entity_type = 'user'
+        $userAuditWhere
+        ORDER BY al.performed_at DESC, al.id DESC
+    ";
+    $userAuditRows = execute_prepared_query($conn, $userAuditSql, $userAuditTypes, $userAuditParams);
 }
 
-$loginSql = "
-    SELECT
-        la.id,
-        la.attempted_at AS event_time,
-        la.attempt_status,
-        la.failure_reason,
-        la.email AS login_email,
-        la.ip_address,
-        la.portal_type,
-        u.first_name,
-        u.last_name,
-        u.email
-    FROM login_attempts la
-    LEFT JOIN users u
-        ON u.id = la.user_id
-    $loginWhere
-    ORDER BY la.attempted_at DESC, la.id DESC
-";
-$loginRows = execute_prepared_query($conn, $loginSql, $loginTypes, $loginParams);
+$loginRows = [];
+if ($hasLoginAttempts) {
+    $loginParams = [];
+    $loginTypes = '';
+    $loginWhere = " WHERE 1=1 ";
+
+    if ($filterFrom !== '') {
+        $loginWhere .= " AND DATE(la.attempted_at) >= ? ";
+        $loginTypes .= 's';
+        $loginParams[] = $filterFrom;
+    }
+    if ($filterTo !== '') {
+        $loginWhere .= " AND DATE(la.attempted_at) <= ? ";
+        $loginTypes .= 's';
+        $loginParams[] = $filterTo;
+    }
+    if ($filterUser > 0) {
+        $loginWhere .= " AND la.user_id = ? ";
+        $loginTypes .= 'i';
+        $loginParams[] = $filterUser;
+    }
+
+    $loginSql = "
+        SELECT
+            la.id,
+            la.attempted_at AS event_time,
+            la.attempt_status,
+            la.failure_reason,
+            la.email AS login_email,
+            la.ip_address,
+            la.portal_type,
+            u.first_name,
+            u.last_name,
+            u.email
+        FROM login_attempts la
+        LEFT JOIN users u
+            ON u.id = la.user_id
+        $loginWhere
+        ORDER BY la.attempted_at DESC, la.id DESC
+    ";
+    $loginRows = execute_prepared_query($conn, $loginSql, $loginTypes, $loginParams);
+}
 
 foreach ($userAuditRows as $row) {
     $userActivityRows[] = [
@@ -462,7 +705,7 @@ foreach ($loginRows as $row) {
 
     $userActivityRows[] = [
         'event_time' => $row['event_time'] ?? '',
-        'user_name' => trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')),
+        'user_name' => trim((string)($row['first_name'] ?? '') . ' ' . (string)($row['last_name'] ?? '')),
         'user_email' => $row['email'] ?: ($row['login_email'] ?? ''),
         'activity_type' => 'login',
         'action' => $label,
@@ -516,7 +759,11 @@ if ($exportType === 'csv') {
             }
 
             $meaning = '';
-            if (($row['source_type'] ?? '') === 'audit') {
+            $sourceType = (string)($row['source_type'] ?? '');
+
+            if (in_array($sourceType, ['pending_workflow', 'pending_fallback'], true)) {
+                $meaning = 'pending';
+            } elseif ($sourceType === 'audit') {
                 $meaning = strtolower((string)($row['action'] ?? ''));
             } else {
                 $meaning = (string)($row['decision'] ?: $row['comment_type']);
@@ -529,6 +776,13 @@ if ($exportType === 'csv') {
             $reason = $row['comment_text'] ?? '';
             if ($reason === '' && ($row['source_type'] ?? '') === 'comment') {
                 $reason = $row['signature_reason'] ?? '';
+            }
+            if ($reason === '' && in_array($sourceType, ['pending_workflow', 'pending_fallback'], true)) {
+                $submitter = trim(($row['submitter_first_name'] ?? '') . ' ' . ($row['submitter_last_name'] ?? ''));
+                if ($submitter === '') {
+                    $submitter = (string)($row['submitter_email'] ?? 'Unknown User');
+                }
+                $reason = 'Pending approval for approver. Submitted by ' . $submitter;
             }
 
             fputcsv($out, [
@@ -592,10 +846,10 @@ function action_badge_html(string $action): string
     if (in_array($action, ['create', 'created'], true)) {
         return '<span class="badge badge-soft-info">Created</span>';
     }
-    if (in_array($action, ['draft_save', 'draft saved'], true)) {
+    if (in_array($action, ['draft_save', 'save_draft', 'draft saved'], true)) {
         return '<span class="badge badge-soft-secondary">Draft Saved</span>';
     }
-    if (in_array($action, ['submit', 'revision_submit'], true)) {
+    if (in_array($action, ['submit', 'revision_submit', 'submit_review'], true)) {
         return '<span class="badge badge-soft-warning">Submitted</span>';
     }
     if (in_array($action, ['approve', 'approved', 'approval', 'login_success'], true)) {
@@ -606,6 +860,9 @@ function action_badge_html(string $action): string
     }
     if (in_array($action, ['return', 'returned'], true)) {
         return '<span class="badge badge-soft-secondary">Returned</span>';
+    }
+    if (in_array($action, ['pending'], true)) {
+        return '<span class="badge badge-soft-warning">Pending</span>';
     }
 
     if (in_array($action, ['activate'], true)) {
@@ -869,7 +1126,7 @@ $queryBase = [
     <div class="card cp-card" style="padding:0;">
       <div class="px-4 py-3 border-bottom">
         <div class="fw-bold" style="color:#1a3a6e;font-size:14px;">Approval &amp; Denial Events</div>
-        <div class="text-secondary" style="font-size:12px;">Captures: approver, meaning, full reason, electronic signature evidence, audit logs, IP address.</div>
+        <div class="text-secondary" style="font-size:12px;">Shows live pending approvals plus approval/rejection/return history.</div>
       </div>
       <div class="table-responsive">
         <table class="table align-middle mb-0">
@@ -880,7 +1137,7 @@ $queryBase = [
               <th>Meaning</th>
               <th>Document ID</th>
               <th>Version</th>
-              <th>Reason</th>
+              <th>Reason / Details</th>
               <th>IP Address</th>
             </tr>
           </thead>
@@ -889,7 +1146,11 @@ $queryBase = [
               <?php foreach ($approvalRows as $row): ?>
                 <?php
                   $meaning = '';
-                  if (($row['source_type'] ?? '') === 'audit') {
+                  $sourceType = (string)($row['source_type'] ?? '');
+
+                  if (in_array($sourceType, ['pending_workflow', 'pending_fallback'], true)) {
+                      $meaning = 'pending';
+                  } elseif ($sourceType === 'audit') {
                       $meaning = strtolower((string)($row['action'] ?? ''));
                   } else {
                       $meaning = (string)($row['decision'] ?: $row['comment_type']);
@@ -901,14 +1162,34 @@ $queryBase = [
 
                   $displayTime = format_dt($row['event_time'] ?? '');
                   $displayIp = $row['sign_ip_address'] ?? '—';
-                  $displayReason = $row['comment_text'] ?? '';
+                  $displayReason = trim((string)($row['comment_text'] ?? ''));
 
                   if ($displayReason === '' && ($row['source_type'] ?? '') === 'comment') {
-                      $displayReason = $row['signature_reason'] ?? '';
+                      $displayReason = trim((string)($row['signature_reason'] ?? ''));
+                  }
+
+                  if ($displayReason === '' && in_array($sourceType, ['pending_workflow', 'pending_fallback'], true)) {
+                      $submitter = trim((string)($row['submitter_first_name'] ?? '') . ' ' . (string)($row['submitter_last_name'] ?? ''));
+                      if ($submitter === '') {
+                          $submitter = (string)($row['submitter_email'] ?? 'Unknown User');
+                      }
+
+                      $docType = trim((string)($row['type_name'] ?? 'Document'));
+                      $docTitle = trim((string)($row['document_title'] ?? 'Untitled'));
+                      $dueAt = trim((string)($row['due_at'] ?? ''));
+
+                      $displayReason = $docType . ' "' . $docTitle . '" is waiting for approval. Submitted by ' . $submitter . '.';
+                      if ($dueAt !== '' && $dueAt !== '0000-00-00 00:00:00') {
+                          $displayReason .= ' Due: ' . format_dt($dueAt) . '.';
+                      }
                   }
 
                   if ($displayReason === '') {
                       $displayReason = '—';
+                  }
+
+                  if (in_array($sourceType, ['pending_workflow', 'pending_fallback'], true)) {
+                      $displayIp = '—';
                   }
                 ?>
                 <tr>
@@ -923,7 +1204,7 @@ $queryBase = [
               <?php endforeach; ?>
             <?php else: ?>
               <tr>
-                <td colspan="7" class="text-center text-secondary py-4">No approval or denial records found.</td>
+                <td colspan="7" class="text-center text-secondary py-4">No approval, denial, or pending approval records found.</td>
               </tr>
             <?php endif; ?>
           </tbody>

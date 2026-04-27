@@ -32,9 +32,7 @@ if (!function_exists('has_column')) {
         $column = mysqli_real_escape_string($conn, $column);
         $res = mysqli_query($conn, "SHOW COLUMNS FROM `$table` LIKE '$column'");
         $has = $res && mysqli_num_rows($res) > 0;
-        if ($res) {
-            mysqli_free_result($res);
-        }
+        if ($res) mysqli_free_result($res);
         return $has;
     }
 }
@@ -45,9 +43,7 @@ if (!function_exists('table_exists')) {
         $table = mysqli_real_escape_string($conn, $table);
         $res = mysqli_query($conn, "SHOW TABLES LIKE '$table'");
         $has = $res && mysqli_num_rows($res) > 0;
-        if ($res) {
-            mysqli_free_result($res);
-        }
+        if ($res) mysqli_free_result($res);
         return $has;
     }
 }
@@ -74,13 +70,10 @@ if (!function_exists('stmt_bind_execute')) {
         $values = [];
 
         foreach ($params as $param) {
-            if (is_int($param)) {
-                $types .= 'i';
-            } elseif (is_float($param)) {
-                $types .= 'd';
-            } else {
-                $types .= 's';
-            }
+            if (is_int($param)) $types .= 'i';
+            elseif (is_float($param)) $types .= 'd';
+            else $types .= 's';
+
             $values[] = $param;
         }
 
@@ -111,9 +104,8 @@ if (!function_exists('fetch_one_prepared')) {
     function fetch_one_prepared(mysqli $conn, string $sql, array $params = [])
     {
         $stmt = mysqli_prepare($conn, $sql);
-        if (!$stmt) {
-            return null;
-        }
+        if (!$stmt) return null;
+
         stmt_bind_execute($stmt, $params);
         $res = mysqli_stmt_get_result($stmt);
         $row = $res ? mysqli_fetch_assoc($res) : null;
@@ -129,11 +121,13 @@ if (!function_exists('exec_prepared')) {
         if (!$stmt) {
             throw new Exception('Database prepare failed: ' . mysqli_error($conn));
         }
+
         if (!stmt_bind_execute($stmt, $params)) {
             $err = mysqli_stmt_error($stmt);
             mysqli_stmt_close($stmt);
             throw new Exception('Database execute failed: ' . $err);
         }
+
         return $stmt;
     }
 }
@@ -142,9 +136,7 @@ if (!function_exists('redirect_back')) {
     function redirect_back(string $query = ''): void
     {
         $url = 'create-document.php';
-        if ($query !== '') {
-            $url .= '?' . ltrim($query, '?');
-        }
+        if ($query !== '') $url .= '?' . ltrim($query, '?');
         header('Location: ' . $url);
         exit;
     }
@@ -153,9 +145,7 @@ if (!function_exists('redirect_back')) {
 if (!function_exists('write_audit_log')) {
     function write_audit_log(mysqli $conn, string $entityType, $entityId, string $action, $oldValue, $newValue, $performedBy, string $remarks = ''): void
     {
-        if (!table_exists($conn, 'audit_logs')) {
-            return;
-        }
+        if (!table_exists($conn, 'audit_logs')) return;
 
         $eventId = generate_uuid_v4();
         $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
@@ -168,6 +158,7 @@ if (!function_exists('write_audit_log')) {
             (event_id, entity_type, entity_id, action, old_value, new_value, performed_by, performed_at, remarks, ip_address, user_agent)
             VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
         ";
+
         $stmt = mysqli_prepare($conn, $sql);
         if ($stmt) {
             stmt_bind_execute($stmt, [
@@ -190,9 +181,7 @@ if (!function_exists('write_audit_log')) {
 if (!function_exists('ensure_upload_dir')) {
     function ensure_upload_dir(string $dir): void
     {
-        if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
-        }
+        if (!is_dir($dir)) mkdir($dir, 0777, true);
     }
 }
 
@@ -212,12 +201,8 @@ if (!function_exists('save_document_upload')) {
         }
 
         $maxSize = 25 * 1024 * 1024;
-        if ((int)$file['size'] <= 0) {
-            throw new Exception('Uploaded file is empty.');
-        }
-        if ((int)$file['size'] > $maxSize) {
-            throw new Exception('Maximum allowed file size is 25 MB.');
-        }
+        if ((int)$file['size'] <= 0) throw new Exception('Uploaded file is empty.');
+        if ((int)$file['size'] > $maxSize) throw new Exception('Maximum allowed file size is 25 MB.');
 
         $originalName = trim((string)($file['name'] ?? ''));
         $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
@@ -258,11 +243,7 @@ if (!function_exists('build_auto_topic')) {
         $typeName = trim($typeName);
         $documentNumber = trim($documentNumber);
 
-        if ($documentNumber !== '') {
-            return $typeName . ' ' . $documentNumber;
-        }
-
-        return $typeName . ' Draft';
+        return $documentNumber !== '' ? $typeName . ' ' . $documentNumber : $typeName . ' Draft';
     }
 }
 
@@ -273,10 +254,7 @@ if (!function_exists('slugify_field_label')) {
         $label = preg_replace('/[^a-z0-9]+/i', '_', $label);
         $label = trim((string)$label, '_');
 
-        if ($label === '') {
-            $label = 'field_' . ($index + 1);
-        }
-
+        if ($label === '') $label = 'field_' . ($index + 1);
         return $label;
     }
 }
@@ -284,21 +262,15 @@ if (!function_exists('slugify_field_label')) {
 if (!function_exists('normalize_form_response_labels')) {
     function normalize_form_response_labels(string $builderJson, string $responseJson): string
     {
-        if ($builderJson === '' || $responseJson === '') {
-            return $responseJson;
-        }
+        if ($builderJson === '' || $responseJson === '') return $responseJson;
 
         $builder = json_decode($builderJson, true);
         $responses = json_decode($responseJson, true);
 
-        if (!is_array($builder) || !is_array($responses)) {
-            return $responseJson;
-        }
+        if (!is_array($builder) || !is_array($responses)) return $responseJson;
 
         $fields = is_array($builder['fields'] ?? null) ? $builder['fields'] : [];
-        if (!$fields) {
-            return $responseJson;
-        }
+        if (!$fields) return $responseJson;
 
         $normalized = [];
         $usedKeys = [];
@@ -336,9 +308,16 @@ if (!function_exists('normalize_form_response_labels')) {
     }
 }
 
+if (!function_exists('is_builder_document_type')) {
+    function is_builder_document_type(string $typeName): bool
+    {
+        $typeName = strtolower(trim($typeName));
+        return in_array($typeName, ['form', 'checklist'], true);
+    }
+}
+
 $currentUserId = (int)($_SESSION['user_id'] ?? $_SESSION['admin_id'] ?? 0);
 $currentRoleCode = (string)($_SESSION['role_code'] ?? '');
-$currentRoleName = (string)($_SESSION['role_name'] ?? 'QA Admin');
 $currentDisplayName = (string)($_SESSION['full_name'] ?? $_SESSION['admin_name'] ?? 'Profile');
 
 if ($currentUserId <= 0) {
@@ -366,9 +345,7 @@ $currentUser = fetch_one_prepared($conn, "
     LIMIT 1
 ", [$currentUserId]);
 
-if (!$currentUser) {
-    die('User not found.');
-}
+if (!$currentUser) die('User not found.');
 
 $flashSuccess = $_SESSION['flash_success'] ?? '';
 $flashError   = $_SESSION['flash_error'] ?? '';
@@ -399,16 +376,12 @@ $old = $_SESSION['create_document_old'] ?? [];
 unset($_SESSION['create_document_old']);
 
 $queryDraftId = trim((string)($_GET['draft_id'] ?? ''));
-if ($queryDraftId !== '') {
-    $old['draft_id'] = $queryDraftId;
-}
+if ($queryDraftId !== '') $old['draft_id'] = $queryDraftId;
 
 $isFreshCreatePage = ($queryDraftId === '' && empty($old));
 
 $creatorName = trim((string)($currentUser['first_name'] ?? '') . ' ' . (string)($currentUser['last_name'] ?? ''));
-if ($creatorName === '') {
-    $creatorName = (string)($currentUser['email'] ?? $currentDisplayName);
-}
+if ($creatorName === '') $creatorName = (string)($currentUser['email'] ?? $currentDisplayName);
 
 $defaultAutoTopic = build_auto_topic($defaultTypeName, (string)($old['document_number'] ?? ''));
 
@@ -434,12 +407,8 @@ $formData = [
     'existing_file_size'   => (string)($old['existing_file_size'] ?? ''),
 ];
 
-if ($formData['effective_date'] === '') {
-    $formData['effective_date'] = date('Y-m-d');
-}
-if ($formData['review_date'] === '') {
-    $formData['review_date'] = date('Y-m-d', strtotime('+' . max(1, $defaultReviewCycle) . ' days'));
-}
+if ($formData['effective_date'] === '') $formData['effective_date'] = date('Y-m-d');
+if ($formData['review_date'] === '') $formData['review_date'] = date('Y-m-d', strtotime('+' . max(1, $defaultReviewCycle) . ' days'));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string)($_POST['action'] ?? 'save_draft'));
@@ -466,16 +435,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'existing_file_size'   => trim((string)($_POST['existing_file_size'] ?? '')),
     ];
 
-    if ($formData['document_type_id'] === '' && $defaultTypeId > 0) {
-        $formData['document_type_id'] = (string)$defaultTypeId;
-    }
-
-    if ($formData['effective_date'] === '') {
-        $formData['effective_date'] = date('Y-m-d');
-    }
-    if ($formData['review_date'] === '') {
-        $formData['review_date'] = date('Y-m-d', strtotime('+' . max(1, $defaultReviewCycle) . ' days'));
-    }
+    if ($formData['document_type_id'] === '' && $defaultTypeId > 0) $formData['document_type_id'] = (string)$defaultTypeId;
+    if ($formData['effective_date'] === '') $formData['effective_date'] = date('Y-m-d');
+    if ($formData['review_date'] === '') $formData['review_date'] = date('Y-m-d', strtotime('+' . max(1, $defaultReviewCycle) . ' days'));
 
     $documentTypeId = (int)$formData['document_type_id'];
     $approverUserId = (int)$formData['approver_user_id'];
@@ -496,17 +458,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $docTypeName = (string)$docType['type_name'];
     $docPrefix   = (string)$docType['prefix'];
-    $isFormDocument = strtolower($docTypeName) === 'form';
+    $isFormDocument = is_builder_document_type($docTypeName);
 
     if ($formData['document_topic'] === '') {
         $formData['document_topic'] = build_auto_topic($docTypeName, $formData['document_number']);
     }
 
     if ($formData['form_response_json'] !== '' && $formData['form_builder_json'] !== '') {
-        $formData['form_response_json'] = normalize_form_response_labels(
-            $formData['form_builder_json'],
-            $formData['form_response_json']
-        );
+        $formData['form_response_json'] = normalize_form_response_labels($formData['form_builder_json'], $formData['form_response_json']);
     }
 
     $_SESSION['create_document_old'] = $formData;
@@ -568,9 +527,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($approvers as $approverRow) {
             if ((int)$approverRow['id'] === $approverUserId) {
                 $approverName = trim((string)($approverRow['first_name'] ?? '') . ' ' . (string)($approverRow['last_name'] ?? ''));
-                if ($approverName === '') {
-                    $approverName = (string)($approverRow['email'] ?? '');
-                }
+                if ($approverName === '') $approverName = (string)($approverRow['email'] ?? '');
                 break;
             }
         }
@@ -647,8 +604,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $formDefinitionId = null;
         if ($isFormDocument && $formData['form_builder_json'] !== '' && table_exists($conn, 'form_definitions') && $hasFormBuilderJson) {
-            $formNameToStore = $formData['form_name'] !== '' ? $formData['form_name'] : ($documentTitle . ' Form');
-            $formTypeToStore = $formData['form_type'] !== '' ? $formData['form_type'] : 'Checklist';
+            $formNameToStore = $formData['form_name'] !== '' ? $formData['form_name'] : ($documentTitle . ' Builder');
+            $formTypeToStore = $formData['form_type'] !== '' ? $formData['form_type'] : $docTypeName;
 
             $stmt = exec_prepared($conn, "
                 INSERT INTO form_definitions
@@ -757,10 +714,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $documentVersionId = (int)mysqli_insert_id($conn);
         mysqli_stmt_close($stmt);
 
-        $stmt = exec_prepared($conn, "UPDATE documents SET current_version_id = ? WHERE id = ?", [
-            $documentVersionId,
-            $documentId
-        ]);
+        $stmt = exec_prepared($conn, "UPDATE documents SET current_version_id = ? WHERE id = ?", [$documentVersionId, $documentId]);
         mysqli_stmt_close($stmt);
 
         write_audit_log(
@@ -838,67 +792,38 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0) ? round(((
     .fill-field-card{border:1px solid #dde3ec;border-radius:10px;padding:14px;background:#fff;}
     .fill-field-label{font-size:14px;font-weight:600;color:#0D2144;margin-bottom:8px;display:block;}
     .fill-field-type{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eaf2ff;color:#2563eb;margin-left:8px;}
+    .checklist-fill-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #dde3ec;border-radius:10px;background:#fff;}
+    .checklist-fill-row + .checklist-fill-row{margin-top:10px;}
 
-    .upload-box{
-      border:2px dashed #cfd8e3;
-      border-radius:12px;
-      background:#fff;
-      transition:all .2s ease;
-    }
-    .upload-box:hover{
-      border-color:#7aa7ff;
-      background:#f8fbff;
-    }
-    .upload-box.drag-over{
-      border-color:#0d6efd!important;
-      background:#eef5ff!important;
-    }
+    .upload-box{border:2px dashed #cfd8e3;border-radius:12px;background:#fff;transition:all .2s ease;}
+    .upload-box:hover{border-color:#7aa7ff;background:#f8fbff;}
+    .upload-box.drag-over{border-color:#0d6efd!important;background:#eef5ff!important;}
 
     .swal2-popup.cp-builder-popup{
-      width:920px!important;
-      max-width:calc(100vw - 24px)!important;
-      border-radius:18px!important;
-      padding:0!important;
-      overflow:hidden;
+      width:920px!important;max-width:calc(100vw - 24px)!important;border-radius:18px!important;padding:0!important;overflow:hidden;
       box-shadow:0 20px 60px rgba(13,33,68,.18)!important;
     }
     .cp-builder-modal{background:#fff;}
-    .cp-builder-header{
-      padding:20px 22px 14px;
-      border-bottom:1px solid #e8edf3;
-      background:linear-gradient(180deg,#f8fbff 0%,#ffffff 100%);
-    }
+    .cp-builder-header{padding:20px 22px 14px;border-bottom:1px solid #e8edf3;background:linear-gradient(180deg,#f8fbff 0%,#ffffff 100%);}
     .cp-builder-title{margin:0;font-size:20px;font-weight:700;color:#0D2144;}
     .cp-builder-subtitle{margin:4px 0 0;font-size:13px;color:#6b7280;}
     .cp-builder-body{padding:18px 22px 10px;}
     .cp-builder-top-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
     .cp-builder-field-group label{display:block;font-size:13px;font-weight:600;color:#1e2a3a;margin-bottom:6px;}
-    .cp-builder-input,.cp-builder-textarea{
-      width:100%;border:1px solid #d9e2ec;border-radius:10px;background:#fff;
-      padding:11px 12px;font-size:14px;color:#1e2a3a;outline:none;
-    }
+    .cp-builder-input,.cp-builder-textarea{width:100%;border:1px solid #d9e2ec;border-radius:10px;background:#fff;padding:11px 12px;font-size:14px;color:#1e2a3a;outline:none;}
     .cp-builder-textarea{min-height:96px;resize:vertical;}
     .cp-builder-grid{display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start;}
     .cp-builder-card{border:1px solid #dde3ec;border-radius:14px;background:#fff;padding:14px;}
     .cp-builder-side-title{font-size:15px;font-weight:700;color:#0D2144;margin-bottom:2px;}
     .cp-builder-side-subtitle{font-size:13px;color:#6b7280;margin-bottom:12px;}
     .cp-builder-type-list{display:grid;grid-template-columns:1fr;gap:10px;}
-    .cp-builder-type-btn{
-      display:flex;align-items:center;gap:12px;border:1px solid #d7dee8;border-radius:12px;background:#fff;
-      padding:12px 14px;font-size:14px;font-weight:600;color:#1e2a3a;cursor:pointer;text-align:left;
-    }
+    .cp-builder-type-btn{display:flex;align-items:center;gap:12px;border:1px solid #d7dee8;border-radius:12px;background:#fff;padding:12px 14px;font-size:14px;font-weight:600;color:#1e2a3a;cursor:pointer;text-align:left;}
     .cp-builder-type-btn:hover{background:#eef4ff;border-color:#9db7ea;color:#0D2144;}
-    .cp-builder-type-icon{
-      width:36px;height:36px;border-radius:10px;background:#e9eef5;display:flex;
-      align-items:center;justify-content:center;font-weight:700;color:#0D2144;flex:0 0 36px;
-    }
+    .cp-builder-type-icon{width:36px;height:36px;border-radius:10px;background:#e9eef5;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0D2144;flex:0 0 36px;}
     .cp-builder-preview-list{border:1px solid #dde3ec;border-radius:12px;background:#f8f9fb;padding:10px 12px;max-height:380px;overflow-y:auto;}
     .cp-builder-preview-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #e8edf3;font-size:13px;}
     .cp-builder-preview-item:last-child{border-bottom:none;}
-    .cp-builder-chip,.builder-chip{
-      display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;
-      background:#eaf2ff;color:#2563eb;margin-right:6px;margin-bottom:4px;
-    }
+    .cp-builder-chip,.builder-chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eaf2ff;color:#2563eb;margin-right:6px;margin-bottom:4px;}
     .cp-builder-empty{color:#6b7280;font-size:13px;padding:18px 8px;text-align:center;}
     .swal2-popup.cp-small-popup{width:520px!important;max-width:calc(100vw - 24px)!important;border-radius:16px!important;padding:20px!important;}
     .attached-fields-box{border:1px solid #dde3ec;border-radius:8px;background:#f8f9fb;padding:10px 12px;margin-top:12px;}
@@ -953,7 +878,7 @@ body.editor-open{
 
   <div class="mb-4">
     <h1 class="page-title mb-2">Create Controlled Document</h1>
-    <p class="page-subtitle mb-0">Create a new controlled document with required metadata, ownership, approval workflow and dynamic form fields.</p>
+    <p class="page-subtitle mb-0">Create a new controlled document with metadata, ownership, approval workflow, and form/checklist builder support.</p>
   </div>
 
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -1041,9 +966,7 @@ body.editor-open{
                   <?php foreach ($approvers as $approver): ?>
                     <?php
                       $approverName = trim(($approver['first_name'] ?? '') . ' ' . ($approver['last_name'] ?? ''));
-                      if ($approverName === '') {
-                          $approverName = (string)($approver['email'] ?? 'Approver');
-                      }
+                      if ($approverName === '') $approverName = (string)($approver['email'] ?? 'Approver');
                       $label = $approverName . ' — ' . ($approver['role_name'] ?? 'Approver');
                     ?>
                     <option value="<?php echo (int)$approver['id']; ?>" <?php echo (string)$formData['approver_user_id'] === (string)$approver['id'] ? 'selected' : ''; ?>>
@@ -1075,12 +998,12 @@ body.editor-open{
               </div>
 
               <div class="col-12 d-none" id="documentInfoFormTableWrapper">
-                <label class="form-label">Attached Form Builder Details</label>
+                <label class="form-label">Attached Builder Details</label>
                 <div class="info-form-summary-card">
                   <table class="info-form-summary-table">
-                    <tr><th>Form Name</th><td id="infoFormName">—</td></tr>
-                    <tr><th>Form Type</th><td id="infoFormType">—</td></tr>
-                    <tr><th>Total Fields</th><td id="infoFormFieldCount">0</td></tr>
+                    <tr><th>Name</th><td id="infoFormName">—</td></tr>
+                    <tr><th>Type</th><td id="infoFormType">—</td></tr>
+                    <tr><th>Total Items</th><td id="infoFormFieldCount">0</td></tr>
                     <tr><th>Description</th><td id="infoFormDesc">—</td></tr>
                   </table>
                 </div>
@@ -1092,8 +1015,8 @@ body.editor-open{
 
         <div class="card cp-card d-none" id="formTypePanel">
           <div class="card-body">
-            <h2 class="card-title mb-1">Form / Checklist</h2>
-            <p class="card-subtitle mb-3">Create fields, then fill the same fields before saving draft or submitting for review.</p>
+            <h2 class="card-title mb-1">Form / Checklist Builder</h2>
+            <p class="card-subtitle mb-3">For checklist, only clickable checklist items are allowed. For form, normal fields are allowed.</p>
 
             <div id="formBuildMode">
               <div id="attachedFormSummary" class="d-none mb-3">
@@ -1104,7 +1027,7 @@ body.editor-open{
                     <div id="attachedFieldsPreview" class="attached-fields-box d-none"></div>
                   </div>
                   <div class="d-flex gap-2 flex-shrink-0">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openChecklistBuilder(true)">Edit Form</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openChecklistBuilder(true)">Edit</button>
                     <button type="button" class="btn btn-sm btn-outline-danger" onclick="detachForm()">Remove</button>
                   </div>
                 </div>
@@ -1113,16 +1036,16 @@ body.editor-open{
               <div id="noFormAttached">
                 <div class="upload-box p-4 text-center mb-3" style="cursor:default;">
                   <div class="mb-2" style="font-size:2rem;">📋</div>
-                  <div class="fw-semibold mb-1">No form built yet</div>
+                  <div class="fw-semibold mb-1">No builder attached yet</div>
                   <p class="small text-secondary mb-3">
-                    Use the builder to add Text Input, Text Area, Number, Date, Dropdown, Checkbox, Yes/No and Signature fields.
+                    Create either a Form Builder or a Checklist Builder based on selected document type.
                   </p>
-                  <button type="button" class="btn btn-primary" id="openBuilderBtn">+ Create Form / Checklist</button>
+                  <button type="button" class="btn btn-primary" id="openBuilderBtn">+ Create Builder</button>
                 </div>
               </div>
 
               <div id="formFillWrapper" class="d-none mt-3">
-                <label class="form-label">Fill Created Inputs</label>
+                <label class="form-label">Fill Created Inputs / Checklist Items</label>
                 <div class="form-fill-card">
                   <div id="dynamicFormFields" class="builder-preview-grid"></div>
                 </div>
@@ -1176,9 +1099,10 @@ body.editor-open{
             <ul class="small text-secondary note-list mb-0">
               <li>Metadata completed.</li>
               <li>Unique document ID validated.</li>
-              <li>Created fields filled.</li>
+              <li>Builder created properly.</li>
+              <li>Checklist items clicked or form fields filled.</li>
               <li>Approver selected and validated.</li>
-              <li>File upload or text content added.</li>
+              <li>File upload or text content added for non-builder docs.</li>
             </ul>
           </div>
         </div>
@@ -1193,18 +1117,30 @@ body.editor-open{
 <script>
 const BUILDER_STORAGE_KEY = 'cpBuiltFormInline';
 const BUILDER_RESPONSE_KEY = 'cpBuiltFormResponses';
-
 let topicTouched = false;
 
 function getSelectedTypeOption() {
   return document.getElementById('docTypeSelect').selectedOptions[0];
 }
 
-function buildAutoTopicJs() {
+function getSelectedTypeName() {
   const opt = getSelectedTypeOption();
-  const typeName = opt ? (opt.dataset.name || 'SOP') : 'SOP';
+  return opt ? (opt.dataset.name || 'SOP') : 'SOP';
+}
+
+function buildAutoTopicJs() {
+  const typeName = getSelectedTypeName();
   const docNumber = (document.getElementById('docNumber').value || '').trim();
   return docNumber !== '' ? typeName + ' ' + docNumber : typeName + ' Draft';
+}
+
+function isBuilderDocumentTypeJs(typeName) {
+  typeName = (typeName || '').toLowerCase().trim();
+  return typeName === 'form' || typeName === 'checklist';
+}
+
+function isChecklistTypeJs(typeName) {
+  return (typeName || '').toLowerCase().trim() === 'checklist';
 }
 
 function syncTopicInput(forceAuto = false) {
@@ -1217,11 +1153,11 @@ function syncTopicInput(forceAuto = false) {
 
 function handleDocTypeChange(selectEl) {
   const opt = selectEl.selectedOptions[0];
-  const typeName = (opt.dataset.name || '').toLowerCase();
-  const isForm = typeName === 'form';
+  const typeName = (opt.dataset.name || '');
+  const isBuilderType = isBuilderDocumentTypeJs(typeName);
 
-  document.getElementById('contentCard').classList.toggle('d-none', isForm);
-  document.getElementById('formTypePanel').classList.toggle('d-none', !isForm);
+  document.getElementById('contentCard').classList.toggle('d-none', isBuilderType);
+  document.getElementById('formTypePanel').classList.toggle('d-none', !isBuilderType);
 
   const reviewDays = parseInt(opt.dataset.reviewDays || '365', 10);
   const eff = document.getElementById('effective_date').value;
@@ -1233,6 +1169,12 @@ function handleDocTypeChange(selectEl) {
 
   syncTopicInput(false);
   updateDocIdPreview();
+
+  const data = getBuilderData();
+  if (data && Array.isArray(data.fields) && data.fields.length) {
+    data.formType = typeName;
+    saveBuilderData(data);
+  }
 }
 
 function setContentMode(mode) {
@@ -1270,7 +1212,8 @@ function fieldTypeLabel(type) {
     dropdown: 'Dropdown',
     checkbox: 'Checkbox',
     yesno: 'Yes / No',
-    signature: 'Signature'
+    signature: 'Signature',
+    checklist_item: 'Checklist Item'
   };
   return map[type] || type;
 }
@@ -1284,7 +1227,8 @@ function fieldTypeIcon(type) {
     dropdown: '▼',
     checkbox: '☑',
     yesno: '?',
-    signature: '✍'
+    signature: '✍',
+    checklist_item: '✔'
   };
   return map[type] || '•';
 }
@@ -1298,7 +1242,7 @@ function getBuilderData() {
   if (raw) {
     try { return JSON.parse(raw); } catch (e) {}
   }
-  return { formName: '', formType: 'Checklist', formDesc: '', fields: [] };
+  return { formName: '', formType: getSelectedTypeName(), formDesc: '', fields: [] };
 }
 
 function getResponseData() {
@@ -1313,11 +1257,11 @@ function saveResponseData(data) {
 
 function saveBuilderData(data) {
   document.getElementById('form_name_hidden').value = data.formName || '';
-  document.getElementById('form_type_hidden').value = data.formType || 'Checklist';
+  document.getElementById('form_type_hidden').value = data.formType || getSelectedTypeName();
   document.getElementById('form_desc_hidden').value = data.formDesc || '';
   document.getElementById('form_builder_json_hidden').value = JSON.stringify(data);
   sessionStorage.setItem(BUILDER_STORAGE_KEY, JSON.stringify(data));
-  renderBuilderSummary(data, true);
+  renderBuilderSummary(data);
   renderDynamicFillForm(data);
 }
 
@@ -1346,7 +1290,7 @@ function renderAttachedFields(fields) {
 
   box.innerHTML = fields.map(function(field, index) {
     return '<div class="attached-field-row"><strong>' + (index + 1) + '.</strong> ' +
-      escapeHtml(field.label || ('Field ' + (index + 1))) +
+      escapeHtml(field.label || ('Item ' + (index + 1))) +
       '<span class="builder-chip">' + escapeHtml(fieldTypeLabel(field.type)) + '</span></div>';
   }).join('');
   box.classList.remove('d-none');
@@ -1355,8 +1299,8 @@ function renderAttachedFields(fields) {
 function renderBuilderInfoTable(data) {
   const wrapper = document.getElementById('documentInfoFormTableWrapper');
   const fields = Array.isArray(data.fields) ? data.fields : [];
-  document.getElementById('infoFormName').textContent = data.formName || 'Untitled Form';
-  document.getElementById('infoFormType').textContent = data.formType || 'Checklist';
+  document.getElementById('infoFormName').textContent = data.formName || 'Untitled';
+  document.getElementById('infoFormType').textContent = data.formType || getSelectedTypeName();
   document.getElementById('infoFormFieldCount').textContent = String(fields.length);
   document.getElementById('infoFormDesc').textContent = data.formDesc || '—';
   wrapper.classList.remove('d-none');
@@ -1364,9 +1308,9 @@ function renderBuilderInfoTable(data) {
 
 function renderBuilderSummary(data) {
   const fieldCount = Array.isArray(data.fields) ? data.fields.length : 0;
-  document.getElementById('attachedFormName').textContent = data.formName || 'Untitled Form';
+  document.getElementById('attachedFormName').textContent = data.formName || 'Untitled';
   document.getElementById('attachedFormMeta').textContent =
-    fieldCount + ' field' + (fieldCount !== 1 ? 's' : '') + (data.formDesc ? ' · ' + data.formDesc : '');
+    (data.formType || getSelectedTypeName()) + ' · ' + fieldCount + ' item' + (fieldCount !== 1 ? 's' : '') + (data.formDesc ? ' · ' + data.formDesc : '');
 
   renderAttachedFields(data.fields || []);
   renderBuilderInfoTable(data);
@@ -1377,12 +1321,12 @@ function renderBuilderSummary(data) {
 
 function buildFieldsHtml(fields) {
   if (!fields.length) {
-    return '<div class="cp-builder-empty">No fields added yet.</div>';
+    return '<div class="cp-builder-empty">No items added yet.</div>';
   }
 
   return '<div class="cp-builder-preview-list">' + fields.map(function(field, index) {
     return '<div class="cp-builder-preview-item">' +
-      '<div><strong>' + escapeHtml(field.label || ('Field ' + (index + 1))) + '</strong>' +
+      '<div><strong>' + escapeHtml(field.label || ('Item ' + (index + 1))) + '</strong>' +
       '<div><span class="cp-builder-chip">' + escapeHtml(fieldTypeLabel(field.type)) + '</span></div>' +
       '</div>' +
       '<div><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeBuilderField(' + index + ')">Remove</button></div>' +
@@ -1391,29 +1335,36 @@ function buildFieldsHtml(fields) {
 }
 
 async function addBuilderField(type) {
-  let html = '';
+  let title = 'Add ' + fieldTypeLabel(type);
+  let labelPlaceholder = 'Field label';
 
+  if (type === 'checklist_item') {
+    title = 'Add Checklist Item';
+    labelPlaceholder = 'Checklist item text';
+  }
+
+  let html = '';
   if (type === 'dropdown') {
     html = `
       <input id="swal-field-label" class="swal2-input" placeholder="Field label">
       <textarea id="swal-field-options" class="swal2-textarea" placeholder="Enter options, one per line"></textarea>
     `;
   } else {
-    html = `<input id="swal-field-label" class="swal2-input" placeholder="Field label">`;
+    html = `<input id="swal-field-label" class="swal2-input" placeholder="${labelPlaceholder}">`;
   }
 
   const result = await Swal.fire({
-    title: 'Add ' + fieldTypeLabel(type),
+    title: title,
     html: html,
     showCancelButton: true,
-    confirmButtonText: 'Add Field',
+    confirmButtonText: 'Add',
     customClass: { popup: 'cp-small-popup' },
     preConfirm: () => {
       const label = (document.getElementById('swal-field-label') || {}).value || '';
       const optionsRaw = (document.getElementById('swal-field-options') || {}).value || '';
 
       if (!label.trim()) {
-        Swal.showValidationMessage('Please enter field label');
+        Swal.showValidationMessage('Please enter label');
         return false;
       }
 
@@ -1434,10 +1385,9 @@ async function addBuilderField(type) {
 
   if (result.isConfirmed && result.value) {
     const data = getBuilderData();
-    data.formName = data.formName || (document.getElementById('document_topic_hidden').value + ' Form');
-    if (!Array.isArray(data.fields)) {
-      data.fields = [];
-    }
+    if (!Array.isArray(data.fields)) data.fields = [];
+    data.formName = data.formName || (document.getElementById('document_topic_hidden').value + ' Builder');
+    data.formType = getSelectedTypeName();
     data.fields.push(result.value);
     saveBuilderData(data);
     openChecklistBuilder(true);
@@ -1446,9 +1396,7 @@ async function addBuilderField(type) {
 
 function removeBuilderField(index) {
   const data = getBuilderData();
-  if (!Array.isArray(data.fields)) {
-    data.fields = [];
-  }
+  if (!Array.isArray(data.fields)) data.fields = [];
   data.fields.splice(index, 1);
   saveBuilderData(data);
   openChecklistBuilder(true);
@@ -1461,10 +1409,7 @@ function makeFieldKey(field, index) {
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
 
-  if (!base) {
-    base = 'field_' + (index + 1);
-  }
-
+  if (!base) base = 'field_' + (index + 1);
   return base;
 }
 
@@ -1480,6 +1425,7 @@ function renderDynamicFillForm(data) {
     return;
   }
 
+  const isChecklist = isChecklistTypeJs(data.formType || getSelectedTypeName());
   const usedKeys = {};
 
   container.innerHTML = fields.map((field, index) => {
@@ -1493,6 +1439,14 @@ function renderDynamicFillForm(data) {
     usedKeys[key] = true;
 
     const value = responses[key] ?? '';
+
+    if (isChecklist || field.type === 'checklist_item') {
+      return '<div class="checklist-fill-row">' +
+        '<input class="form-check-input dynamic-builder-input" type="checkbox" data-key="' + key + '" ' + (value ? 'checked' : '') + '>' +
+        '<label class="mb-0 fw-medium">' + escapeHtml(field.label || ('Checklist Item ' + (index + 1))) + '</label>' +
+        '</div>';
+    }
+
     let control = '';
 
     if (field.type === 'textarea') {
@@ -1545,11 +1499,8 @@ function syncFormResponses() {
 
   document.querySelectorAll('.dynamic-builder-input').forEach(el => {
     const key = el.dataset.key;
-    if (el.type === 'checkbox') {
-      data[key] = el.checked ? 1 : 0;
-    } else {
-      data[key] = el.value;
-    }
+    if (el.type === 'checkbox') data[key] = el.checked ? 1 : 0;
+    else data[key] = el.value;
   });
 
   document.querySelectorAll('.dynamic-builder-radio:checked').forEach(el => {
@@ -1560,16 +1511,17 @@ function syncFormResponses() {
   document.getElementById('document_topic_hidden').value = document.getElementById('document_topic_input').value.trim();
 }
 
-async function openChecklistBuilder(isEdit) {
-  const data = getBuilderData();
-  if (!data.formName) {
-    data.formName = document.getElementById('document_topic_hidden').value + ' Form';
-  }
-  if (!Array.isArray(data.fields)) {
-    data.fields = [];
+function getAvailableBuilderButtons() {
+  const typeName = getSelectedTypeName();
+  const isChecklist = isChecklistTypeJs(typeName);
+
+  if (isChecklist) {
+    return [
+      {type:'checklist_item', label:'Checklist Item'}
+    ];
   }
 
-  const imageStyleList = [
+  return [
     {type:'text',label:'Text Input'},
     {type:'textarea',label:'Text Area'},
     {type:'number',label:'Number'},
@@ -1579,13 +1531,25 @@ async function openChecklistBuilder(isEdit) {
     {type:'yesno',label:'Yes / No'},
     {type:'signature',label:'Signature'}
   ];
+}
 
-  const buttons = imageStyleList.map(item =>
+async function openChecklistBuilder(isEdit) {
+  const data = getBuilderData();
+  if (!data.formName) data.formName = document.getElementById('document_topic_hidden').value + ' Builder';
+  if (!Array.isArray(data.fields)) data.fields = [];
+  data.formType = getSelectedTypeName();
+
+  const buttons = getAvailableBuilderButtons().map(item =>
     '<button type="button" class="cp-builder-type-btn" onclick="addBuilderField(\'' + item.type + '\')">' +
       '<span class="cp-builder-type-icon">' + fieldTypeIcon(item.type) + '</span>' +
       '<span>' + item.label + '</span>' +
     '</button>'
   ).join('');
+
+  const selectedTypeName = getSelectedTypeName();
+  const subtitle = isChecklistTypeJs(selectedTypeName)
+    ? 'Checklist mode: only clickable checklist items are allowed.'
+    : 'Form mode: normal input fields are allowed.';
 
   const result = await Swal.fire({
     customClass: { popup: 'cp-builder-popup' },
@@ -1596,14 +1560,14 @@ async function openChecklistBuilder(isEdit) {
     html:
       '<div class="cp-builder-modal">' +
         '<div class="cp-builder-header">' +
-          '<h3 class="cp-builder-title">Form / Checklist Builder</h3>' +
-          '<p class="cp-builder-subtitle">Add fields like your design and then user can fill them before draft save or submit review.</p>' +
+          '<h3 class="cp-builder-title">' + escapeHtml(selectedTypeName) + ' Builder</h3>' +
+          '<p class="cp-builder-subtitle">' + escapeHtml(subtitle) + '</p>' +
         '</div>' +
         '<div class="cp-builder-body">' +
           '<div class="cp-builder-top-fields">' +
             '<div class="cp-builder-field-group">' +
-              '<label>Form / Checklist Name</label>' +
-              '<input id="builder-form-name" class="cp-builder-input" type="text" placeholder="Enter form name" value="' + escapeHtml(data.formName) + '">' +
+              '<label>Name</label>' +
+              '<input id="builder-form-name" class="cp-builder-input" type="text" placeholder="Enter builder name" value="' + escapeHtml(data.formName) + '">' +
             '</div>' +
             '<div class="cp-builder-field-group">' +
               '<label>Description</label>' +
@@ -1612,12 +1576,12 @@ async function openChecklistBuilder(isEdit) {
           '</div>' +
           '<div class="cp-builder-grid">' +
             '<div class="cp-builder-card">' +
-              '<div class="cp-builder-side-title">Add Field</div>' +
-              '<div class="cp-builder-side-subtitle">Click to add to your form</div>' +
+              '<div class="cp-builder-side-title">Add Item</div>' +
+              '<div class="cp-builder-side-subtitle">Based on selected document type</div>' +
               '<div class="cp-builder-type-list">' + buttons + '</div>' +
             '</div>' +
             '<div class="cp-builder-card">' +
-              '<div class="cp-builder-side-title">Added Fields</div>' +
+              '<div class="cp-builder-side-title">Added Structure</div>' +
               buildFieldsHtml(data.fields) +
             '</div>' +
           '</div>' +
@@ -1629,17 +1593,17 @@ async function openChecklistBuilder(isEdit) {
       const currentData = getBuilderData();
 
       if (!formName.trim()) {
-        Swal.showValidationMessage('Please enter form name');
+        Swal.showValidationMessage('Please enter name');
         return false;
       }
 
       if (!Array.isArray(currentData.fields) || !currentData.fields.length) {
-        Swal.showValidationMessage('Please add at least one field');
+        Swal.showValidationMessage('Please add at least one item');
         return false;
       }
 
       currentData.formName = formName.trim();
-      currentData.formType = 'Checklist';
+      currentData.formType = getSelectedTypeName();
       currentData.formDesc = formDesc.trim();
       return currentData;
     }
@@ -1703,29 +1667,18 @@ uploadBox.addEventListener('click', function(e) {
 });
 
 fileInput.addEventListener('change', function() {
-  if (this.files && this.files.length > 0) {
-    showSelectedFile(this.files[0]);
-  }
+  if (this.files && this.files.length > 0) showSelectedFile(this.files[0]);
 });
 
 uploadBox.addEventListener('dragenter', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadBox.classList.add('drag-over');
+  e.preventDefault(); e.stopPropagation(); uploadBox.classList.add('drag-over');
 });
-
 uploadBox.addEventListener('dragover', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadBox.classList.add('drag-over');
+  e.preventDefault(); e.stopPropagation(); uploadBox.classList.add('drag-over');
 });
-
 uploadBox.addEventListener('dragleave', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadBox.classList.remove('drag-over');
+  e.preventDefault(); e.stopPropagation(); uploadBox.classList.remove('drag-over');
 });
-
 uploadBox.addEventListener('drop', function(e) {
   e.preventDefault();
   e.stopPropagation();
@@ -1734,9 +1687,7 @@ uploadBox.addEventListener('drop', function(e) {
   const files = e.dataTransfer.files;
   if (files && files.length > 0) {
     const dt = new DataTransfer();
-    for (let i = 0; i < files.length; i++) {
-      dt.items.add(files[i]);
-    }
+    for (let i = 0; i < files.length; i++) dt.items.add(files[i]);
     fileInput.files = dt.files;
     showSelectedFile(files[0]);
   }
@@ -1748,9 +1699,7 @@ document.getElementById('openBuilderBtn').addEventListener('click', function(e) 
 });
 
 document.getElementById('docNumber').addEventListener('input', function() {
-  if (!topicTouched) {
-    syncTopicInput(false);
-  }
+  if (!topicTouched) syncTopicInput(false);
   updateDocIdPreview();
 });
 
@@ -1779,9 +1728,7 @@ function clearCreateDocumentState() {
   document.getElementById('existing_file_size').value = '';
 
   const selectedFileInfo = document.getElementById('selectedFileInfo');
-  if (selectedFileInfo) {
-    selectedFileInfo.classList.add('d-none');
-  }
+  if (selectedFileInfo) selectedFileInfo.classList.add('d-none');
 
   detachForm();
 }
@@ -1789,9 +1736,7 @@ function clearCreateDocumentState() {
 (function restoreBuiltForm() {
   const isFreshCreatePage = document.getElementById('is_fresh_create_page')?.value === '1';
 
-  if (isFreshCreatePage) {
-    clearCreateDocumentState();
-  }
+  if (isFreshCreatePage) clearCreateDocumentState();
 
   let data = null;
   const rawHidden = document.getElementById('form_builder_json_hidden').value || '';

@@ -189,6 +189,10 @@ if (!function_exists('statusBadgeClass')) {
     function statusBadgeClass($status) {
         $status = strtolower(trim((string)$status));
 
+        if ($status === '' || $status === null) {
+            $status = 'draft';
+        }
+
         if ($status === 'draft') return 'badge badge-soft-secondary';
         if ($status === 'pending_approval') return 'badge badge-soft-warning';
         if ($status === 'approved') return 'badge badge-soft-success';
@@ -206,6 +210,10 @@ if (!function_exists('statusBadgeClass')) {
 if (!function_exists('statusLabel')) {
     function statusLabel($status) {
         $status = strtolower(trim((string)$status));
+
+        if ($status === '' || $status === null) {
+            return 'Draft';
+        }
 
         if ($status === 'pending_approval') return 'Pending Approval';
         if ($status === 'pending_retirement') return 'Pending Retirement';
@@ -1074,7 +1082,11 @@ $baseQuery = [
               $department = trim((string)($row['department_name'] ?? '')) !== '' ? (string)$row['department_name'] : '—';
               $submittedBy = trim((string)($row['submitted_by_name'] ?? '')) !== '' ? (string)$row['submitted_by_name'] : '—';
               $approverName = trim((string)($row['approver_name'] ?? '')) !== '' ? (string)$row['approver_name'] : (string)$row['approver'];
-              $statusValue = strtolower((string)($row['current_status'] ?? ''));
+              $statusValue = trim((string)($row['current_status'] ?? ''));
+if ($statusValue === '') {
+    $statusValue = trim((string)($row['version_status'] ?? ''));
+}
+$statusValue = strtolower($statusValue);
               $viewUrl = 'assigned-documents.php?' . http_build_query(array_merge($baseQuery, ['view_id' => $docId]));
             ?>
             <tr>
@@ -1115,7 +1127,11 @@ $baseQuery = [
     $modalOwner = trim((string)($viewDocument['owner_name'] ?? '')) !== '' ? (string)$viewDocument['owner_name'] : '—';
     $modalSubmittedBy = trim((string)($viewDocument['submitted_by_name'] ?? '')) !== '' ? (string)$viewDocument['submitted_by_name'] : '—';
     $modalApprover = trim((string)($viewDocument['approver_name'] ?? '')) !== '' ? (string)$viewDocument['approver_name'] : (string)$viewDocument['approver'];
-    $modalStatusValue = strtolower((string)($viewDocument['current_status'] ?? ''));
+    $modalStatusValue = trim((string)($viewDocument['current_status'] ?? ''));
+if ($modalStatusValue === '') {
+    $modalStatusValue = trim((string)($viewDocument['version_status'] ?? ''));
+}
+$modalStatusValue = strtolower($modalStatusValue);
     $filePath = trim((string)($viewDocument['primary_file_path'] ?? ''));
     $fileName = trim((string)($viewDocument['primary_file_name'] ?? ''));
     $fileExt = getFileExtensionSafe($filePath);
