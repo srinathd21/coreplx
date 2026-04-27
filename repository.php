@@ -14,6 +14,27 @@ if (!function_exists('e')) {
     }
 }
 
+if (!function_exists('tableExists')) {
+    function tableExists(mysqli $conn, string $tableName): bool {
+        $tableName = mysqli_real_escape_string($conn, $tableName);
+        $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
+        $ok = ($res && mysqli_num_rows($res) > 0);
+        if ($res) mysqli_free_result($res);
+        return $ok;
+    }
+}
+
+if (!function_exists('columnExists')) {
+    function columnExists(mysqli $conn, string $tableName, string $columnName): bool {
+        $tableName = mysqli_real_escape_string($conn, $tableName);
+        $columnName = mysqli_real_escape_string($conn, $columnName);
+        $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$tableName}` LIKE '{$columnName}'");
+        $ok = ($res && mysqli_num_rows($res) > 0);
+        if ($res) mysqli_free_result($res);
+        return $ok;
+    }
+}
+
 if (!function_exists('formatDateDisplay')) {
     function formatDateDisplay($date) {
         if (empty($date) || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
@@ -57,6 +78,8 @@ if (!function_exists('statusBadgeClass')) {
         if ($status === 'pending_retirement') return 'badge badge-soft-warning';
         if ($status === 'pending_approval') return 'badge badge-soft-warning';
         if ($status === 'draft') return 'badge badge-soft-secondary';
+        if ($status === 'rejected') return 'badge badge-soft-danger';
+        if ($status === 'superseded') return 'badge badge-soft-secondary';
 
         if (isOverdueDate($reviewDate)) {
             return 'badge badge-soft-danger';
@@ -75,6 +98,8 @@ if (!function_exists('displayStatusLabel')) {
         if ($status === 'pending_retirement') return 'Pending Retirement';
         if ($status === 'pending_approval') return 'Pending Approval';
         if ($status === 'draft') return 'Draft';
+        if ($status === 'rejected') return 'Rejected';
+        if ($status === 'superseded') return 'Superseded';
 
         if (isOverdueDate($reviewDate)) {
             return 'Overdue Review';
@@ -181,12 +206,18 @@ if ($currentUser) {
     $roleName = trim((string)($currentUser['role_name'] ?? 'Profile'));
 }
 
-$search = trim((string)($_GET['search'] ?? ''));
-$typeFilter = trim((string)($_GET['type'] ?? ''));
-$deptFilter = trim((string)($_GET['department'] ?? ''));
-$reviewFilter = trim((string)($_GET['review'] ?? ''));
-$viewId = (int)($_GET['view_id'] ?? 0);
-$export = trim((string)($_GET['export'] ?? ''));
+$search         = trim((string)($_GET['search'] ?? ''));
+$typeFilter     = trim((string)($_GET['type'] ?? ''));
+$deptFilter     = trim((string)($_GET['department'] ?? ''));
+$reviewFilter   = trim((string)($_GET['review'] ?? ''));
+$statusFilter   = trim((string)($_GET['status'] ?? ''));
+$ownerIdFilter  = (int)($_GET['owner_id'] ?? 0);
+$approverFilter = (int)($_GET['approver_id'] ?? 0);
+$viewId         = (int)($_GET['view_id'] ?? 0);
+$export         = trim((string)($_GET['export'] ?? ''));
+
+$hasDocumentCreatedBy = columnExists($conn, 'documents', 'created_by');
+$hasWorkflowSteps = tableExists($conn, 'workflow_steps');
 
 $types = [];
 $typeRes = mysqli_query($conn, "SELECT DISTINCT type_name FROM document_types WHERE status='active' ORDER BY type_name ASC");
@@ -219,6 +250,7 @@ if ($viewId > 0 && $export === '') {
             d.current_status,
             dt.type_name,
             dept.department_name,
+            dv.id AS version_id,
             dv.version_label,
             dv.effective_date,
             dv.review_date,
@@ -257,6 +289,7 @@ $sql = "
         d.current_status,
         dt.type_name,
         dept.department_name,
+        dv.id AS version_id,
         dv.version_label,
         dv.effective_date,
         dv.review_date,
@@ -308,6 +341,37 @@ if ($reviewFilter === 'overdue') {
         OR dv.review_date = '0000-00-00'
         OR dv.review_date >= CURDATE()
     )";
+}
+
+if ($statusFilter !== '') {
+    $sql .= " AND LOWER(COALESCE(d.current_status, '')) = LOWER(?)";
+    $params[] = $statusFilter;
+    $bindTypes .= 's';
+}
+
+if ($ownerIdFilter > 0) {
+    if ($hasDocumentCreatedBy) {
+        $sql .= " AND (d.owner_user_id = ? OR d.created_by = ?)";
+        $params[] = $ownerIdFilter;
+        $params[] = $ownerIdFilter;
+        $bindTypes .= 'ii';
+    } else {
+        $sql .= " AND d.owner_user_id = ?";
+        $params[] = $ownerIdFilter;
+        $bindTypes .= 'i';
+    }
+}
+
+if ($approverFilter > 0 && $hasWorkflowSteps) {
+    $sql .= " AND EXISTS (
+        SELECT 1
+        FROM workflow_steps ws2
+        WHERE ws2.document_version_id = d.current_version_id
+          AND ws2.approver_user_id = ?
+          AND ws2.status = 'pending'
+    )";
+    $params[] = $approverFilter;
+    $bindTypes .= 'i';
 }
 
 $sql .= " ORDER BY d.id DESC LIMIT 500";
@@ -540,7 +604,10 @@ $baseQuery = [
     'search' => $search,
     'type' => $typeFilter,
     'department' => $deptFilter,
-    'review' => $reviewFilter
+    'review' => $reviewFilter,
+    'status' => $statusFilter,
+    'owner_id' => $ownerIdFilter > 0 ? $ownerIdFilter : '',
+    'approver_id' => $approverFilter > 0 ? $approverFilter : ''
 ];
 
 $pdfUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['export' => 'pdf']));
@@ -1024,6 +1091,10 @@ if ($viewDocument && $export === '') {
   <div class="card cp-card mb-3">
     <div class="card-body">
       <form method="get" id="repoFilterForm">
+        <input type="hidden" name="status" value="<?php echo e($statusFilter); ?>">
+        <input type="hidden" name="owner_id" value="<?php echo $ownerIdFilter > 0 ? (int)$ownerIdFilter : ''; ?>">
+        <input type="hidden" name="approver_id" value="<?php echo $approverFilter > 0 ? (int)$approverFilter : ''; ?>">
+
         <div class="repo-filter-grid">
           <div class="repo-filter-group">
             <label class="form-label mb-1">Search</label>
@@ -1098,6 +1169,7 @@ if ($viewDocument && $export === '') {
           <?php foreach ($rows as $row): ?>
             <?php
               $docId = (int)$row['id'];
+              $versionId = (int)($row['version_id'] ?? 0);
               $docNumber = $row['document_number'] ?: ('DOC-' . $docId);
               $title = $row['title'] ?: ($row['topic'] ?: 'Untitled');
               $type = $row['type_name'] ?: '—';
@@ -1110,8 +1182,13 @@ if ($viewDocument && $export === '') {
               $reviewStyle = $isOverdue ? 'color:#dc2626;font-weight:600;' : 'color:#6b7280;';
               $statusLabel = displayStatusLabel($row['current_status'] ?? '', $row['review_date'] ?? '');
               $statusClass = statusBadgeClass($row['current_status'] ?? '', $row['review_date'] ?? '');
+
               $pdfLink = !empty($row['primary_file_path']) ? $row['primary_file_path'] : ('repository.php?view_id=' . $docId);
-              $viewUrl = 'repository.php?' . http_build_query(array_merge($baseQuery, ['view_id' => $docId]));
+
+              $viewUrl = 'view-document.php?id=' . $docId;
+              if ($versionId > 0) {
+                  $viewUrl .= '&version_id=' . $versionId;
+              }
             ?>
             <tr>
               <td class="fw-semibold" style="color:#2563eb;font-size:13px;"><?php echo e($docNumber); ?></td>

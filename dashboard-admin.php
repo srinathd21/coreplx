@@ -21,9 +21,7 @@ if (!function_exists('tableExists')) {
         $tableName = mysqli_real_escape_string($conn, $tableName);
         $res = mysqli_query($conn, "SHOW TABLES LIKE '{$tableName}'");
         $ok = ($res && mysqli_num_rows($res) > 0);
-        if ($res) {
-            mysqli_free_result($res);
-        }
+        if ($res) mysqli_free_result($res);
         return $ok;
     }
 }
@@ -35,9 +33,7 @@ if (!function_exists('columnExists')) {
         $columnName = mysqli_real_escape_string($conn, $columnName);
         $res = mysqli_query($conn, "SHOW COLUMNS FROM `{$tableName}` LIKE '{$columnName}'");
         $ok = ($res && mysqli_num_rows($res) > 0);
-        if ($res) {
-            mysqli_free_result($res);
-        }
+        if ($res) mysqli_free_result($res);
         return $ok;
     }
 }
@@ -59,9 +55,7 @@ if (!in_array($currentRoleCode, ['qa_admin', 'super_admin'], true)) {
 function fetch_one(mysqli $conn, string $sql, string $types = '', array $params = [])
 {
     $stmt = mysqli_prepare($conn, $sql);
-    if (!$stmt) {
-        return null;
-    }
+    if (!$stmt) return null;
 
     if ($types !== '' && !empty($params)) {
         mysqli_stmt_bind_param($stmt, $types, ...$params);
@@ -78,9 +72,7 @@ function fetch_all(mysqli $conn, string $sql, string $types = '', array $params 
 {
     $rows = [];
     $stmt = mysqli_prepare($conn, $sql);
-    if (!$stmt) {
-        return $rows;
-    }
+    if (!$stmt) return $rows;
 
     if ($types !== '' && !empty($params)) {
         mysqli_stmt_bind_param($stmt, $types, ...$params);
@@ -129,9 +121,7 @@ function status_badge(string $status): string
 function short_name(array $row): string
 {
     $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
-    if ($name !== '') {
-        return $name;
-    }
+    if ($name !== '') return $name;
 
     if (!empty($row['full_name']) && trim((string)$row['full_name']) !== '' && (string)$row['full_name'] !== '0') {
         return trim((string)$row['full_name']);
@@ -149,7 +139,6 @@ $hasNotifications = tableExists($conn, 'notifications');
 $hasAuditLogs = tableExists($conn, 'audit_logs');
 $hasAckAssignments = tableExists($conn, 'acknowledgement_assignments');
 $hasDocVersions = tableExists($conn, 'document_versions');
-$hasDocTypes = tableExists($conn, 'document_types');
 
 $userRow = fetch_one($conn, "
     SELECT u.id, u.first_name, u.last_name, u.full_name, u.email, r.role_name
@@ -165,7 +154,8 @@ $avatarLetter = strtoupper(substr($welcomeName, 0, 1));
 $documentsOwnedSql = "
     SELECT COUNT(*) AS cnt
     FROM documents
-    WHERE owner_user_id = ?
+    WHERE LOWER(COALESCE(current_status, '')) <> 'deleted'
+      AND owner_user_id = ?
 ";
 $documentsOwnedTypes = 'i';
 $documentsOwnedParams = [$currentUserId];
@@ -174,8 +164,11 @@ if ($hasDocumentsCreatedBy) {
     $documentsOwnedSql = "
         SELECT COUNT(*) AS cnt
         FROM documents
-        WHERE owner_user_id = ?
-           OR created_by = ?
+        WHERE LOWER(COALESCE(current_status, '')) <> 'deleted'
+          AND (
+                owner_user_id = ?
+             OR created_by = ?
+          )
     ";
     $documentsOwnedTypes = 'ii';
     $documentsOwnedParams = [$currentUserId, $currentUserId];
@@ -184,25 +177,28 @@ if ($hasDocumentsCreatedBy) {
 $documentsOwned = count_query($conn, $documentsOwnedSql, $documentsOwnedTypes, $documentsOwnedParams);
 
 $pendingApprovals = 0;
-if ($hasWorkflowSteps) {
+if ($hasWorkflowSteps && $hasDocVersions) {
     $pendingApprovals = count_query($conn, "
-        SELECT COUNT(*) AS cnt
-        FROM workflow_steps
-        WHERE approver_user_id = ?
-          AND status = 'pending'
+        SELECT COUNT(DISTINCT d.id) AS cnt
+        FROM workflow_steps ws
+        INNER JOIN document_versions dv ON dv.id = ws.document_version_id
+        INNER JOIN documents d ON d.id = dv.document_id
+        WHERE ws.approver_user_id = ?
+          AND ws.status = 'pending'
+          AND LOWER(COALESCE(d.current_status, '')) = 'pending_approval'
     ", 'i', [$currentUserId]);
 }
 
 $overdueReviews = 0;
 if ($hasDocVersions) {
     $overdueReviews = count_query($conn, "
-        SELECT COUNT(*) AS cnt
+        SELECT COUNT(DISTINCT d.id) AS cnt
         FROM documents d
         LEFT JOIN document_versions dv ON dv.id = d.current_version_id
         WHERE dv.review_date IS NOT NULL
           AND dv.review_date <> '0000-00-00'
           AND dv.review_date < CURDATE()
-          AND d.current_status IN ('effective', 'approved', 'published')
+          AND LOWER(COALESCE(d.current_status, '')) IN ('effective', 'approved', 'published')
     ");
 }
 
@@ -220,6 +216,7 @@ $pendingApprovalRows = [];
 if ($hasWorkflowSteps && $hasDocVersions) {
     $pendingApprovalRows = fetch_all($conn, "
         SELECT
+            d.id AS document_id,
             d.document_number,
             d.title,
             dt.type_name,
@@ -235,6 +232,7 @@ if ($hasWorkflowSteps && $hasDocVersions) {
         LEFT JOIN users submitter ON submitter.id = dv.submitted_by
         WHERE ws.approver_user_id = ?
           AND ws.status = 'pending'
+          AND LOWER(COALESCE(d.current_status, '')) = 'pending_approval'
         ORDER BY dv.submitted_at ASC, ws.id ASC
         LIMIT 5
     ", 'i', [$currentUserId]);
@@ -270,6 +268,8 @@ $updatedAtOrderCol = $hasDocumentsUpdatedAt ? "d.updated_at" : ($hasDocumentsCre
 
 $workQueueSql = "
     SELECT
+        d.id AS document_id,
+        d.current_version_id,
         d.document_number,
         d.title,
         d.current_status,
@@ -294,7 +294,8 @@ if ($hasWorkflowSteps) {
 }
 
 $workQueueSql .= "
-    WHERE " . implode(' OR ', $workQueueWhere) . "
+    WHERE LOWER(COALESCE(d.current_status, '')) <> 'deleted'
+      AND (" . implode(' OR ', $workQueueWhere) . ")
     ORDER BY {$updatedAtOrderCol} DESC, d.id DESC
     LIMIT 6
 ";
@@ -322,32 +323,33 @@ if ($hasAuditLogs) {
         WHERE al.performed_by = ?
            OR al.entity_type IN ('document', 'user')
         ORDER BY al.performed_at DESC, al.id DESC
+        LIMIT 20
     ", 'i', [$currentUserId]);
 }
 
 $recentDocumentsSql = "
     SELECT
+        d.id AS document_id,
         d.document_number,
         d.title,
         d.current_status,
         dt.type_name
     FROM documents d
     LEFT JOIN document_types dt ON dt.id = d.document_type_id
+    WHERE LOWER(COALESCE(d.current_status, '')) <> 'deleted'
     ORDER BY
 ";
 
 if ($hasDocumentsCreatedBy || $hasDocumentsUpdatedBy) {
     $priorityParts = [];
-    if ($hasDocumentsCreatedBy) {
-        $priorityParts[] = "CASE WHEN d.created_by = ? THEN 1 ELSE 0 END";
-    }
-    if ($hasDocumentsUpdatedBy) {
-        $priorityParts[] = "CASE WHEN d.updated_by = ? THEN 1 ELSE 0 END";
-    }
+    if ($hasDocumentsCreatedBy) $priorityParts[] = "CASE WHEN d.created_by = ? THEN 1 ELSE 0 END";
+    if ($hasDocumentsUpdatedBy) $priorityParts[] = "CASE WHEN d.updated_by = ? THEN 1 ELSE 0 END";
     $priorityParts[] = "CASE WHEN d.owner_user_id = ? THEN 1 ELSE 0 END";
     $recentDocumentsSql .= " (" . implode(' + ', $priorityParts) . ") DESC, ";
+
     $recentDocumentsParams = [];
     $recentDocumentsTypes = '';
+
     if ($hasDocumentsCreatedBy) {
         $recentDocumentsParams[] = $currentUserId;
         $recentDocumentsTypes .= 'i';
@@ -356,6 +358,7 @@ if ($hasDocumentsCreatedBy || $hasDocumentsUpdatedBy) {
         $recentDocumentsParams[] = $currentUserId;
         $recentDocumentsTypes .= 'i';
     }
+
     $recentDocumentsParams[] = $currentUserId;
     $recentDocumentsTypes .= 'i';
 } else {
@@ -381,18 +384,20 @@ $searchDocuments = fetch_all($conn, "
     FROM documents d
     LEFT JOIN document_types dt ON dt.id = d.document_type_id
     LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+    WHERE LOWER(COALESCE(d.current_status, '')) <> 'deleted'
     ORDER BY d.document_number ASC, d.id DESC
 ");
 
 $reviewQueueCount = 0;
 if ($hasDocVersions) {
     $reviewQueueCount = count_query($conn, "
-        SELECT COUNT(*) AS cnt
+        SELECT COUNT(DISTINCT d.id) AS cnt
         FROM documents d
         LEFT JOIN document_versions dv ON dv.id = d.current_version_id
         WHERE dv.review_date IS NOT NULL
           AND dv.review_date <> '0000-00-00'
           AND dv.review_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+          AND LOWER(COALESCE(d.current_status, '')) IN ('effective','approved','published')
     ");
 }
 
@@ -414,6 +419,11 @@ if ($hasAckAssignments) {
 }
 
 $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+$ownedUrl = 'repository.php?owner_id=' . (int)$currentUserId;
+$pendingUrl = 'repository.php?status=pending_approval&approver_id=' . (int)$currentUserId;
+$overdueUrl = 'repository.php?review=overdue';
+$unreadUrl = 'notifications.php?filter=unread';
 ?>
 <!doctype html>
 <html lang="en">
@@ -424,45 +434,23 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/styles.css" rel="stylesheet">
   <style>
-    .dashboard-top-row {
-      align-items: flex-start !important;
-    }
-    .dashboard-user-card {
-      height: auto !important;
-    }
+    .dashboard-top-row { align-items: flex-start !important; }
+    .dashboard-user-card { height: auto !important; }
     .dashboard-user-card .card-body {
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
       padding-bottom: 1.25rem !important;
     }
-    .user-meta-grid {
-      margin-bottom: 0 !important;
-    }
-    .dashboard-hero-stack {
-      height: auto !important;
-      gap: 1rem !important;
-    }
-    .search-card .card-body {
-      padding-bottom: 1rem !important;
-    }
-    .hero-carousel {
-      min-height: 265px;
-      height: 265px !important;
-      overflow: hidden;
-    }
+    .user-meta-grid { margin-bottom: 0 !important; }
+    .dashboard-hero-stack { height: auto !important; gap: 1rem !important; }
+    .search-card .card-body { padding-bottom: 1rem !important; }
+    .hero-carousel { min-height: 265px; height: 265px !important; overflow: hidden; }
     .hero-carousel .carousel-item,
-    .hero-carousel .hero-banner {
-      min-height: 265px;
-      height: 265px !important;
-    }
-    .hero-banner {
-      padding: 1.5rem !important;
-    }
+    .hero-carousel .hero-banner { min-height: 265px; height: 265px !important; }
+    .hero-banner { padding: 1.5rem !important; }
 
-    .dashboard-search-wrap {
-      position: relative;
-    }
+    .dashboard-search-wrap { position: relative; }
     .dashboard-search-results {
       position: absolute;
       top: calc(100% + 8px);
@@ -477,19 +465,13 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
       overflow-y: auto;
       display: none;
     }
-    .dashboard-search-results.show {
-      display: block;
-    }
+    .dashboard-search-results.show { display: block; }
     .dashboard-search-item {
       padding: 14px 16px;
       border-bottom: 1px solid #eef2f7;
     }
-    .dashboard-search-item:last-child {
-      border-bottom: none;
-    }
-    .dashboard-search-item:hover {
-      background: #f8fbff;
-    }
+    .dashboard-search-item:last-child { border-bottom: none; }
+    .dashboard-search-item:hover { background: #f8fbff; }
     .dashboard-search-docid {
       font-size: 13px;
       font-weight: 700;
@@ -507,9 +489,7 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
       color: #6b7280;
       line-height: 1.5;
     }
-    .dashboard-search-actions {
-      margin-top: 8px;
-    }
+    .dashboard-search-actions { margin-top: 8px; }
     .dashboard-search-empty {
       padding: 14px 16px;
       font-size: 13px;
@@ -539,9 +519,7 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
       min-height: 132px;
       padding: 12px !important;
     }
-    .recent-doc-box .small {
-      font-size: 11px;
-    }
+    .recent-doc-box .small { font-size: 11px; }
     .recent-doc-box .fw-semibold {
       font-size: 13px;
       line-height: 1.35;
@@ -550,6 +528,15 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
+    }
+
+    .doc-id-link {
+      color:#2563eb;
+      font-weight:700;
+      text-decoration:none;
+    }
+    .doc-id-link:hover {
+      text-decoration:underline;
     }
   </style>
 </head>
@@ -577,19 +564,22 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
             </div>
 
             <div class="user-meta-grid">
-              <a href="repository.php?filter=owned" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View all your documents">
+              <a href="<?php echo e($ownedUrl); ?>" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View your owned documents only">
                 <div class="user-meta-value"><?php echo (int)$documentsOwned; ?></div>
                 <div class="user-meta-label">Documents Owned</div>
               </a>
-              <a href="audit-trail.php?tab=approval" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View documents pending approval">
+
+              <a href="<?php echo e($pendingUrl); ?>" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View pending approval documents only">
                 <div class="user-meta-value"><?php echo (int)$pendingApprovals; ?></div>
                 <div class="user-meta-label">Pending Approvals</div>
               </a>
-              <a href="repository.php?filter=overdue" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View overdue documents">
+
+              <a href="<?php echo e($overdueUrl); ?>" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View overdue review documents only">
                 <div class="user-meta-value"><?php echo (int)$overdueReviews; ?></div>
                 <div class="user-meta-label">Overdue Reviews</div>
               </a>
-              <a href="notifications.php?filter=unread" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View unread alerts">
+
+              <a href="<?php echo e($unreadUrl); ?>" class="user-meta-box text-decoration-none" style="cursor:pointer;" title="View unread notifications only">
                 <div class="user-meta-value"><?php echo (int)$unreadAlerts; ?></div>
                 <div class="user-meta-label">Unread Alerts</div>
               </a>
@@ -609,11 +599,7 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
                     <span class="input-group-text bg-white border-end-0">
                       <svg xmlns="https://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
                     </span>
-                    <input
-                      type="text"
-                      id="dashboardSearchInput"
-                      class="form-control border-start-0 ps-0"
-                      placeholder="Search documents, IDs, owners, or keywords">
+                    <input type="text" id="dashboardSearchInput" class="form-control border-start-0 ps-0" placeholder="Search documents, IDs, owners, or keywords">
                   </div>
                 </form>
                 <div class="dashboard-search-results" id="dashboardSearchResults"></div>
@@ -627,6 +613,7 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
               <button type="button" data-bs-target="#dashboardCarousel" data-bs-slide-to="1" aria-label="Slide 2"></button>
               <button type="button" data-bs-target="#dashboardCarousel" data-bs-slide-to="2" aria-label="Slide 3"></button>
             </div>
+
             <div class="carousel-inner hero-carousel cp-card">
               <div class="carousel-item active">
                 <div class="hero-banner hero-banner-review">
@@ -635,9 +622,10 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
                     <h2 class="hero-title"><?php echo (int)$reviewQueueCount; ?> documents are due for periodic review</h2>
                     <p class="hero-copy mb-0">Open the review queue and assign owners before compliance due dates are missed.</p>
                   </div>
-                  <a href="repository.php?filter=review_due" class="btn btn-light hero-btn">Open Review Queue</a>
+                  <a href="repository.php?review=current" class="btn btn-light hero-btn">Open Review Queue</a>
                 </div>
               </div>
+
               <div class="carousel-item">
                 <div class="hero-banner hero-banner-policy">
                   <div>
@@ -648,6 +636,7 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
                   <a href="notifications.php" class="btn btn-light hero-btn">View Notifications</a>
                 </div>
               </div>
+
               <div class="carousel-item">
                 <div class="hero-banner hero-banner-search">
                   <div>
@@ -660,6 +649,7 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>
@@ -675,10 +665,11 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
             </div>
           </div>
           <div class="d-flex gap-2 align-items-center">
-            <a href="audit-trail.php?tab=approval" class="btn btn-sm btn-warning" style="font-weight:600;">View All Pending</a>
+            <a href="<?php echo e($pendingUrl); ?>" class="btn btn-sm btn-warning" style="font-weight:600;">View All Pending</a>
             <button class="btn btn-sm btn-outline-secondary" onclick="dismissActionPanel()" title="Dismiss for this session">✕</button>
           </div>
         </div>
+
         <div class="table-responsive">
           <table class="table align-middle mb-0" style="font-size:13px;">
             <thead>
@@ -697,21 +688,26 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
                 <?php foreach ($pendingApprovalRows as $row): ?>
                   <?php
                     $submittedByName = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
-                    if ($submittedByName === '') {
-                        $submittedByName = $row['email'] ?? '—';
-                    }
+                    if ($submittedByName === '') $submittedByName = $row['email'] ?? '—';
+
                     $submittedOn = !empty($row['submitted_at']) ? strtotime($row['submitted_at']) : null;
                     $daysWaiting = $submittedOn ? max(0, floor((time() - $submittedOn) / 86400)) : 0;
                     $daysBadge = $daysWaiting >= 4 ? 'badge-soft-danger' : 'badge-soft-warning';
                   ?>
                   <tr>
-                    <td class="fw-semibold" style="color:#2563eb;"><?php echo e($row['document_number']); ?></td>
+                    <td>
+                      <a class="doc-id-link" href="view-document.php?id=<?php echo (int)$row['document_id']; ?>&version_id=<?php echo (int)$row['document_version_id']; ?>">
+                        <?php echo e($row['document_number']); ?>
+                      </a>
+                    </td>
                     <td><?php echo e($row['title']); ?></td>
                     <td><span class="badge badge-soft-info"><?php echo e($row['type_name'] ?: 'Document'); ?></span></td>
                     <td><?php echo e($submittedByName); ?></td>
                     <td style="color:#6b7280;"><?php echo e($submittedOn ? date('d M Y', $submittedOn) : '—'); ?></td>
                     <td><span class="badge <?php echo e($daysBadge); ?>"><?php echo (int)$daysWaiting; ?> day<?php echo $daysWaiting !== 1 ? 's' : ''; ?></span></td>
-                    <td><a href="audit-trail.php?tab=approval&doc_id=<?php echo urlencode((string)$row['document_number']); ?>" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a></td>
+                    <td>
+                      <a href="review-document.php?id=<?php echo (int)$row['document_id']; ?>&version_id=<?php echo (int)$row['document_version_id']; ?>" class="btn btn-sm btn-success" style="height:28px;padding:0 12px;font-size:12px;font-weight:600;">Review &amp; Sign</a>
+                    </td>
                   </tr>
                 <?php endforeach; ?>
               <?php else: ?>
@@ -722,135 +718,167 @@ $searchDocumentsJson = json_encode($searchDocuments, JSON_UNESCAPED_UNICODE | JS
             </tbody>
           </table>
         </div>
+
       </div>
     </div>
 
     <div class="row g-3 g-xxl-4 mb-4">
       <div class="col-xl-8">
-        <div class="card cp-card h-100"><div class="card-body p-4">
-          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-            <div>
-              <h2 class="card-title mb-1">My Work Queue</h2>
-              <p class="card-subtitle mb-0">Items that require your action today.</p>
+        <div class="card cp-card h-100">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+              <div>
+                <h2 class="card-title mb-1">My Work Queue</h2>
+                <p class="card-subtitle mb-0">Items that require your action today.</p>
+              </div>
+              <a href="repository.php" class="btn btn-sm btn-outline-primary">Open Queue</a>
             </div>
-            <a href="repository.php" class="btn btn-sm btn-outline-primary">Open Queue</a>
-          </div>
-          <div class="table-responsive">
-            <table class="table align-middle mb-0">
-              <thead>
-                <tr><th>Document ID</th><th>Title</th><th>Task</th><th>Status</th><th>Due</th></tr>
-              </thead>
-              <tbody>
-                <?php if (!empty($workQueue)): ?>
-                  <?php foreach ($workQueue as $row): ?>
-                    <?php
-                      $task = 'Owner Task';
-                      if (($row['workflow_status'] ?? '') === 'pending') {
-                          $task = 'Approval Required';
-                      } elseif (($row['current_status'] ?? '') === 'draft') {
-                          $task = 'Draft Update';
-                      } elseif (($row['current_status'] ?? '') === 'pending_approval') {
-                          $task = 'Pending Workflow';
-                      } else {
-                          $task = 'Periodic Review';
-                      }
-                    ?>
-                    <tr>
-                      <td class="fw-semibold"><?php echo e($row['document_number']); ?></td>
-                      <td><?php echo e($row['title']); ?></td>
-                      <td><?php echo e($task); ?></td>
-                      <td><?php echo status_badge((string)($row['current_status'] ?? 'draft')); ?></td>
-                      <td><?php echo e(!empty($row['review_date']) ? date('d-M-Y', strtotime($row['review_date'])) : '—'); ?></td>
-                    </tr>
-                  <?php endforeach; ?>
-                <?php else: ?>
+
+            <div class="table-responsive">
+              <table class="table align-middle mb-0">
+                <thead>
                   <tr>
-                    <td colspan="5" class="text-center text-secondary py-4">No work queue items found.</td>
+                    <th>Document ID</th>
+                    <th>Title</th>
+                    <th>Task</th>
+                    <th>Status</th>
+                    <th>Due</th>
                   </tr>
-                <?php endif; ?>
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  <?php if (!empty($workQueue)): ?>
+                    <?php foreach ($workQueue as $row): ?>
+                      <?php
+                        $task = 'Owner Task';
+
+                        if (($row['workflow_status'] ?? '') === 'pending') {
+                            $task = 'Approval Required';
+                        } elseif (($row['current_status'] ?? '') === 'draft') {
+                            $task = 'Draft Update';
+                        } elseif (($row['current_status'] ?? '') === 'pending_approval') {
+                            $task = 'Pending Workflow';
+                        } else {
+                            $task = 'Periodic Review';
+                        }
+
+                        $viewUrl = 'view-document.php?id=' . (int)($row['document_id'] ?? 0);
+                        if (!empty($row['current_version_id'])) {
+                            $viewUrl .= '&version_id=' . (int)$row['current_version_id'];
+                        }
+                      ?>
+                      <tr>
+                        <td>
+                          <a href="<?php echo e($viewUrl); ?>" class="doc-id-link" title="Open document">
+                            <?php echo e($row['document_number']); ?>
+                          </a>
+                        </td>
+                        <td><?php echo e($row['title']); ?></td>
+                        <td><?php echo e($task); ?></td>
+                        <td><?php echo status_badge((string)($row['current_status'] ?? 'draft')); ?></td>
+                        <td><?php echo e(!empty($row['review_date']) ? date('d-M-Y', strtotime($row['review_date'])) : '—'); ?></td>
+                      </tr>
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <tr>
+                      <td colspan="5" class="text-center text-secondary py-4">No work queue items found.</td>
+                    </tr>
+                  <?php endif; ?>
+                </tbody>
+              </table>
+            </div>
+
           </div>
-        </div></div>
+        </div>
       </div>
 
       <div class="col-xl-4">
-        <div class="card cp-card h-100"><div class="card-body p-4">
-          <h2 class="card-title mb-1">Recent Activity</h2>
-          <p class="card-subtitle mb-3">Latest recorded actions in your workspace.</p>
-          <div class="activity-list small activity-scroll">
-            <?php if (!empty($recentActivity)): ?>
-              <?php foreach ($recentActivity as $row): ?>
-                <?php
-                  $actor = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
-                  if ($actor === '') {
-                      $actor = $row['email'] ?? 'System';
-                  }
-                  $timeLabel = !empty($row['performed_at']) ? date('H:i', strtotime($row['performed_at'])) : '--:--';
-                  $actionLabel = ucwords(str_replace('_', ' ', (string)($row['action'] ?? 'Activity')));
-                  $remark = $row['remarks'] ?: (($row['entity_type'] ?? 'item') . ' activity recorded.');
-                ?>
-                <div class="activity-item">
-                  <span class="activity-time"><?php echo e($timeLabel); ?></span>
-                  <div>
-                    <div class="fw-semibold"><?php echo e($actionLabel); ?></div>
-                    <div class="text-secondary"><?php echo e($remark . ' By ' . $actor . '.'); ?></div>
+        <div class="card cp-card h-100">
+          <div class="card-body p-4">
+            <h2 class="card-title mb-1">Recent Activity</h2>
+            <p class="card-subtitle mb-3">Latest recorded actions in your workspace.</p>
+
+            <div class="activity-list small activity-scroll">
+              <?php if (!empty($recentActivity)): ?>
+                <?php foreach ($recentActivity as $row): ?>
+                  <?php
+                    $actor = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+                    if ($actor === '') $actor = $row['email'] ?? 'System';
+
+                    $timeLabel = !empty($row['performed_at']) ? date('H:i', strtotime($row['performed_at'])) : '--:--';
+                    $actionLabel = ucwords(str_replace('_', ' ', (string)($row['action'] ?? 'Activity')));
+                    $remark = $row['remarks'] ?: (($row['entity_type'] ?? 'item') . ' activity recorded.');
+                  ?>
+                  <div class="activity-item">
+                    <span class="activity-time"><?php echo e($timeLabel); ?></span>
+                    <div>
+                      <div class="fw-semibold"><?php echo e($actionLabel); ?></div>
+                      <div class="text-secondary"><?php echo e($remark . ' By ' . $actor . '.'); ?></div>
+                    </div>
                   </div>
-                </div>
-              <?php endforeach; ?>
-            <?php else: ?>
-              <div class="text-secondary">No recent activity found.</div>
-            <?php endif; ?>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <div class="text-secondary">No recent activity found.</div>
+              <?php endif; ?>
+            </div>
+
           </div>
-        </div></div>
+        </div>
       </div>
     </div>
 
     <div class="row g-3 g-xxl-4">
       <div class="col-xl-8">
-        <div class="card cp-card"><div class="card-body p-4">
-          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-            <div>
-              <h2 class="card-title mb-1">Recent Documents</h2>
-              <p class="card-subtitle mb-0">Recently updated and published records.</p>
-            </div>
-            <a href="repository.php" class="btn btn-sm btn-outline-primary">Open Repository</a>
-          </div>
-
-          <div class="row g-2 recent-docs-row">
-            <?php if (!empty($recentDocuments)): ?>
-              <?php foreach (array_slice($recentDocuments, 0, 6) as $row): ?>
-                <div class="col-auto">
-                  <div class="repo-box recent-doc-box h-100">
-                    <div class="small text-secondary mb-2"><?php echo e($row['type_name'] ?: 'Document'); ?></div>
-                    <div class="fw-semibold mb-2"><?php echo e($row['title']); ?></div>
-                    <div class="small text-secondary mb-2"><?php echo e($row['document_number']); ?></div>
-                    <?php echo status_badge((string)($row['current_status'] ?? 'draft')); ?>
-                  </div>
-                </div>
-              <?php endforeach; ?>
-            <?php else: ?>
-              <div class="col-12">
-                <div class="text-center text-secondary py-4">No recent documents found.</div>
+        <div class="card cp-card">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+              <div>
+                <h2 class="card-title mb-1">Recent Documents</h2>
+                <p class="card-subtitle mb-0">Recently updated and published records.</p>
               </div>
-            <?php endif; ?>
+              <a href="repository.php" class="btn btn-sm btn-outline-primary">Open Repository</a>
+            </div>
+
+            <div class="row g-2 recent-docs-row">
+              <?php if (!empty($recentDocuments)): ?>
+                <?php foreach (array_slice($recentDocuments, 0, 6) as $row): ?>
+                  <div class="col-auto">
+                    <a href="view-document.php?id=<?php echo (int)$row['document_id']; ?>" class="text-decoration-none text-reset">
+                      <div class="repo-box recent-doc-box h-100">
+                        <div class="small text-secondary mb-2"><?php echo e($row['type_name'] ?: 'Document'); ?></div>
+                        <div class="fw-semibold mb-2"><?php echo e($row['title']); ?></div>
+                        <div class="small text-secondary mb-2"><?php echo e($row['document_number']); ?></div>
+                        <?php echo status_badge((string)($row['current_status'] ?? 'draft')); ?>
+                      </div>
+                    </a>
+                  </div>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <div class="col-12">
+                  <div class="text-center text-secondary py-4">No recent documents found.</div>
+                </div>
+              <?php endif; ?>
+            </div>
+
           </div>
-        </div></div>
+        </div>
       </div>
 
       <div class="col-xl-4">
-        <div class="card cp-card"><div class="card-body p-4">
-          <h2 class="card-title mb-1">Quick Actions</h2>
-          <p class="card-subtitle mb-3">Start the most common tasks from one place.</p>
-          <div class="d-grid gap-2">
-            <a class="btn btn-primary" href="create-document.php">Create Document</a>
-            <a class="btn btn-outline-primary" href="update-document.php">Update Document</a>
-            <a class="btn btn-outline-primary" href="repository.php">Open Repository</a>
-            <a class="btn btn-outline-primary" href="audit-trail.php">View Audit Trail</a>
+        <div class="card cp-card">
+          <div class="card-body p-4">
+            <h2 class="card-title mb-1">Quick Actions</h2>
+            <p class="card-subtitle mb-3">Start the most common tasks from one place.</p>
+            <div class="d-grid gap-2">
+              <a class="btn btn-primary" href="create-document.php">Create Document</a>
+              <a class="btn btn-outline-primary" href="update-document.php">Update Document</a>
+              <a class="btn btn-outline-primary" href="repository.php">Open Repository</a>
+              <a class="btn btn-outline-primary" href="audit-trail.php">View Audit Trail</a>
+            </div>
           </div>
-        </div></div>
+        </div>
       </div>
     </div>
+
   </div>
 </main>
 
@@ -860,6 +888,7 @@ function dismissActionPanel() {
   document.getElementById('actionRequiredPanel').style.display = 'none';
   sessionStorage.setItem('actionPanelDismissed', '1');
 }
+
 if (sessionStorage.getItem('actionPanelDismissed') === '1') {
   var p = document.getElementById('actionRequiredPanel');
   if (p) p.style.display = 'none';
@@ -936,7 +965,8 @@ function renderSearchResults(query) {
           'Review Date: ' + escapeHtml(formatDocDate(doc.review_date)) +
         '</div>' +
         '<div class="dashboard-search-actions">' +
-          '<a href="repository.php?q=' + encodeURIComponent(doc.document_number || '') + '" class="btn btn-sm btn-outline-primary">Open in Repository</a>' +
+          '<a href="view-document.php?id=' + encodeURIComponent(doc.id || '') + '" class="btn btn-sm btn-outline-primary">Open Document</a> ' +
+          '<a href="repository.php?search=' + encodeURIComponent(doc.document_number || '') + '" class="btn btn-sm btn-outline-secondary">Open in Repository</a>' +
         '</div>' +
       '</div>';
   }).join('');
