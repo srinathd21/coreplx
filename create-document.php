@@ -1304,7 +1304,7 @@ body.editor-open{
       Maximize Editor
     </button>
   </div>
-<<<<<<< HEAD
+
 
 
   <textarea class="form-control" name="content_text" id="content_text" rows="18"><?php echo e($formData['content_text']); ?></textarea>
