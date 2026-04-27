@@ -351,6 +351,7 @@ $flashError   = $_SESSION['flash_error'] ?? '';
 
 unset($_SESSION['flash_success'], $_SESSION['flash_error']);
 
+// Fetch document types - ensure we get all active types
 $documentTypes = fetch_all_assoc($conn, "
     SELECT id, type_name, prefix, review_cycle_days, acknowledgement_required
     FROM document_types
@@ -358,6 +359,41 @@ $documentTypes = fetch_all_assoc($conn, "
     ORDER BY type_name ASC
 ");
 
+// Debug: If no document types found, try to insert default ones
+if (empty($documentTypes)) {
+    // Check if table has any records
+    $countCheck = mysqli_query($conn, "SELECT COUNT(*) as cnt FROM document_types");
+    if ($countCheck) {
+        $row = mysqli_fetch_assoc($countCheck);
+        if ($row['cnt'] == 0) {
+            // Insert default document types
+            $defaultTypes = [
+                ['SOP', 'Standard Operating Procedure', 'SOP', 365, 1],
+                ['Policy', 'Controlled policy document', 'POL', 365, 1],
+                ['Guidance', 'Guidance document', 'GUI', 365, 0],
+                ['Form', 'Controlled form', 'FRM', 365, 0],
+                ['Work Instruction', 'Work instruction document', 'WI', 365, 1],
+                ['Checklist', 'Controlled checklist', 'CHK', 180, 0]
+            ];
+            
+            foreach ($defaultTypes as $type) {
+                $insertSql = "INSERT INTO document_types (type_name, description, prefix, review_cycle_days, acknowledgement_required, status, created_at) 
+                              VALUES ('{$type[0]}', '{$type[1]}', '{$type[2]}', {$type[3]}, {$type[4]}, 'active', NOW())";
+                mysqli_query($conn, $insertSql);
+            }
+            
+            // Refetch document types
+            $documentTypes = fetch_all_assoc($conn, "
+                SELECT id, type_name, prefix, review_cycle_days, acknowledgement_required
+                FROM document_types
+                WHERE status = 'active'
+                ORDER BY type_name ASC
+            ");
+        }
+    }
+}
+
+// Fetch approvers
 $approvers = fetch_all_assoc($conn, "
     SELECT u.id, u.first_name, u.last_name, u.email, r.role_code, r.role_name
     FROM users u
@@ -383,14 +419,6 @@ if ($creatorName === '') {
     $creatorName = (string)($currentUser['email'] ?? $currentDisplayName);
 }
 
-/*
-|--------------------------------------------------------------------------
-| IMPORTANT CHANGE
-|--------------------------------------------------------------------------
-| document_topic is no longer auto-forced. It is free text.
-| Default value can show initially, but user can edit anything and JS will not overwrite it.
-|--------------------------------------------------------------------------
-*/
 $defaultAutoTopic = build_auto_topic($defaultTypeName, (string)($old['document_number'] ?? ''));
 
 $formData = [
@@ -485,14 +513,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $docPrefix = (string)$docType['prefix'];
     $isFormDocument = is_builder_document_type($docTypeName);
 
-    /*
-    |--------------------------------------------------------------------------
-    | IMPORTANT CHANGE
-    |--------------------------------------------------------------------------
-    | Topic is now required free text.
-    | It will NOT auto-generate when empty.
-    |--------------------------------------------------------------------------
-    */
     if ($formData['document_topic'] === '') {
         $_SESSION['flash_error'] = 'Document topic is required.';
         $_SESSION['create_document_old'] = $formData;
@@ -660,34 +680,6 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0)
       color: #6b7280 !important;
       cursor: not-allowed;
     }
-<<<<<<< HEAD
-    .cp-builder-modal{background:#fff;}
-    .cp-builder-header{padding:20px 22px 14px;border-bottom:1px solid #e8edf3;background:linear-gradient(180deg,#f8fbff 0%,#ffffff 100%);}
-    .cp-builder-title{margin:0;font-size:20px;font-weight:700;color:#0D2144;}
-    .cp-builder-subtitle{margin:4px 0 0;font-size:13px;color:#6b7280;}
-    .cp-builder-body{padding:18px 22px 10px;}
-    .cp-builder-top-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
-    .cp-builder-field-group label{display:block;font-size:13px;font-weight:600;color:#1e2a3a;margin-bottom:6px;}
-    .cp-builder-input,.cp-builder-textarea{width:100%;border:1px solid #d9e2ec;border-radius:10px;background:#fff;padding:11px 12px;font-size:14px;color:#1e2a3a;outline:none;}
-    .cp-builder-textarea{min-height:96px;resize:vertical;}
-    .cp-builder-grid{display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start;}
-    .cp-builder-card{border:1px solid #dde3ec;border-radius:14px;background:#fff;padding:14px;}
-    .cp-builder-side-title{font-size:15px;font-weight:700;color:#0D2144;margin-bottom:2px;}
-    .cp-builder-side-subtitle{font-size:13px;color:#6b7280;margin-bottom:12px;}
-    .cp-builder-type-list{display:grid;grid-template-columns:1fr;gap:10px;}
-    .cp-builder-type-btn{display:flex;align-items:center;gap:12px;border:1px solid #d7dee8;border-radius:12px;background:#fff;padding:12px 14px;font-size:14px;font-weight:600;color:#1e2a3a;cursor:pointer;text-align:left;}
-    .cp-builder-type-btn:hover{background:#eef4ff;border-color:#9db7ea;color:#0D2144;}
-    .cp-builder-type-icon{width:36px;height:36px;border-radius:10px;background:#e9eef5;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0D2144;flex:0 0 36px;}
-    .cp-builder-preview-list{border:1px solid #dde3ec;border-radius:12px;background:#f8f9fb;padding:10px 12px;max-height:380px;overflow-y:auto;}
-    .cp-builder-preview-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #e8edf3;font-size:13px;}
-    .cp-builder-preview-item:last-child{border-bottom:none;}
-    .cp-builder-chip,.builder-chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eaf2ff;color:#2563eb;margin-right:6px;margin-bottom:4px;}
-    .cp-builder-empty{color:#6b7280;font-size:13px;padding:18px 8px;text-align:center;}
-    .swal2-popup.cp-small-popup{width:520px!important;max-width:calc(100vw - 24px)!important;border-radius:16px!important;padding:20px!important;}
-    .attached-fields-box{border:1px solid #dde3ec;border-radius:8px;background:#f8f9fb;padding:10px 12px;margin-top:12px;}
-    .attached-field-row{font-size:13px;color:#1e2a3a;padding:6px 0;border-bottom:1px solid #e8edf3;}
-    .attached-field-row:last-child{border-bottom:none;}
-=======
 
     .info-form-summary-card,
     .form-fill-card,
@@ -984,47 +976,45 @@ $existingFileSizeDisplay = ((int)$formData['existing_file_size'] > 0)
     .attached-field-row:last-child {
       border-bottom: none;
     }
->>>>>>> e9fbaa3fae22f628966e3cf2a6116de1e983e9de
-.text-editor-toolbar{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:10px;
-  margin-bottom:10px;
-}
-#content_text{
-  min-height:560px;
-  resize:vertical;
-  line-height:1.7;
-  font-size:15px;
-}
-.text-editor-fullscreen{
-  position:fixed!important;
-  top:20px!important;
-  left:20px!important;
-  right:20px!important;
-  bottom:20px!important;
-  z-index:99999!important;
-  background:#fff;
-  padding:20px;
-  border-radius:16px;
-  box-shadow:0 20px 70px rgba(0,0,0,.25);
-  overflow:hidden;
-}
-.text-editor-fullscreen #content_text{
-  height:calc(100vh - 150px)!important;
-  min-height:calc(100vh - 150px)!important;
-}
-body.editor-open{
-  overflow:hidden;
-}
-<<<<<<< HEAD
-    @media (max-width:768px){
-      .cp-builder-top-fields,.cp-builder-grid{grid-template-columns:1fr;}
-      .info-form-summary-table th,.info-form-summary-table td{display:block;width:100%;}
-      .info-form-summary-table th{border-bottom:0;}
-      .info-form-summary-table td{border-top:0;margin-bottom:8px;}
-=======
+
+    .text-editor-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    #content_text {
+      min-height: 560px;
+      resize: vertical;
+      line-height: 1.7;
+      font-size: 15px;
+    }
+
+    .text-editor-fullscreen {
+      position: fixed !important;
+      top: 20px !important;
+      left: 20px !important;
+      right: 20px !important;
+      bottom: 20px !important;
+      z-index: 99999 !important;
+      background: #fff;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 20px 70px rgba(0,0,0,.25);
+      overflow: hidden;
+    }
+
+    .text-editor-fullscreen #content_text {
+      height: calc(100vh - 150px) !important;
+      min-height: calc(100vh - 150px) !important;
+    }
+
+    body.editor-open {
+      overflow: hidden;
+    }
+
     @media (max-width: 768px) {
       .cp-builder-top-fields,
       .cp-builder-grid {
@@ -1045,7 +1035,6 @@ body.editor-open{
         border-top: 0;
         margin-bottom: 8px;
       }
->>>>>>> e9fbaa3fae22f628966e3cf2a6116de1e983e9de
     }
   </style>
 </head>
@@ -1099,7 +1088,7 @@ body.editor-open{
     <input type="hidden" id="is_fresh_create_page" value="<?php echo $isFreshCreatePage ? '1' : '0'; ?>">
 
     <div class="row g-3">
-      <div class="col-lg-8">
+      <div class="col-12">
 
         <div class="card cp-card mb-3">
           <div class="card-body">
@@ -1110,15 +1099,19 @@ body.editor-open{
               <div class="col-md-6">
                 <label class="form-label">Document Type</label>
                 <select class="form-select" id="docTypeSelect" name="document_type_id" onchange="handleDocTypeChange(this)">
-                  <?php foreach ($documentTypes as $type): ?>
-                    <option value="<?php echo (int)$type['id']; ?>"
-                            data-prefix="<?php echo e($type['prefix']); ?>"
-                            data-name="<?php echo e($type['type_name']); ?>"
-                            data-review-days="<?php echo (int)$type['review_cycle_days']; ?>"
-                            <?php echo (string)$formData['document_type_id'] === (string)$type['id'] ? 'selected' : ''; ?>>
-                      <?php echo e($type['type_name']); ?>
-                    </option>
-                  <?php endforeach; ?>
+                  <?php if (!empty($documentTypes)): ?>
+                    <?php foreach ($documentTypes as $type): ?>
+                      <option value="<?php echo (int)$type['id']; ?>"
+                              data-prefix="<?php echo e($type['prefix']); ?>"
+                              data-name="<?php echo e($type['type_name']); ?>"
+                              data-review-days="<?php echo (int)$type['review_cycle_days']; ?>"
+                              <?php echo (string)$formData['document_type_id'] === (string)$type['id'] ? 'selected' : ''; ?>>
+                        <?php echo e($type['type_name']); ?>
+                      </option>
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <option value="">No document types available</option>
+                  <?php endif; ?>
                 </select>
               </div>
 
@@ -1296,43 +1289,21 @@ body.editor-open{
             </div>
 
             <div id="richTextPanel" class="<?php echo $formData['content_mode'] === 'rich_text' ? '' : 'd-none'; ?>">
-  <div class="text-editor-toolbar">
-    <div class="small text-secondary">
-      Use this large editor for Policy / SOP / Guidance / Work Instruction text content.
-    </div>
-    <button type="button" class="btn btn-sm btn-outline-primary" id="toggleEditorSizeBtn" onclick="toggleTextEditorSize()">
-      Maximize Editor
-    </button>
-  </div>
+              <div class="text-editor-toolbar">
+                <div class="small text-secondary">
+                  Use this large editor for Policy / SOP / Guidance / Work Instruction text content.
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="toggleEditorSizeBtn" onclick="toggleTextEditorSize()">
+                  Maximize Editor
+                </button>
+              </div>
 
-
-
-  <textarea class="form-control" name="content_text" id="content_text" rows="18"><?php echo e($formData['content_text']); ?></textarea>
-</div>
-
-
-  <textarea class="form-control" name="content_text" id="content_text" rows="18"><?php echo e($formData['content_text']); ?></textarea>
-</div>
-      </div>
-
-      <div class="col-lg-4">
-        <div class="card cp-card mb-3">
-          <div class="card-body">
-            <h2 class="card-title mb-1">Submission Readiness</h2>
-            <p class="card-subtitle mb-3">Verify required information before sending for approval.</p>
-
-            <ul class="small text-secondary note-list mb-0">
-              <li>Metadata completed.</li>
-              <li>Unique document ID validated.</li>
-              <li>Builder created properly.</li>
-              <li>Checklist items clicked or form fields filled.</li>
-              <li>Approver selected and validated.</li>
-              <li>File upload or text content added for non-builder docs.</li>
-            </ul>
+              <textarea class="form-control" name="content_text" id="content_text" rows="18"><?php echo e($formData['content_text']); ?></textarea>
+            </div>
           </div>
         </div>
-      </div>
 
+      </div>
     </div>
   </form>
 
@@ -1346,7 +1317,11 @@ const BUILDER_STORAGE_KEY = 'cpBuiltFormInline';
 const BUILDER_RESPONSE_KEY = 'cpBuiltFormResponses';
 
 function getSelectedTypeOption() {
-  return document.getElementById('docTypeSelect').selectedOptions[0];
+  const select = document.getElementById('docTypeSelect');
+  if (!select || !select.selectedOptions || !select.selectedOptions.length) {
+    return null;
+  }
+  return select.selectedOptions[0];
 }
 
 function getSelectedTypeName() {
@@ -1371,25 +1346,47 @@ function isChecklistTypeJs(typeName) {
   return (typeName || '').toLowerCase().trim() === 'checklist';
 }
 
-/*
-|--------------------------------------------------------------------------
-| IMPORTANT CHANGE
-|--------------------------------------------------------------------------
-| This function no longer overwrites document topic.
-|--------------------------------------------------------------------------
-*/
 function syncTopicInput() {
   const topicInput = document.getElementById('document_topic_input');
-  document.getElementById('document_topic_hidden').value = topicInput.value.trim();
+  if (topicInput) {
+    document.getElementById('document_topic_hidden').value = topicInput.value.trim();
+  }
+}
+
+function autoFillTopic() {
+  const opt = getSelectedTypeOption();
+  if (!opt) return;
+  
+  const typeName = opt.dataset.name || '';
+  const topicInput = document.getElementById('document_topic_input');
+  const currentTopic = topicInput ? topicInput.value.trim() : '';
+  
+  // Only auto-fill if the topic is empty
+  if (!currentTopic) {
+    if (topicInput) {
+      topicInput.value = typeName + ' ';
+      // Place cursor at the end after the space
+      topicInput.focus();
+      const length = topicInput.value.length;
+      topicInput.setSelectionRange(length, length);
+      syncTopicInput();
+      updateDocIdPreview();
+    }
+  }
 }
 
 function handleDocTypeChange(selectEl) {
   const opt = selectEl.selectedOptions[0];
+  if (!opt) return;
+  
   const typeName = (opt.dataset.name || '');
   const isBuilderType = isBuilderDocumentTypeJs(typeName);
 
-  document.getElementById('contentCard').classList.toggle('d-none', isBuilderType);
-  document.getElementById('formTypePanel').classList.toggle('d-none', !isBuilderType);
+  const contentCard = document.getElementById('contentCard');
+  const formTypePanel = document.getElementById('formTypePanel');
+  
+  if (contentCard) contentCard.classList.toggle('d-none', isBuilderType);
+  if (formTypePanel) formTypePanel.classList.toggle('d-none', !isBuilderType);
 
   const reviewDays = parseInt(opt.dataset.reviewDays || '365', 10);
   const eff = document.getElementById('effective_date').value;
@@ -1400,6 +1397,9 @@ function handleDocTypeChange(selectEl) {
     document.getElementById('review_date').value = base.toISOString().slice(0, 10);
   }
 
+  // Auto-fill topic if empty
+  autoFillTopic();
+  
   syncTopicInput();
   updateDocIdPreview();
 
@@ -1421,20 +1421,13 @@ function setContentMode(mode) {
   document.getElementById('richTextPanel').classList.toggle('d-none', mode !== 'rich_text');
 }
 
-/*
-|--------------------------------------------------------------------------
-| IMPORTANT CHANGE
-|--------------------------------------------------------------------------
-| Preview uses whatever user typed. It does not force auto-topic.
-|--------------------------------------------------------------------------
-*/
 function updateDocIdPreview() {
   const opt = getSelectedTypeOption();
   const prefix = opt ? (opt.dataset.prefix || 'SOP') : 'SOP';
   const number = (document.getElementById('docNumber').value || '104').trim();
 
   const topicInput = document.getElementById('document_topic_input');
-  const topic = topicInput.value.trim();
+  const topic = topicInput ? topicInput.value.trim() : '';
 
   document.getElementById('document_topic_hidden').value = topic;
 
@@ -1544,61 +1537,83 @@ function detachForm() {
   document.getElementById('form_builder_json_hidden').value = '';
   document.getElementById('form_response_json_hidden').value = '';
 
-  document.getElementById('attachedFormSummary').classList.add('d-none');
-  document.getElementById('noFormAttached').classList.remove('d-none');
-  document.getElementById('documentInfoFormTableWrapper').classList.add('d-none');
-  document.getElementById('formFillWrapper').classList.add('d-none');
-  document.getElementById('dynamicFormFields').innerHTML = '';
+  const attachedFormSummary = document.getElementById('attachedFormSummary');
+  const noFormAttached = document.getElementById('noFormAttached');
+  const documentInfoFormTableWrapper = document.getElementById('documentInfoFormTableWrapper');
+  const formFillWrapper = document.getElementById('formFillWrapper');
+  const dynamicFormFields = document.getElementById('dynamicFormFields');
+  
+  if (attachedFormSummary) attachedFormSummary.classList.add('d-none');
+  if (noFormAttached) noFormAttached.classList.remove('d-none');
+  if (documentInfoFormTableWrapper) documentInfoFormTableWrapper.classList.add('d-none');
+  if (formFillWrapper) formFillWrapper.classList.add('d-none');
+  if (dynamicFormFields) dynamicFormFields.innerHTML = '';
 }
 
 function renderAttachedFields(fields) {
   const box = document.getElementById('attachedFieldsPreview');
 
   if (!Array.isArray(fields) || !fields.length) {
-    box.innerHTML = '';
-    box.classList.add('d-none');
+    if (box) {
+      box.innerHTML = '';
+      box.classList.add('d-none');
+    }
     return;
   }
 
-  box.innerHTML = fields.map(function(field, index) {
-    return '<div class="attached-field-row"><strong>' + (index + 1) + '.</strong> ' +
-      escapeHtml(field.label || ('Item ' + (index + 1))) +
-      '<span class="builder-chip">' + escapeHtml(fieldTypeLabel(field.type)) + '</span></div>';
-  }).join('');
+  if (box) {
+    box.innerHTML = fields.map(function(field, index) {
+      return '<div class="attached-field-row"><strong>' + (index + 1) + '.</strong> ' +
+        escapeHtml(field.label || ('Item ' + (index + 1))) +
+        '<span class="builder-chip">' + escapeHtml(fieldTypeLabel(field.type)) + '</span></div>';
+    }).join('');
 
-  box.classList.remove('d-none');
+    box.classList.remove('d-none');
+  }
 }
 
 function renderBuilderInfoTable(data) {
   const wrapper = document.getElementById('documentInfoFormTableWrapper');
   const fields = Array.isArray(data.fields) ? data.fields : [];
 
-  document.getElementById('infoFormName').textContent = data.formName || 'Untitled';
-  document.getElementById('infoFormType').textContent = data.formType || getSelectedTypeName();
-  document.getElementById('infoFormFieldCount').textContent = String(fields.length);
-  document.getElementById('infoFormDesc').textContent = data.formDesc || '—';
+  const infoFormName = document.getElementById('infoFormName');
+  const infoFormType = document.getElementById('infoFormType');
+  const infoFormFieldCount = document.getElementById('infoFormFieldCount');
+  const infoFormDesc = document.getElementById('infoFormDesc');
+  
+  if (infoFormName) infoFormName.textContent = data.formName || 'Untitled';
+  if (infoFormType) infoFormType.textContent = data.formType || getSelectedTypeName();
+  if (infoFormFieldCount) infoFormFieldCount.textContent = String(fields.length);
+  if (infoFormDesc) infoFormDesc.textContent = data.formDesc || '—';
 
-  wrapper.classList.remove('d-none');
+  if (wrapper && fields.length > 0) wrapper.classList.remove('d-none');
 }
 
 function renderBuilderSummary(data) {
   const fieldCount = Array.isArray(data.fields) ? data.fields.length : 0;
 
-  document.getElementById('attachedFormName').textContent = data.formName || 'Untitled';
-
-  document.getElementById('attachedFormMeta').textContent =
-    (data.formType || getSelectedTypeName()) +
-    ' · ' +
-    fieldCount +
-    ' item' +
-    (fieldCount !== 1 ? 's' : '') +
-    (data.formDesc ? ' · ' + data.formDesc : '');
+  const attachedFormName = document.getElementById('attachedFormName');
+  const attachedFormMeta = document.getElementById('attachedFormMeta');
+  const attachedFormSummary = document.getElementById('attachedFormSummary');
+  const noFormAttached = document.getElementById('noFormAttached');
+  
+  if (attachedFormName) attachedFormName.textContent = data.formName || 'Untitled';
+  
+  if (attachedFormMeta) {
+    attachedFormMeta.textContent =
+      (data.formType || getSelectedTypeName()) +
+      ' · ' +
+      fieldCount +
+      ' item' +
+      (fieldCount !== 1 ? 's' : '') +
+      (data.formDesc ? ' · ' + data.formDesc : '');
+  }
 
   renderAttachedFields(data.fields || []);
   renderBuilderInfoTable(data);
 
-  document.getElementById('attachedFormSummary').classList.remove('d-none');
-  document.getElementById('noFormAttached').classList.add('d-none');
+  if (attachedFormSummary) attachedFormSummary.classList.remove('d-none');
+  if (noFormAttached) noFormAttached.classList.add('d-none');
 }
 
 function buildFieldsHtml(fields) {
@@ -1725,80 +1740,85 @@ function renderDynamicFillForm(data) {
   const fields = Array.isArray(data.fields) ? data.fields : [];
 
   if (!fields.length) {
-    wrapper.classList.add('d-none');
-    container.innerHTML = '';
+    if (wrapper) wrapper.classList.add('d-none');
+    if (container) container.innerHTML = '';
     return;
   }
 
   const isChecklist = isChecklistTypeJs(data.formType || getSelectedTypeName());
   const usedKeys = {};
 
-  container.innerHTML = fields.map((field, index) => {
-    let key = makeFieldKey(field, index);
-    const originalKey = key;
-    let counter = 2;
+  if (container) {
+    container.innerHTML = fields.map((field, index) => {
+      let key = makeFieldKey(field, index);
+      const originalKey = key;
+      let counter = 2;
 
-    while (usedKeys[key]) {
-      key = originalKey + '_' + counter;
-      counter++;
-    }
+      while (usedKeys[key]) {
+        key = originalKey + '_' + counter;
+        counter++;
+      }
 
-    usedKeys[key] = true;
+      usedKeys[key] = true;
 
-    const value = responses[key] ?? '';
+      const value = responses[key] ?? '';
 
-    if (isChecklist || field.type === 'checklist_item') {
-      return '<div class="checklist-fill-row">' +
-        '<input class="form-check-input dynamic-builder-input" type="checkbox" data-key="' + key + '" ' + (value ? 'checked' : '') + '>' +
-        '<label class="mb-0 fw-medium">' + escapeHtml(field.label || ('Checklist Item ' + (index + 1))) + '</label>' +
+      if (isChecklist || field.type === 'checklist_item') {
+        return '<div class="checklist-fill-row">' +
+          '<input class="form-check-input dynamic-builder-input" type="checkbox" data-key="' + key + '" ' + (value ? 'checked' : '') + '>' +
+          '<label class="mb-0 fw-medium">' + escapeHtml(field.label || ('Checklist Item ' + (index + 1))) + '</label>' +
+          '</div>';
+      }
+
+      let control = '';
+
+      if (field.type === 'textarea') {
+        control = '<textarea class="form-control dynamic-builder-input" data-key="' + key + '" rows="3">' + escapeHtml(value) + '</textarea>';
+      } else if (field.type === 'number') {
+        control = '<input type="number" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
+      } else if (field.type === 'date') {
+        control = '<input type="date" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
+      } else if (field.type === 'dropdown') {
+        const opts = (field.options || []).map(opt =>
+          '<option value="' + escapeHtml(opt) + '" ' + (String(value) === String(opt) ? 'selected' : '') + '>' + escapeHtml(opt) + '</option>'
+        ).join('');
+
+        control = '<select class="form-select dynamic-builder-input" data-key="' + key + '"><option value="">Select option</option>' + opts + '</select>';
+      } else if (field.type === 'checkbox') {
+        control = '<div class="form-check"><input class="form-check-input dynamic-builder-input" type="checkbox" data-key="' + key + '" ' + (value ? 'checked' : '') + '><label class="form-check-label">Checked</label></div>';
+      } else if (field.type === 'yesno') {
+        control = '<div class="d-flex gap-3">' +
+          '<div class="form-check"><input class="form-check-input dynamic-builder-radio" type="radio" name="' + key + '" data-key="' + key + '" value="Yes" ' + (value === 'Yes' ? 'checked' : '') + '><label class="form-check-label">Yes</label></div>' +
+          '<div class="form-check"><input class="form-check-input dynamic-builder-radio" type="radio" name="' + key + '" data-key="' + key + '" value="No" ' + (value === 'No' ? 'checked' : '') + '><label class="form-check-label">No</label></div>' +
+          '</div>';
+      } else if (field.type === 'signature') {
+        control = '<input type="text" class="form-control dynamic-builder-input" data-key="' + key + '" placeholder="Enter signature name" value="' + escapeHtml(value) + '">';
+      } else {
+        control = '<input type="text" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
+      }
+
+      return '<div class="fill-field-card">' +
+        '<label class="fill-field-label">' + escapeHtml(field.label) +
+        '<span class="fill-field-type">' + escapeHtml(fieldTypeLabel(field.type)) + '</span></label>' +
+        control +
         '</div>';
-    }
+    }).join('');
+  }
 
-    let control = '';
-
-    if (field.type === 'textarea') {
-      control = '<textarea class="form-control dynamic-builder-input" data-key="' + key + '" rows="3">' + escapeHtml(value) + '</textarea>';
-    } else if (field.type === 'number') {
-      control = '<input type="number" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
-    } else if (field.type === 'date') {
-      control = '<input type="date" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
-    } else if (field.type === 'dropdown') {
-      const opts = (field.options || []).map(opt =>
-        '<option value="' + escapeHtml(opt) + '" ' + (String(value) === String(opt) ? 'selected' : '') + '>' + escapeHtml(opt) + '</option>'
-      ).join('');
-
-      control = '<select class="form-select dynamic-builder-input" data-key="' + key + '"><option value="">Select option</option>' + opts + '</select>';
-    } else if (field.type === 'checkbox') {
-      control = '<div class="form-check"><input class="form-check-input dynamic-builder-input" type="checkbox" data-key="' + key + '" ' + (value ? 'checked' : '') + '><label class="form-check-label">Checked</label></div>';
-    } else if (field.type === 'yesno') {
-      control = '<div class="d-flex gap-3">' +
-        '<div class="form-check"><input class="form-check-input dynamic-builder-radio" type="radio" name="' + key + '" data-key="' + key + '" value="Yes" ' + (value === 'Yes' ? 'checked' : '') + '><label class="form-check-label">Yes</label></div>' +
-        '<div class="form-check"><input class="form-check-input dynamic-builder-radio" type="radio" name="' + key + '" data-key="' + key + '" value="No" ' + (value === 'No' ? 'checked' : '') + '><label class="form-check-label">No</label></div>' +
-        '</div>';
-    } else if (field.type === 'signature') {
-      control = '<input type="text" class="form-control dynamic-builder-input" data-key="' + key + '" placeholder="Enter signature name" value="' + escapeHtml(value) + '">';
-    } else {
-      control = '<input type="text" class="form-control dynamic-builder-input" data-key="' + key + '" value="' + escapeHtml(value) + '">';
-    }
-
-    return '<div class="fill-field-card">' +
-      '<label class="fill-field-label">' + escapeHtml(field.label) +
-      '<span class="fill-field-type">' + escapeHtml(fieldTypeLabel(field.type)) + '</span></label>' +
-      control +
-      '</div>';
-  }).join('');
-
-  wrapper.classList.remove('d-none');
+  if (wrapper) wrapper.classList.remove('d-none');
   bindDynamicInputs();
 }
 
 function bindDynamicInputs() {
   document.querySelectorAll('.dynamic-builder-input').forEach(el => {
+    el.removeEventListener('input', syncFormResponses);
+    el.removeEventListener('change', syncFormResponses);
     el.addEventListener('input', syncFormResponses);
     el.addEventListener('change', syncFormResponses);
   });
 
   document.querySelectorAll('.dynamic-builder-radio').forEach(el => {
+    el.removeEventListener('change', syncFormResponses);
     el.addEventListener('change', syncFormResponses);
   });
 }
@@ -1941,6 +1961,7 @@ async function openChecklistBuilder(isEdit) {
     saveBuilderData(result.value);
   }
 }
+
 function toggleTextEditorSize() {
   const panel = document.getElementById('richTextPanel');
   const btn = document.getElementById('toggleEditorSizeBtn');
@@ -1973,6 +1994,7 @@ document.addEventListener('keydown', function(e) {
     }
   }
 });
+
 /* file upload */
 const fileInput = document.getElementById('document_file');
 const uploadBox = document.getElementById('documentUploadBox');
@@ -1985,101 +2007,129 @@ function showSelectedFile(file) {
     return;
   }
 
-  selectedFileName.textContent = file.name;
-  selectedFileMeta.textContent = (Math.round((file.size / 1024) * 100) / 100) + ' KB';
-  selectedFileInfo.classList.remove('d-none');
+  if (selectedFileName) selectedFileName.textContent = file.name;
+  if (selectedFileMeta) selectedFileMeta.textContent = (Math.round((file.size / 1024) * 100) / 100) + ' KB';
+  if (selectedFileInfo) selectedFileInfo.classList.remove('d-none');
 
-  document.getElementById('existing_file_name').value = file.name;
-  document.getElementById('existing_file_size').value = file.size;
+  const existingFileName = document.getElementById('existing_file_name');
+  const existingFileSize = document.getElementById('existing_file_size');
+  
+  if (existingFileName) existingFileName.value = file.name;
+  if (existingFileSize) existingFileSize.value = file.size;
 }
 
-uploadBox.addEventListener('click', function(e) {
-  e.preventDefault();
-  fileInput.click();
-});
+if (uploadBox) {
+  uploadBox.addEventListener('click', function(e) {
+    e.preventDefault();
+    if (fileInput) fileInput.click();
+  });
+}
 
-fileInput.addEventListener('change', function() {
-  if (this.files && this.files.length > 0) {
-    showSelectedFile(this.files[0]);
-  }
-});
-
-uploadBox.addEventListener('dragenter', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadBox.classList.add('drag-over');
-});
-
-uploadBox.addEventListener('dragover', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadBox.classList.add('drag-over');
-});
-
-uploadBox.addEventListener('dragleave', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadBox.classList.remove('drag-over');
-});
-
-uploadBox.addEventListener('drop', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-
-  uploadBox.classList.remove('drag-over');
-
-  const files = e.dataTransfer.files;
-
-  if (files && files.length > 0) {
-    const dt = new DataTransfer();
-
-    for (let i = 0; i < files.length; i++) {
-      dt.items.add(files[i]);
+if (fileInput) {
+  fileInput.addEventListener('change', function() {
+    if (this.files && this.files.length > 0) {
+      showSelectedFile(this.files[0]);
     }
+  });
+}
 
-    fileInput.files = dt.files;
+if (uploadBox) {
+  uploadBox.addEventListener('dragenter', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.classList.add('drag-over');
+  });
 
-    showSelectedFile(files[0]);
-  }
-});
+  uploadBox.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.classList.add('drag-over');
+  });
 
-document.getElementById('openBuilderBtn').addEventListener('click', function(e) {
-  e.preventDefault();
-  openChecklistBuilder(false);
-});
+  uploadBox.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.classList.remove('drag-over');
+  });
 
-document.getElementById('docNumber').addEventListener('input', function() {
-  updateDocIdPreview();
-});
+  uploadBox.addEventListener('drop', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
 
-document.getElementById('document_topic_input').addEventListener('input', function() {
-  syncTopicInput();
-  updateDocIdPreview();
-});
+    uploadBox.classList.remove('drag-over');
 
-document.getElementById('effective_date').addEventListener('change', function() {
-  handleDocTypeChange(document.getElementById('docTypeSelect'));
-});
+    const files = e.dataTransfer.files;
+
+    if (files && files.length > 0) {
+      const dt = new DataTransfer();
+
+      for (let i = 0; i < files.length; i++) {
+        dt.items.add(files[i]);
+      }
+
+      if (fileInput) fileInput.files = dt.files;
+
+      showSelectedFile(files[0]);
+    }
+  });
+}
+
+const openBuilderBtn = document.getElementById('openBuilderBtn');
+if (openBuilderBtn) {
+  openBuilderBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    openChecklistBuilder(false);
+  });
+}
+
+const docNumber = document.getElementById('docNumber');
+if (docNumber) {
+  docNumber.addEventListener('input', function() {
+    updateDocIdPreview();
+  });
+}
+
+const documentTopicInput = document.getElementById('document_topic_input');
+if (documentTopicInput) {
+  documentTopicInput.addEventListener('input', function() {
+    syncTopicInput();
+    updateDocIdPreview();
+  });
+}
+
+const effectiveDate = document.getElementById('effective_date');
+if (effectiveDate) {
+  effectiveDate.addEventListener('change', function() {
+    const docTypeSelect = document.getElementById('docTypeSelect');
+    if (docTypeSelect) handleDocTypeChange(docTypeSelect);
+  });
+}
 
 function clearCreateDocumentState() {
   sessionStorage.removeItem(BUILDER_STORAGE_KEY);
   sessionStorage.removeItem(BUILDER_RESPONSE_KEY);
 
-  document.getElementById('form_name_hidden').value = '';
-  document.getElementById('form_type_hidden').value = '';
-  document.getElementById('form_desc_hidden').value = '';
-  document.getElementById('form_builder_json_hidden').value = '';
-  document.getElementById('form_response_json_hidden').value = '';
-  document.getElementById('existing_file_name').value = '';
-  document.getElementById('existing_file_path').value = '';
-  document.getElementById('existing_file_mime').value = '';
-  document.getElementById('existing_file_size').value = '';
+  const formNameHidden = document.getElementById('form_name_hidden');
+  const formTypeHidden = document.getElementById('form_type_hidden');
+  const formDescHidden = document.getElementById('form_desc_hidden');
+  const formBuilderJsonHidden = document.getElementById('form_builder_json_hidden');
+  const formResponseJsonHidden = document.getElementById('form_response_json_hidden');
+  const existingFileName = document.getElementById('existing_file_name');
+  const existingFilePath = document.getElementById('existing_file_path');
+  const existingFileMime = document.getElementById('existing_file_mime');
+  const existingFileSize = document.getElementById('existing_file_size');
+  
+  if (formNameHidden) formNameHidden.value = '';
+  if (formTypeHidden) formTypeHidden.value = '';
+  if (formDescHidden) formDescHidden.value = '';
+  if (formBuilderJsonHidden) formBuilderJsonHidden.value = '';
+  if (formResponseJsonHidden) formResponseJsonHidden.value = '';
+  if (existingFileName) existingFileName.value = '';
+  if (existingFilePath) existingFilePath.value = '';
+  if (existingFileMime) existingFileMime.value = '';
+  if (existingFileSize) existingFileSize.value = '';
 
-  const selectedFileInfo = document.getElementById('selectedFileInfo');
-
-  if (selectedFileInfo) {
-    selectedFileInfo.classList.add('d-none');
-  }
+  if (selectedFileInfo) selectedFileInfo.classList.add('d-none');
 
   detachForm();
 }
@@ -2111,8 +2161,12 @@ function clearCreateDocumentState() {
     renderDynamicFillForm(data);
   }
 
-  handleDocTypeChange(document.getElementById('docTypeSelect'));
-  setContentMode(document.getElementById('content_mode').value || 'file');
+  const docTypeSelect = document.getElementById('docTypeSelect');
+  if (docTypeSelect) handleDocTypeChange(docTypeSelect);
+  
+  const contentMode = document.getElementById('content_mode');
+  if (contentMode) setContentMode(contentMode.value || 'file');
+  
   syncTopicInput();
   updateDocIdPreview();
 })();
